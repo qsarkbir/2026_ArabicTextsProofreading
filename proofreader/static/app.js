@@ -86,7 +86,7 @@ async function routeNow() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   topbar.innerHTML = '';
   try {
-    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], life);
+    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
     else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
     else await homeView(life);
   } catch (e) {
@@ -136,18 +136,22 @@ async function homeView(life) {
 }
 
 // ---------- setup: scan source and page mapping ----------
-async function setupView(slug, life) {
+async function setupView(slug, from, life) {
   const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
   document.title = `設定 - ${p.uri}`;
   topbar.innerHTML = `<span class="ar">${esc(p.title)}</span><span class="muted small">${esc(p.uri)}</span>`;
+  if (!(from >= 0 && from < p.pages.length)) from = null;
+  // cancelling leaves the project as it was: back to the page we came from, or home before setup is finished
+  const cancel = () => { location.hash = p.source ? `#/p/${slug}${from == null ? '' : '/' + from}` : '#/'; };
 
   const renderSource = async () => {
     const terms = (await api('GET', `/api/projects/${slug}/search-terms`)).q;
     view.innerHTML = `<div class="wrap">
       <div class="steps"><span>1. テキスト ✓</span>›<span class="on">2. ページ画像</span>›<span>3. ページの対応</span></div>
       <div class="card">
-        <h2>ページ画像を選ぶ</h2>
+        <div class="row"><h2>ページ画像を選ぶ</h2><span style="flex:1"></span><button id="cancel">キャンセル</button></div>
+        ${p.source ? '<p class="help">資料を選んでも、次の画面で対応を確定するまで現在の資料・対応は変わりません。</p>' : ''}
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
@@ -164,14 +168,15 @@ async function setupView(slug, life) {
     if (p.candidates.length) $('#cands').innerHTML = p.candidates.map(id => card({id, title: id, thumb: `https://archive.org/services/img/${id}`, creator: '', date: ''})).join('');
     let sourceBusy = false;
     const sourceRoot = $('.wrap', view);
+    const lock = on => sourceRoot.querySelectorAll('button:not(#cancel),input').forEach(el => el.disabled = on);
+    $('#cancel').onclick = cancel;
     const use = async id => {
       if (sourceBusy) return;
-      sourceBusy = true;
-      sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = true);
+      sourceBusy = true; lock(true);
       toast('ページ一覧を取得しています…');
-      try { p = await api('POST', `/api/projects/${slug}/source/ia`, {id}); await renderMatch(); }
+      try { const r = await api('POST', `/api/projects/${slug}/source/ia`, {id}); await renderMatch(r.draft); }
       catch (e) { if (life.alive) toast(e.message, true); }
-      finally { sourceBusy = false; sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = false); }
+      finally { sourceBusy = false; lock(false); }
     };
     sourceRoot.addEventListener('click', e => { const b = e.target.closest('button.use'); if (b) use(b.dataset.id); });
     let sourceSearch = 0;
@@ -190,8 +195,7 @@ async function setupView(slug, life) {
     $('#pdf').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
       if (sourceBusy) return;
-      sourceBusy = true;
-      sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = true);
+      sourceBusy = true; lock(true);
       $('#pdfmsg').textContent = 'ページ数を確認しています…';
       let doc;
       try {
@@ -200,38 +204,46 @@ async function setupView(slug, life) {
         finally { URL.revokeObjectURL(url); delete pdfDocs[url]; }
         if (!life.alive) return;
         $('#pdfmsg').textContent = `${doc.numPages}ページ。アップロード中…`;
-        p = await api('POST', `/api/projects/${slug}/source/pdf`, f, {'X-Filename': encodeURIComponent(f.name), 'X-Page-Count': String(doc.numPages)});
-        if (life.alive) await renderMatch();
+        const r = await api('POST', `/api/projects/${slug}/source/pdf`, f, {'X-Filename': encodeURIComponent(f.name), 'X-Page-Count': String(doc.numPages)});
+        await renderMatch(r.draft);
       } catch (err) { if (life.alive && $('#pdfmsg')) { $('#pdfmsg').textContent = ''; toast(err.message, true); } }
-      finally { if (doc) await doc.destroy(); sourceBusy = false; sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = false); }
+      finally { if (doc) await doc.destroy(); sourceBusy = false; lock(false); }
     };
     if (!p.candidates.length && terms) search();
   };
 
-  const renderMatch = async () => {
-    // pick the first page with a reasonable amount of text as the reference
-    let ref = 0;
-    for (let i = 0; i < Math.min(p.pages.length, 40); i++) {
-      const pg = await api('GET', `/api/projects/${slug}/pages/${i}`);
-      if (pg.original.replace(/[\s~#|=]/g, '').length > 200) { ref = i; break; }
+  // draft: a newly chosen source that the server keeps aside until this mapping is confirmed
+  const renderMatch = async draft => {
+    const src = draft || p.source, draftQ = draft ? `&draft=${draft.revision}` : '';
+    let ref = from;
+    if (ref == null) {
+      // pick the first page with a reasonable amount of text as the reference
+      ref = 0;
+      for (let i = 0; i < Math.min(p.pages.length, 40); i++) {
+        const pg = await api('GET', `/api/projects/${slug}/pages/${i}`);
+        if (pg.original.replace(/[\s~#|=]/g, '').length > 200) { ref = i; break; }
+      }
     }
-    let pg = await api('GET', `/api/projects/${slug}/pages/${ref}`);
-    let img = pg.image ? pg.image.index : ref;
+    const pg = await api('GET', `/api/projects/${slug}/pages/${ref}`);
+    let img = !draft && pg.image ? pg.image.index : ref;
     const initialImg = img;
-    const total = p.source.count;
+    const total = src.count;
     view.innerHTML = `<div class="wrap">
       <div class="steps"><span>1. テキスト ✓</span>›<span>2. ページ画像 ✓</span>›<span class="on">3. ページの対応</span></div>
       <div class="card">
         <h2>ページの対応を合わせる</h2>
-        <p class="help">左のテキスト（${esc(pg.marker)}）と同じページが右に出るまで、画像の番号を動かしてください。変更は確定時に保存します。対応を変更して確定すると、途中ページの補正を解除して全ページに適用します。</p>
+        <p class="help">左のテキスト（${esc(pg.marker)}）と同じページが右に出るまで、画像の番号を動かしてください。変更は確定時に保存します。${draft
+          ? '確定すると資料を切り替え、これまでの画像の対応と途中ページの補正を解除します。'
+          : '対応を変更して確定すると、途中ページの補正を解除して全ページに適用します。'}「キャンセル」では何も変更しません。</p>
         <div class="row">
-          <span>資料：<b>${esc(p.source.title || p.source.id || '')}</b>（${total}枚）</span>
+          <span>資料：<b>${esc(src.title || src.id || '')}</b>（${total}枚）${draft ? ' <span class="badge b-warn">未確定</span>' : ''}</span>
           <button id="chg">資料を選び直す</button>
           <span style="flex:1"></span>
           <button id="m10">−10</button><button id="m1">−1</button>
-          <span>画像 <input type="number" id="imgn" min="1" max="${total}" style="width:80px"> / ${total}</span>
+          <span>画像 <input type="number" id="imgn" aria-label="画像の番号" min="1" max="${total}" style="width:80px"> / ${total}</span>
           <button id="p1">+1</button><button id="p10">+10</button>
-          <button class="primary" id="ok">この対応で校正を始める</button>
+          <button id="cancel">キャンセル</button>
+          <button class="primary" id="ok">${draft ? 'この資料と対応で確定する' : 'この対応で校正を続ける'}</button>
         </div>
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
@@ -241,27 +253,41 @@ async function setupView(slug, life) {
       img = Math.max(0, Math.min(total - 1, img));
       $('#imgn').value = img + 1;
       const box = $('#mimg');
+      const current = () => life.alive && version === previewVersion && box.isConnected;
+      const failed = e => {
+        if (!current()) return;
+        box.innerHTML = `<div class="imgmsg">画像を表示できません：${esc(e.message)} <button id="mretry">再試行</button></div>`;
+        $('#mretry').onclick = show;
+      };
+      box.innerHTML = '<div class="imgmsg">読み込み中…</div>';
       try {
-      const image = await api('GET', `/api/projects/${slug}/image?index=${img}`);
-      if (version !== previewVersion || !box.isConnected) return;
-      if (p.source.type === 'ia') {
-        box.innerHTML = image && !image.missing ? `<img src="${esc(image.url)}" alt="原本のページ画像">` : '<div class="imgmsg">画像がありません</div>';
-      } else {
-        box.innerHTML = '<div class="imgmsg">描画中…</div>';
-        const c = await renderPdfPage(image.pdf, img, 900);
-        if (!life.alive || version !== previewVersion || !box.isConnected) return;
-        box.innerHTML = ''; if (c) box.appendChild(c); else box.innerHTML = '<div class="imgmsg">画像がありません</div>';
-      }
-      } catch (e) { if (life.alive && box.isConnected) box.textContent = `画像を表示できません：${e.message}`; }
+        const image = await api('GET', `/api/projects/${slug}/image?index=${img}${draftQ}`);
+        if (!current()) return;
+        if (!image || image.missing) { box.innerHTML = '<div class="imgmsg">画像がありません</div>'; return; }
+        if (image.url) {
+          const el = new Image();
+          el.alt = '原本のページ画像';
+          el.onload = () => { if (current()) box.replaceChildren(el); };
+          el.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
+          el.src = image.url;
+        } else {
+          const c = await renderPdfPage(image.pdf, img, 900);
+          if (!current()) return;
+          if (c) box.replaceChildren(c); else box.innerHTML = '<div class="imgmsg">画像がありません</div>';
+        }
+      } catch (e) { failed(e); }
     };
     for (const [id, d] of [['m10', -10], ['m1', -1], ['p1', 1], ['p10', 10]]) $('#' + id).onclick = () => { img += d; show(); };
     $('#imgn').onchange = e => { img = (parseInt(e.target.value, 10) || 1) - 1; show(); };
     $('#chg').onclick = () => renderSource().catch(e => { if (life.alive) toast(e.message, true); });
+    $('#cancel').onclick = cancel;
     $('#ok').onclick = async () => {
+      $('#ok').disabled = true;
       try {
-        if (img !== initialImg) await api('POST', `/api/projects/${slug}/mapping`, {offset: img - ref, clear_anchors: true});
+        if (draft) await api('POST', `/api/projects/${slug}/mapping`, {source: draft.revision, offset: img - ref, clear_anchors: true});
+        else if (img !== initialImg) await api('POST', `/api/projects/${slug}/mapping`, {offset: img - ref, clear_anchors: true});
         location.hash = `#/p/${slug}/${ref}`;
-      } catch (e) { if (life.alive) toast(e.message, true); }
+      } catch (e) { if (life.alive) { toast(e.message, true); $('#ok').disabled = false; } }
     };
     show();
   };
@@ -346,7 +372,7 @@ async function proofView(slug, idx, life) {
     </div>
     <span class="prog" id="prog"></span>
     <div class="grp" style="margin-left:auto">
-      <a href="#/p/${slug}/setup">資料・ページ対応</a>
+      <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
       <button id="findb">ページを探す</button>
       <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>

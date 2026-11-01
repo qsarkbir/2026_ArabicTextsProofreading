@@ -32,6 +32,7 @@ class RegressionTests(unittest.TestCase):
 
     def tearDown(self):
         store._cache.clear()
+        server.DRAFTS.clear()
         self.root.stop()
         self.temp.cleanup()
 
@@ -118,16 +119,45 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(result['index'], 2)
         self.assertEqual(store.load(p['slug'])['anchors'], [[1, 3]])
 
+    def choose_pdf(self, slug):
+        draft = server.set_pdf(Request(data=b'%PDF-test', headers={'X-Page-Count': '2'}), slug)['draft']
+        server.set_mapping(Request({'source': draft['revision'], 'offset': 0}), slug)
+        return draft
+
     def test_pdf_replacements_have_distinct_urls(self):
         p = self.project()
-        request = Request(data=b'%PDF-test', headers={'X-Page-Count': '2'})
-        server.set_pdf(request, p['slug'])
+        self.choose_pdf(p['slug'])
         first = server.image_for(store.load(p['slug']), 0)
-        server.set_pdf(request, p['slug'])
+        self.choose_pdf(p['slug'])
         second = server.image_for(store.load(p['slug']), 0)
         self.assertNotEqual(first['pdf'], second['pdf'])
         self.assertNotEqual(first['key'], second['key'])
         self.assertTrue(server.image_for(store.load(p['slug']), 2)['missing'])
+
+    def test_choosing_a_source_changes_nothing_until_confirmed(self):
+        p = self.project()
+        p['anchors'] = [[1, 3]]
+        store.save_project(p['slug'], p)
+        before = store.load(p['slug'])
+        draft = server.set_pdf(Request(data=b'%PDF-test', headers={'X-Page-Count': '5'}), p['slug'])['draft']
+        self.assertEqual(store.load(p['slug']), before)
+        preview = server.preview_image(Request(query={'index': ['4'], 'draft': [draft['revision']]}), p['slug'])
+        self.assertIn(draft['file'], preview['pdf'])
+        self.assertFalse(preview['missing'])
+        server.set_mapping(Request({'source': draft['revision'], 'offset': 1, 'clear_anchors': True}), p['slug'])
+        after = store.load(p['slug'])
+        self.assertEqual((after['source']['file'], after['offset'], after['anchors']), (draft['file'], 1, []))
+        with self.assertRaises(server.ApiError):
+            server.set_mapping(Request({'source': draft['revision']}), p['slug'])
+
+    def test_stale_draft_is_rejected_without_changes(self):
+        p = self.project()
+        first = server.set_pdf(Request(data=b'%PDF-test', headers={'X-Page-Count': '2'}), p['slug'])['draft']
+        server.set_pdf(Request(data=b'%PDF-test', headers={'X-Page-Count': '3'}), p['slug'])
+        with self.assertRaises(server.ApiError):
+            server.set_mapping(Request({'source': first['revision'], 'offset': 4}), p['slug'])
+        self.assertEqual(store.load(p['slug'])['source']['type'], 'ia')
+        self.assertEqual(store.load(p['slug'])['offset'], 0)
 
     def test_search_uses_edits_notes_and_status(self):
         p = self.project()

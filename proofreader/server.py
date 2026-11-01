@@ -25,6 +25,7 @@ from . import net, ocr, openiti, sources, store
 STATIC = Path(__file__).resolve().parent / "static"
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
+DRAFTS = {}  # slug -> scan source chosen in setup, applied only when the mapping is confirmed
 
 
 def route(method, pattern):
@@ -40,14 +41,17 @@ class ApiError(Exception):
         self.status = status
 
 
+def source_view(src):
+    return src and {k: v for k, v in src.items() if k != "pages"} | {"count": len(src["pages"]) if src["type"] == "ia" else src.get("count", 0)}
+
+
 def project_view(slug):
     p = store.load(slug)
     pages = store.parts(slug)["pages"]
     w = store.work(slug)
-    src = p["source"]
     return {
         **{k: p[k] for k in ("slug", "uri", "raw_url", "title", "author", "created", "candidates", "offset", "anchors")},
-        "source": src and {k: v for k, v in src.items() if k != "pages"} | {"count": len(src["pages"]) if src["type"] == "ia" else src.get("count", 0)},
+        "source": source_view(p["source"]),
         "pages": [{"vol": pg["vol"], "page": pg["page"]} for pg in pages],
         "edited": sorted(int(k) for k in w["edits"]),
         "done": sorted(int(k) for k, s in w["status"].items() if s.get("done")),
@@ -62,6 +66,20 @@ def page_index(slug, i):
     if not 0 <= i < len(store.parts(slug)["pages"]):
         raise ApiError("ページ番号が範囲外です", HTTPStatus.NOT_FOUND)
     return i
+
+
+def draft_for(slug, revision):
+    src = DRAFTS.get(slug)
+    if not src or src["revision"] != revision:
+        raise ApiError("選んだ資料の情報がありません。資料を選び直してください", HTTPStatus.CONFLICT)
+    return src
+
+
+def stage(slug, src):
+    """Keep a newly chosen source aside so that choosing (or cancelling) changes nothing yet."""
+    src["revision"] = uuid.uuid4().hex
+    DRAFTS[slug] = src
+    return project_view(slug) | {"draft": source_view(src)}
 
 
 def image_for(p, i, index=None):
@@ -155,12 +173,8 @@ def set_ia(h, slug):
         raise ApiError(f"この資料のページ画像を取得できませんでした: {e}")
     if not src["pages"]:
         raise ApiError("この資料にはページ画像がありません")
-    p = store.load(slug)
-    src["revision"] = uuid.uuid4().hex
-    p["source"] = src
-    p["offset"], p["anchors"] = 0, []
-    store.save_project(slug, p)
-    return project_view(slug)
+    store.load(slug)
+    return stage(slug, src)
 
 
 @route("POST", r"/api/projects/(?P<slug>[^/]+)/source/pdf")
@@ -171,15 +185,10 @@ def set_pdf(h, slug):
     count = int(h.headers.get("X-Page-Count") or 0)
     if count < 1:
         raise ApiError("PDFのページ数を確認できませんでした")
-    revision = uuid.uuid4().hex
-    name = f"source-{revision}.pdf"
+    name = f"source-{uuid.uuid4().hex}.pdf"
     store.file_path(slug, name).write_bytes(data)
-    p = store.load(slug)
-    p["source"] = {"type": "pdf", "file": name, "revision": revision,
-                   "title": urllib.parse.unquote(h.headers.get("X-Filename", name)), "count": count}
-    p["offset"], p["anchors"] = 0, []
-    store.save_project(slug, p)
-    return project_view(slug)
+    return stage(slug, {"type": "pdf", "file": name,
+                        "title": urllib.parse.unquote(h.headers.get("X-Filename", name)), "count": count})
 
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/files/(?P<name>[^/]+)")
@@ -194,6 +203,9 @@ def get_file(h, slug, name):
 def set_mapping(h, slug):
     body = h.json()
     p = store.load(slug)
+    if "source" in body:
+        p["source"] = draft_for(slug, body["source"])
+        p["offset"], p["anchors"] = 0, []
     if "offset" in body:
         p["offset"] = int(body["offset"])
     if body.get("clear_anchors"):
@@ -203,6 +215,8 @@ def set_mapping(h, slug):
         p["anchors"] = [a for a in p["anchors"] if a[0] != a_page] + [[a_page, a_img]]
         p["anchors"].sort()
     store.save_project(slug, p)
+    if "source" in body:
+        DRAFTS.pop(slug, None)
     return project_view(slug)
 
 
@@ -210,7 +224,11 @@ def set_mapping(h, slug):
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/image")
 def preview_image(h, slug):
-    return image_for(store.load(slug), 0, int(h.query.get("index", ["0"])[0]))
+    p = store.load(slug)
+    draft = h.query.get("draft", [""])[0]
+    if draft:
+        p["source"] = draft_for(slug, draft)
+    return image_for(p, 0, int(h.query.get("index", ["0"])[0]))
 
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/search")
