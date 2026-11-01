@@ -26,6 +26,12 @@ API キーは、リポジトリのルート（`README.md` と同じ場所）に 
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+Claude OCR を使うときは、パッケージを入れた仮想環境の Python でアプリを起動します（`activate` してから `python -m proofreader` としても同じです）。
+
+```bash
+.venv\Scripts\python -m proofreader
+```
+
 `.env` は起動時に読み込まれ、PC 全体に設定した環境変数より優先されます。`.gitignore` で除外してあるので、コミットされることはありません。`.env` を使わずに、環境変数 `ANTHROPIC_API_KEY` を設定するか `ant auth login` でログインしておいてもかまいません。
 
 読み取りは校正者がページを開いて「Claudeで読み取る」を押したときだけ行い、結果は `projects/<テキスト>/ocr/` に保存して再利用します。モデルは `claude-opus-5-5` です（`proofreader/ocr.py`）。

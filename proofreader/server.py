@@ -384,7 +384,9 @@ def main():
     if env_keys:
         print(f"  loaded {ENV_FILE.name}: {', '.join(env_keys)}")
     if not ocr.available():
-        print("  note: anthropic package not installed - Claude OCR is disabled")
+        print(f"  note: anthropic package not installed in this Python ({sys.executable}) - Claude OCR is disabled")
+        if (ENV_FILE.parent / ".venv").is_dir():
+            print(r"        start it with the virtual environment instead: .venv\Scripts\python -m proofreader")
     if not a.no_browser:
         webbrowser.open(url)
     try:
