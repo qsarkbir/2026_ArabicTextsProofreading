@@ -20,7 +20,15 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-API キーは環境変数 `ANTHROPIC_API_KEY` に設定するか、`ant auth login` でログインしておきます。読み取りは校正者がページを開いて「Claudeで読み取る」を押したときだけ行い、結果は `projects/<テキスト>/ocr/` に保存して再利用します。モデルは `claude-opus-5-5` です（`proofreader/ocr.py`）。
+API キーは、リポジトリのルート（`README.md` と同じ場所）に `.env` ファイルを作って書いておきます。
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`.env` は起動時に読み込まれ、PC 全体に設定した環境変数より優先されます。`.gitignore` で除外してあるので、コミットされることはありません。`.env` を使わずに、環境変数 `ANTHROPIC_API_KEY` を設定するか `ant auth login` でログインしておいてもかまいません。
+
+読み取りは校正者がページを開いて「Claudeで読み取る」を押したときだけ行い、結果は `projects/<テキスト>/ocr/` に保存して再利用します。モデルは `claude-opus-5-5` です（`proofreader/ocr.py`）。
 
 ## 流れ
 

@@ -9,6 +9,7 @@ import difflib
 import io
 import json
 import mimetypes
+import os
 import re
 import sys
 import urllib.parse
@@ -20,6 +21,7 @@ from pathlib import Path
 from . import net, ocr, openiti, sources, store
 
 STATIC = Path(__file__).resolve().parent / "static"
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
 
 
@@ -352,14 +354,35 @@ class Handler(BaseHTTPRequestHandler):
         self.dispatch("PUT")
 
 
+def load_env(path=ENV_FILE):
+    """KEY=VALUE lines from the repository's .env; they take precedence over the shell environment."""
+    if not path.is_file():
+        return []
+    keys = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.removeprefix("export ").split("=", 1)
+        k, v = k.strip(), v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        os.environ[k] = v
+        keys.append(k)
+    return keys
+
+
 def main():
     ap = argparse.ArgumentParser(description="OpenITI proofreading app")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
+    env_keys = load_env()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     url = f"http://127.0.0.1:{a.port}/"
     print(f"Proofreader: {url}  (projects in {store.ROOT})")
+    if env_keys:
+        print(f"  loaded {ENV_FILE.name}: {', '.join(env_keys)}")
     if not ocr.available():
         print("  note: anthropic package not installed - Claude OCR is disabled")
     if not a.no_browser:
