@@ -12,7 +12,7 @@ python -m proofreader --no-browser --port 8770
 - Python 3.10 以上。標準ライブラリだけで動く。`anthropic` パッケージ（`requirements.txt`）は Claude OCR を使うときだけ必要で、無ければ OCR が無効になるだけ。`anthropic` は `.venv` にだけ入っているので、OCR を使うときはシステムの `python` ではなく `.venv\Scripts\python -m proofreader` で起動する。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動）。
-- ビルド工程・テスト・リンターは無い。変更の確認は、アプリを起動してブラウザで実際に操作して行う。
+- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js`。構文確認は `node --check proofreader/static/app.js`。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
 ## 構成

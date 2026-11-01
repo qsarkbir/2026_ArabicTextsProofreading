@@ -94,6 +94,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px}
 kbd{border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:11px;background:var(--bg)}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50;max-width:90vw}
 .toast.err{background:var(--bad-ink);color:#fff}
+dialog{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(720px,95vw);max-height:85vh}
+dialog::backdrop{background:#0006}
+dialog form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#findresults{display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:55vh;overflow:auto}
+#findresults button{text-align:start;white-space:normal}
+.diff button.sp{font:inherit;white-space:pre-wrap;padding:0;border:0}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.saved{white-space:normal}
+.card{overflow-x:auto}
 @media (max-width:900px){
   .proof{grid-template-columns:1fr;height:auto}
   .imgpane{border-right:0;border-bottom:1px solid var(--line);height:60vh}

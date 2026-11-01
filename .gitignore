@@ -3,3 +3,4 @@ projects/
 __pycache__/
 *.pyc
 .env
+tests/preview-*/

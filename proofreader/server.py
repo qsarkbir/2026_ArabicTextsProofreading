@@ -7,6 +7,7 @@ import base64
 import csv
 import difflib
 import io
+import hashlib
 import json
 import mimetypes
 import os
@@ -14,6 +15,7 @@ import re
 import sys
 import urllib.parse
 import webbrowser
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -62,19 +64,22 @@ def page_index(slug, i):
     return i
 
 
-def image_for(p, i):
+def image_for(p, i, index=None):
     src = p["source"]
     if not src:
         return None
-    idx = store.image_index(p, i)
+    idx = store.image_index(p, i) if index is None else index
+    identity = f"{src['type']}:{src.get('revision', src.get('id', src.get('file', '')))}:{idx}"
+    key = hashlib.sha256(identity.encode()).hexdigest()
     if src["type"] == "ia":
         if not 0 <= idx < len(src["pages"]):
             return {"index": idx, "missing": True, "count": len(src["pages"])}
         c = src["pages"][idx]
-        return {"index": idx, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
+        return {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
                 "w": c["w"], "h": c["h"], "url": sources.ia_image_url(c["service"], 1600),
                 "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
-    return {"index": idx, "count": src.get("count", 0), "pdf": f"/api/projects/{p['slug']}/files/{src['file']}"}
+    return {"index": idx, "key": key, "missing": not 0 <= idx < src.get("count", 0),
+            "count": src.get("count", 0), "pdf": f"/api/projects/{p['slug']}/files/{src['file']}?v={src.get('revision', 'legacy')}"}
 
 
 # ---------- projects ----------
@@ -105,7 +110,7 @@ def create_project(h):
 @route("POST", r"/api/projects/upload-text")
 def create_from_file(h):
     name = urllib.parse.unquote(h.headers.get("X-Filename", "text.txt"))
-    text = h.body().decode("utf-8-sig")
+    text = h.body().decode("utf-8")
     if not openiti.split(text)["pages"]:
         raise ApiError("ページ区切り（PageV..P..）がないテキストは校正できません")
     uri = re.sub(r"\.(txt|mARkdown|completed|inProgress)$", "", name)
@@ -151,7 +156,9 @@ def set_ia(h, slug):
     if not src["pages"]:
         raise ApiError("この資料にはページ画像がありません")
     p = store.load(slug)
+    src["revision"] = uuid.uuid4().hex
     p["source"] = src
+    p["offset"], p["anchors"] = 0, []
     store.save_project(slug, p)
     return project_view(slug)
 
@@ -162,10 +169,15 @@ def set_pdf(h, slug):
     if not data.startswith(b"%PDF"):
         raise ApiError("PDFファイルではありません")
     count = int(h.headers.get("X-Page-Count") or 0)
-    name = "source.pdf"
+    if count < 1:
+        raise ApiError("PDFのページ数を確認できませんでした")
+    revision = uuid.uuid4().hex
+    name = f"source-{revision}.pdf"
     store.file_path(slug, name).write_bytes(data)
     p = store.load(slug)
-    p["source"] = {"type": "pdf", "file": name, "title": urllib.parse.unquote(h.headers.get("X-Filename", name)), "count": count}
+    p["source"] = {"type": "pdf", "file": name, "revision": revision,
+                   "title": urllib.parse.unquote(h.headers.get("X-Filename", name)), "count": count}
+    p["offset"], p["anchors"] = 0, []
     store.save_project(slug, p)
     return project_view(slug)
 
@@ -196,6 +208,28 @@ def set_mapping(h, slug):
 
 # ---------- pages ----------
 
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/image")
+def preview_image(h, slug):
+    return image_for(store.load(slug), 0, int(h.query.get("index", ["0"])[0]))
+
+
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/search")
+def search_pages(h, slug):
+    query = h.query.get("q", [""])[0].casefold().strip()
+    kind = h.query.get("filter", ["all"])[0]
+    w = store.work(slug)
+    found = []
+    for i, pg in enumerate(store.parts(slug)["pages"]):
+        key = str(i)
+        st = w["status"].get(key, {})
+        if kind == "todo" and st.get("done") or kind == "edited" and key not in w["edits"] or kind == "noted" and not st.get("note"):
+            continue
+        text = w["edits"].get(key, pg["text"])
+        if query and query not in text.casefold() and query not in st.get("note", "").casefold():
+            continue
+        found.append({"i": i, "marker": pg["marker"], "note": st.get("note", "")})
+    return found
+
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)")
 def get_page(h, slug, i):
     i = page_index(slug, i)
@@ -203,10 +237,14 @@ def get_page(h, slug, i):
     pg = store.parts(slug)["pages"][i]
     w = store.work(slug)
     st = w["status"].get(str(i), {})
+    img = image_for(p, i)
+    cached = store.ocr_get(slug, i)
+    if cached and (not img or img.get("missing") or not cached.get("image_key") or cached["image_key"] != img.get("key")):
+        cached = None
     return {"i": i, "vol": pg["vol"], "page": pg["page"], "marker": pg["marker"],
             "original": pg["text"], "text": w["edits"].get(str(i), pg["text"]),
             "done": bool(st.get("done")), "note": st.get("note", ""),
-            "ocr": store.ocr_get(slug, i), "image": image_for(p, i)}
+            "ocr": cached, "image": img}
 
 
 @route("PUT", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)")
@@ -224,10 +262,12 @@ def run_ocr(h, slug, i):
     cached = store.ocr_get(slug, i)
     p = store.load(slug)
     img = image_for(p, i)
-    if cached and not b.get("force") and cached.get("image_index") == (img or {}).get("index"):
-        return cached
     if not img or img.get("missing"):
         raise ApiError("このページに対応する画像がありません")
+    if b.get("image_key") and b["image_key"] != (img or {}).get("key"):
+        raise ApiError("画像の対応が変更されています。ページを開き直してください", HTTPStatus.CONFLICT)
+    if cached and cached.get("image_key") and not b.get("force") and cached["image_key"] == img.get("key"):
+        return cached
     if p["source"]["type"] == "ia":
         try:
             data, mtype = net.get_bytes(sources.ia_image_url(img["service"], 2000), timeout=120)
@@ -243,6 +283,9 @@ def run_ocr(h, slug, i):
     except ocr.OCRUnavailable as e:
         raise ApiError(str(e), HTTPStatus.SERVICE_UNAVAILABLE)
     res["image_index"] = img["index"]
+    res["image_key"] = img["key"]
+    if (image_for(store.load(slug), i) or {}).get("key") != img["key"]:
+        raise ApiError("読み取り中に画像の対応が変更されました。もう一度読み取ってください", HTTPStatus.CONFLICT)
     store.ocr_put(slug, i, res)
     return res
 

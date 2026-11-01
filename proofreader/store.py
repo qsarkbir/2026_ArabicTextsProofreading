@@ -72,7 +72,8 @@ def save_project(slug, project):
 def parts(slug):
     """Split original text, cached per slug since it never changes."""
     if slug not in _cache:
-        _cache[slug] = openiti.split((_dir(slug) / "original.txt").read_text(encoding="utf-8"))
+        with (_dir(slug) / "original.txt").open(encoding="utf-8", newline="") as f:
+            _cache[slug] = openiti.split(f.read())
     return _cache[slug]
 
 

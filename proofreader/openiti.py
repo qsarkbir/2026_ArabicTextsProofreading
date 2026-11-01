@@ -103,7 +103,6 @@ def fetch(ref):
 
 def split(text):
     """Split into header, page segments and tail. Each page keeps the exact marker text."""
-    text = text.lstrip("﻿")
     cut = text.find(HEADER_END)
     cut = cut + len(HEADER_END) if cut >= 0 else 0
     header, body = text[:cut], text[cut:]

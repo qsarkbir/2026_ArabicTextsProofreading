@@ -42,7 +42,7 @@ async function loadPdf(url) {
     pdfLib = window.pdfjsLib;
     pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
-  if (!pdfDocs[url]) pdfDocs[url] = pdfLib.getDocument(url).promise;
+  if (!pdfDocs[url]) pdfDocs[url] = pdfLib.getDocument(url).promise.catch(e => { delete pdfDocs[url]; throw e; });
   return pdfDocs[url];
 }
 async function renderPdfPage(url, index, width) {
@@ -59,32 +59,55 @@ async function renderPdfPage(url, index, width) {
 
 // ---------- routing ----------
 window.addEventListener('hashchange', routeNow);
-let leave = null;  // cleanup of the current view
+let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash;
+let activeView = null;
+function lifecycle() {
+  const life = {alive: true, cleanup: []};
+  activeView = life;
+  life.api = async (...args) => {
+    const result = await api(...args);
+    if (!life.alive) throw new Error('画面が切り替わりました');
+    return result;
+  };
+  return life;
+}
 async function routeNow() {
-  if (leave) { await leave(); leave = null; }
+  if (routeBusy) { routeAgain = true; return; }
+  routeBusy = true;
+  try {
+  if (leave) {
+    try { await leave(); }
+    catch (e) { history.replaceState(null, '', currentHash || '#/'); toast('保存できないため移動を中止しました。再試行してください。', true); routeAgain = false; return; }
+    leave = null;
+  }
+  if (activeView) { activeView.alive = false; activeView.cleanup.forEach(fn => fn()); }
+  const life = lifecycle();
+  currentHash = location.hash;
   const h = location.hash.replace(/^#\/?/, '').split('/');
   topbar.innerHTML = '';
   try {
-    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1]);
-    else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null);
-    else await homeView();
+    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], life);
+    else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
+    else await homeView(life);
   } catch (e) {
     view.innerHTML = `<div class="wrap"><div class="card">読み込めませんでした：${esc(e.message)}　<a href="#/">ホームへ</a></div></div>`;
   }
+  } finally { routeBusy = false; if (routeAgain) { routeAgain = false; routeNow(); } }
 }
 
 // ---------- home ----------
-async function homeView() {
+async function homeView(life) {
+  const api = life.api;
   document.title = 'OpenITI 校正';
   const list = await api('GET', '/api/projects');
   view.innerHTML = `<div class="wrap">
     <div class="card">
       <h2>新しいテキストを読み込む</h2>
       <div class="row">
-        <input type="text" id="ref" placeholder="OpenITIのバージョンURI、またはGitHubのURL（例：1014IbnMaryamTilimsani.Bustan.Kraken22021817402301-ara1）">
+        <input type="text" id="ref" aria-label="OpenITIのバージョンURIまたはGitHubのURL" placeholder="OpenITIのバージョンURI、またはGitHubのURL（例：1014IbnMaryamTilimsani.Bustan.Kraken22021817402301-ara1）">
         <button class="primary" id="go">読み込む</button>
       </div>
-      <div class="row" style="margin-top:8px"><span class="muted small">または手元のOpenITI形式ファイル：</span><input type="file" id="file" accept=".txt,.mARkdown,.completed,.inProgress,text/plain"></div>
+      <div class="row" style="margin-top:8px"><label class="muted small" for="file">または手元のOpenITI形式ファイル：</label><input type="file" id="file" accept=".txt,.mARkdown,.completed,.inProgress,text/plain"></div>
     </div>
     <div class="card">
       <h2>校正中のテキスト</h2>
@@ -101,19 +124,20 @@ async function homeView() {
     const ref = $('#ref').value.trim(); if (!ref) return;
     $('#go').disabled = true; $('#go').textContent = '取得中…';
     try { const p = await api('POST', '/api/projects', {ref}); location.hash = `#/p/${p.slug}/setup`; }
-    catch (e) { toast(e.message, true); $('#go').disabled = false; $('#go').textContent = '読み込む'; }
+    catch (e) { if (life.alive) { toast(e.message, true); $('#go').disabled = false; $('#go').textContent = '読み込む'; } }
   };
   $('#go').onclick = go;
   $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
   $('#file').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = `#/p/${p.slug}/setup`; }
-    catch (err) { toast(err.message, true); }
+    catch (err) { if (life.alive) toast(err.message, true); }
   };
 }
 
 // ---------- setup: scan source and page mapping ----------
-async function setupView(slug) {
+async function setupView(slug, life) {
+  const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
   document.title = `設定 - ${p.uri}`;
   topbar.innerHTML = `<span class="ar">${esc(p.title)}</span><span class="muted small">${esc(p.uri)}</span>`;
@@ -127,43 +151,59 @@ async function setupView(slug) {
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
-        <div class="row"><input type="search" id="q" value="${esc(terms)}"><button id="search">検索</button></div>
+        <div class="row"><input type="search" id="q" aria-label="Internet Archiveの検索語" value="${esc(terms)}"><button id="search">検索</button></div>
         <div id="results" class="results"></div>
         <h3>識別子・URLを直接指定</h3>
-        <div class="row"><input type="text" id="iaid" placeholder="例：ElBoustane または https://archive.org/details/ElBoustane"><button id="useid">使う</button></div>
+        <div class="row"><input type="text" id="iaid" aria-label="Internet Archiveの識別子またはURL" placeholder="例：ElBoustane または https://archive.org/details/ElBoustane"><button id="useid">使う</button></div>
         <h3>手元のPDFをアップロード</h3>
-        <div class="row"><input type="file" id="pdf" accept="application/pdf"><span id="pdfmsg" class="muted small"></span></div>
+        <div class="row"><input type="file" id="pdf" aria-label="ページ画像のPDF" accept="application/pdf"><span id="pdfmsg" class="muted small" role="status"></span></div>
       </div></div>`;
     const card = r => `<div class="res"><img loading="lazy" src="${esc(r.thumb)}" alt="">
       <div class="t"><b>${esc(r.title)}</b><span class="muted small">${esc(r.creator)} ${esc(r.date)}${r.imagecount ? ` ・${r.imagecount}枚` : ''}</span>
       <div class="row" style="margin-top:4px"><button data-id="${esc(r.id)}" class="primary use">使う</button><a class="small" target="_blank" rel="noopener" href="https://archive.org/details/${esc(r.id)}">IAで見る</a></div></div></div>`;
     if (p.candidates.length) $('#cands').innerHTML = p.candidates.map(id => card({id, title: id, thumb: `https://archive.org/services/img/${id}`, creator: '', date: ''})).join('');
+    let sourceBusy = false;
+    const sourceRoot = $('.wrap', view);
     const use = async id => {
+      if (sourceBusy) return;
+      sourceBusy = true;
+      sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = true);
       toast('ページ一覧を取得しています…');
-      try { p = await api('POST', `/api/projects/${slug}/source/ia`, {id}); renderMatch(); }
-      catch (e) { toast(e.message, true); }
+      try { p = await api('POST', `/api/projects/${slug}/source/ia`, {id}); await renderMatch(); }
+      catch (e) { if (life.alive) toast(e.message, true); }
+      finally { sourceBusy = false; sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = false); }
     };
-    view.addEventListener('click', e => { const b = e.target.closest('button.use'); if (b) use(b.dataset.id); });
+    sourceRoot.addEventListener('click', e => { const b = e.target.closest('button.use'); if (b) use(b.dataset.id); });
+    let sourceSearch = 0;
     const search = async () => {
-      $('#results').innerHTML = '<span class="muted">検索中…</span>';
+      const version = ++sourceSearch, results = $('#results', sourceRoot);
+      results.innerHTML = '<span class="muted">検索中…</span>';
       try {
         const rs = await api('GET', `/api/ia/search?q=${encodeURIComponent($('#q').value)}`);
-        $('#results').innerHTML = rs.length ? rs.map(card).join('') : '<span class="muted">見つかりませんでした。語を減らすか、ラテン文字の書名・著者名でも試してください。</span>';
-      } catch (e) { $('#results').innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+        if (version !== sourceSearch || !sourceRoot.isConnected) return;
+        results.innerHTML = rs.length ? rs.map(card).join('') : '<span class="muted">見つかりませんでした。語を減らすか、ラテン文字の書名・著者名でも試してください。</span>';
+      } catch (e) { if (life.alive && version === sourceSearch) results.innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
     };
     $('#search').onclick = search;
     $('#q').onkeydown = e => { if (e.key === 'Enter') search(); };
     $('#useid').onclick = () => use($('#iaid').value);
     $('#pdf').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
+      if (sourceBusy) return;
+      sourceBusy = true;
+      sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = true);
       $('#pdfmsg').textContent = 'ページ数を確認しています…';
+      let doc;
       try {
         const url = URL.createObjectURL(f);
-        const doc = await loadPdf(url);
+        try { doc = await loadPdf(url); }
+        finally { URL.revokeObjectURL(url); delete pdfDocs[url]; }
+        if (!life.alive) return;
         $('#pdfmsg').textContent = `${doc.numPages}ページ。アップロード中…`;
         p = await api('POST', `/api/projects/${slug}/source/pdf`, f, {'X-Filename': encodeURIComponent(f.name), 'X-Page-Count': String(doc.numPages)});
-        renderMatch();
-      } catch (err) { $('#pdfmsg').textContent = ''; toast(err.message, true); }
+        if (life.alive) await renderMatch();
+      } catch (err) { if (life.alive && $('#pdfmsg')) { $('#pdfmsg').textContent = ''; toast(err.message, true); } }
+      finally { if (doc) await doc.destroy(); sourceBusy = false; sourceRoot.querySelectorAll('button,input').forEach(el => el.disabled = false); }
     };
     if (!p.candidates.length && terms) search();
   };
@@ -177,12 +217,13 @@ async function setupView(slug) {
     }
     let pg = await api('GET', `/api/projects/${slug}/pages/${ref}`);
     let img = pg.image ? pg.image.index : ref;
+    const initialImg = img;
     const total = p.source.count;
     view.innerHTML = `<div class="wrap">
       <div class="steps"><span>1. テキスト ✓</span>›<span>2. ページ画像 ✓</span>›<span class="on">3. ページの対応</span></div>
       <div class="card">
         <h2>ページの対応を合わせる</h2>
-        <p class="help">左のテキスト（${esc(pg.marker)}）と同じページが右に出るまで、画像の番号を動かしてください。ここで決めた対応が全ページに適用されます。途中でずれた場合は、校正画面でそのページ以降だけ直せます。</p>
+        <p class="help">左のテキスト（${esc(pg.marker)}）と同じページが右に出るまで、画像の番号を動かしてください。変更は確定時に保存します。対応を変更して確定すると、途中ページの補正を解除して全ページに適用します。</p>
         <div class="row">
           <span>資料：<b>${esc(p.source.title || p.source.id || '')}</b>（${total}枚）</span>
           <button id="chg">資料を選び直す</button>
@@ -194,26 +235,33 @@ async function setupView(slug) {
         </div>
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
+    let previewVersion = 0;
     const show = async () => {
+      const version = ++previewVersion;
       img = Math.max(0, Math.min(total - 1, img));
       $('#imgn').value = img + 1;
       const box = $('#mimg');
+      try {
+      const image = await api('GET', `/api/projects/${slug}/image?index=${img}`);
+      if (version !== previewVersion || !box.isConnected) return;
       if (p.source.type === 'ia') {
-        await api('POST', `/api/projects/${slug}/mapping`, {offset: img - ref, clear_anchors: true});
-        const q = await api('GET', `/api/projects/${slug}/pages/${ref}`);
-        box.innerHTML = q.image && !q.image.missing ? `<img src="${esc(q.image.url)}" alt="">` : '<div class="imgmsg">画像がありません</div>';
+        box.innerHTML = image && !image.missing ? `<img src="${esc(image.url)}" alt="原本のページ画像">` : '<div class="imgmsg">画像がありません</div>';
       } else {
         box.innerHTML = '<div class="imgmsg">描画中…</div>';
-        const c = await renderPdfPage(p.source.pdf || `/api/projects/${slug}/files/${p.source.file}`, img, 900);
+        const c = await renderPdfPage(image.pdf, img, 900);
+        if (!life.alive || version !== previewVersion || !box.isConnected) return;
         box.innerHTML = ''; if (c) box.appendChild(c); else box.innerHTML = '<div class="imgmsg">画像がありません</div>';
       }
+      } catch (e) { if (life.alive && box.isConnected) box.textContent = `画像を表示できません：${e.message}`; }
     };
     for (const [id, d] of [['m10', -10], ['m1', -1], ['p1', 1], ['p10', 10]]) $('#' + id).onclick = () => { img += d; show(); };
     $('#imgn').onchange = e => { img = (parseInt(e.target.value, 10) || 1) - 1; show(); };
-    $('#chg').onclick = () => renderSource();
+    $('#chg').onclick = () => renderSource().catch(e => { if (life.alive) toast(e.message, true); });
     $('#ok').onclick = async () => {
-      await api('POST', `/api/projects/${slug}/mapping`, {offset: img - ref, clear_anchors: true});
-      location.hash = `#/p/${slug}/${ref}`;
+      try {
+        if (img !== initialImg) await api('POST', `/api/projects/${slug}/mapping`, {offset: img - ref, clear_anchors: true});
+        location.hash = `#/p/${slug}/${ref}`;
+      } catch (e) { if (life.alive) toast(e.message, true); }
     };
     show();
   };
@@ -274,7 +322,8 @@ function diffBlocks(A, B) {
 }
 
 // ---------- proofreading ----------
-async function proofView(slug, idx) {
+async function proofView(slug, idx, life) {
+  const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
   if (!p.source) { location.hash = `#/p/${slug}/setup`; return; }
   const N = p.pages.length;
@@ -297,6 +346,8 @@ async function proofView(slug, idx) {
     </div>
     <span class="prog" id="prog"></span>
     <div class="grp" style="margin-left:auto">
+      <a href="#/p/${slug}/setup">資料・ページ対応</a>
+      <button id="findb">ページを探す</button>
       <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
         <label><input type="checkbox" data-k="punct"> 句読点・記号の違いを無視</label>
@@ -309,29 +360,33 @@ async function proofView(slug, idx) {
         <a href="/api/projects/${slug}/export?fmt=text"><button style="width:100%">校正済みテキスト（OpenITI形式）</button></a>
         <a href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
         <a href="/api/projects/${slug}/export?fmt=notes"><button style="width:100%">注記・確認状況（CSV）</button></a>
-        <a href="#/p/${slug}/setup"><button style="width:100%">資料・ページ対応の設定</button></a>
       </div></div>
     </div>`;
 
-  view.innerHTML = `<div class="proof">
+  view.innerHTML = `<dialog id="finder" aria-labelledby="findtitle"><h2 id="findtitle">ページを探す</h2>
+    <form id="findform"><label>本文・注記 <input type="search" id="findq"></label>
+    <label>対象 <select id="findfilter"><option value="all">すべて</option><option value="todo">未確認</option><option value="edited">修正あり</option><option value="noted">注記あり</option></select></label>
+    <button type="submit">検索</button><button type="button" id="findclose">閉じる</button></form>
+    <div id="findresults" aria-live="polite"></div></dialog><div class="proof">
     <section class="imgpane">
       <div class="toolbar">
-        <button id="zo">−</button><span id="zv" class="small" title="クリックで100%に戻す" style="cursor:pointer"></span><button id="zi">+</button>
+        <button id="zo" aria-label="画像を縮小">−</button><button id="zv" class="small" title="100%に戻す"></button><button id="zi" aria-label="画像を拡大">+</button>
         <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
         <span style="flex:1"></span>
         <span class="small" id="imginfo"></span>
-        <button id="shl" title="画像を1枚戻す">◀</button><button id="shr" title="画像を1枚進める">▶</button>
+        <span class="small">このページ以降：</span><button id="shl" title="このページ以降の画像を1枚戻す">◀</button><button id="shr" title="このページ以降の画像を1枚進める">▶</button>
         <a id="ialink" class="small" target="_blank" rel="noopener">原本</a>
       </div>
       <div class="imgview" id="imgview"><div class="imgmsg">読み込み中…</div></div>
     </section>
     <section class="textpane">
-      <textarea class="editor ar" id="ed" dir="rtl" spellcheck="false"></textarea>
+      <textarea class="editor ar" id="ed" aria-label="校正テキスト" dir="rtl" spellcheck="false" disabled></textarea>
       <div class="status">
         <label><input type="checkbox" id="done"> 確認済み</label>
-        <input type="text" class="note" id="note" placeholder="注記（例：ブーバーヤ版 p.152 では … と読む）">
-        <button id="revert" hidden>元に戻す</button>
-        <span class="saved" id="saved"></span>
+        <input type="text" class="note" id="note" aria-label="ページの注記" placeholder="注記（例：ブーバーヤ版 p.152 では … と読む）">
+        <button id="undo" disabled>取り消す</button><button id="redo" disabled>やり直す</button>
+        <button id="revert" hidden>原文に戻す</button>
+        <span class="saved" id="saved" role="status" aria-live="polite">保存済み</span><button id="retry" hidden>保存を再試行</button>
       </div>
       <div class="ocrpane">
         <div class="ocrhead">
@@ -348,43 +403,85 @@ async function proofView(slug, idx) {
   const ed = $('#ed');
   let pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
   ed.value = pg.text;
+  ed.disabled = false;
+  const originalDisplay = pg.original.replace(/\r\n?/g, '\n');
   $('#done').checked = pg.done;
   $('#note').value = pg.note;
 
   // progress
   const progress = () => {
     $('#prog').innerHTML = `確認済み ${p.done.length}/${N} <span class="bar"><i style="width:${(100 * p.done.length / N).toFixed(1)}%"></i></span> 修正 ${p.edited.length}`;
-    $('#revert').hidden = ed.value === pg.original;
+    $('#revert').hidden = ed.value === originalDisplay;
   };
   progress();
 
   // saving
-  let saveT = null, pending = null;
-  const save = async patch => {
-    pending = Object.assign(pending || {}, patch);
-    clearTimeout(saveT);
-    $('#saved').textContent = '…';
-    return new Promise(ok => { saveT = setTimeout(async () => { await flush(); ok(); }, 500); });
-  };
-  const flush = async () => {
-    clearTimeout(saveT);
-    if (!pending) return;
-    const body = pending; pending = null;
-    try {
-      p = await api('PUT', `/api/projects/${slug}/pages/${idx}`, body);
-      $('#saved').textContent = '保存済み'; progress();
-    } catch (e) { $('#saved').textContent = '保存失敗'; toast(e.message, true); }
-  };
+  const saver = createSaver(async body => {
+    p = await api('PUT', `/api/projects/${slug}/pages/${idx}`, body);
+    progress();
+  }, (state, error) => {
+    if (!life.alive) return;
+    $('#saved').textContent = {dirty: '未保存', saving: '保存中…', saved: '保存済み', error: '保存失敗：変更は未保存です'}[state];
+    $('#retry').hidden = state !== 'error';
+    if (error) toast(error.message, true);
+  });
+  const save = saver.save, flush = saver.flush;
   leave = flush;
-  window.onbeforeunload = () => { if (pending) { flush(); return '保存中です'; } };
+  const unload = e => { if (saver.dirty()) { e.preventDefault(); e.returnValue = ''; } };
+  window.addEventListener('beforeunload', unload);
+  life.cleanup.push(() => window.removeEventListener('beforeunload', unload));
+  $('#retry').onclick = () => flush().catch(() => {});
 
-  ed.addEventListener('input', () => { save({text: ed.value}); progress(); scheduleDiff(); });
+  const history = [ed.value];
+  let historyAt = 0;
+  const historyButtons = () => { $('#undo').disabled = historyAt === 0; $('#redo').disabled = historyAt === history.length - 1; };
+  const textChanged = (record = true) => {
+    if (record && history[historyAt] !== ed.value) {
+      history.splice(historyAt + 1); history.push(ed.value);
+      if (history.length > 100) history.shift();
+      historyAt = history.length - 1;
+    }
+    historyButtons();
+    save({text: ed.value === originalDisplay ? pg.original : ed.value});
+    progress(); scheduleDiff();
+  };
+  const undo = delta => {
+    const at = historyAt + delta;
+    if (at < 0 || at >= history.length) return;
+    historyAt = at; ed.value = history[at]; textChanged(false); renderDiff(); ed.focus();
+  };
+  $('#undo').onclick = () => undo(-1); $('#redo').onclick = () => undo(1);
+
+  ed.addEventListener('input', () => textChanged());
   $('#note').addEventListener('input', e => save({note: e.target.value}));
   $('#done').onchange = e => save({done: e.target.checked});
-  $('#revert').onclick = () => { ed.value = pg.original; save({text: ed.value}); progress(); renderDiff(); };
+  $('#revert').onclick = () => { ed.value = originalDisplay; textChanged(); renderDiff(); };
 
   // navigation
-  const go = async i => { await flush(); location.hash = `#/p/${slug}/${Math.max(0, Math.min(N - 1, i))}`; };
+  const go = async i => { try { await flush(); if (life.alive) location.hash = `#/p/${slug}/${Math.max(0, Math.min(N - 1, i))}`; } catch (e) {} };
+  $('#prev').disabled = idx === 0; $('#next').disabled = idx === N - 1;
+  for (const link of document.querySelectorAll('#exp a')) link.onclick = async e => {
+    e.preventDefault();
+    try { await flush(); if (life.alive) location.assign(link.href); } catch (e) {}
+  };
+  const finder = $('#finder');
+  let searchVersion = 0;
+  const findPages = async e => {
+    if (e) e.preventDefault();
+    const version = ++searchVersion, box = $('#findresults');
+    const q = $('#findq').value, filter = $('#findfilter').value;
+    box.textContent = '検索中…';
+    try {
+      await flush();
+      const results = await api('GET', `/api/projects/${slug}/search?q=${encodeURIComponent(q)}&filter=${filter}`);
+      if (!life.alive || version !== searchVersion) return;
+      box.innerHTML = `<p>${results.length}ページ</p>` + results.map(r => `<button type="button" data-i="${r.i}">${esc(r.marker)}${r.note ? ' — ' + esc(r.note) : ''}</button>`).join('');
+    } catch (e) { if (life.alive) box.textContent = e.message; }
+  };
+  $('#findb').onclick = () => { finder.showModal(); findPages(); };
+  $('#findform').onsubmit = findPages;
+  $('#findclose').onclick = () => finder.close();
+  $('#findresults').onclick = e => { const b = e.target.closest('[data-i]'); if (b) { finder.close(); go(+b.dataset.i); } };
   $('#prev').onclick = () => go(idx - 1);
   $('#next').onclick = () => go(idx + 1);
   $('#psel').onchange = e => {
@@ -392,26 +489,30 @@ async function proofView(slug, idx) {
     let i = p.pages.findIndex((_, k) => label(k) === v);
     if (i < 0 && /^\d+$/.test(v)) i = parseInt(v, 10) - 1;
     if (i < 0) { const m = v.match(/P0*(\d+)$/); if (m) i = p.pages.findIndex(x => x.page === +m[1]); }
-    if (i >= 0) go(i); else toast('そのページはありません', true);
+    if (i >= 0 && i < N) go(i); else toast('そのページはありません', true);
   };
-  const nextTodo = () => {
+  const nextTodo = async () => {
+    try { await flush(); } catch (e) { return; }
+    if (!life.alive) return;
     const done = new Set(p.done);
     for (let k = 1; k <= N; k++) { const i = (idx + k) % N; if (!done.has(i)) return go(i); }
     toast('すべてのページが確認済みです');
   };
   $('#todo').onclick = nextTodo;
   const onKey = async e => {
-    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); $('#done').checked = true; await save({done: true}); nextTodo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && e.target === ed && !e.isComposing) { e.preventDefault(); undo(e.shiftKey ? 1 : -1); }
+    else if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); $('#done').checked = true; save({done: true}); nextTodo(); }
     else if (e.altKey && e.key === 'PageDown') { e.preventDefault(); go(idx + 1); }
     else if (e.altKey && e.key === 'PageUp') { e.preventDefault(); go(idx - 1); }
   };
   document.addEventListener('keydown', onKey);
-  const prevLeave = leave;
-  leave = async () => { document.removeEventListener('keydown', onKey); await prevLeave(); };
+  life.cleanup.push(() => document.removeEventListener('keydown', onKey));
 
   // menus
   for (const [b, m] of [['optb', 'opt'], ['expb', 'exp']]) $('#' + b).onclick = e => { e.stopPropagation(); $('#' + m).hidden = !$('#' + m).hidden; };
-  document.addEventListener('click', e => { if (!e.target.closest('.menu')) for (const m of ['opt', 'exp']) { const el = $('#' + m); if (el) el.hidden = true; } });
+  const closeMenus = e => { if (!e.target.closest('.menu')) for (const m of ['opt', 'exp']) { const el = $('#' + m); if (el) el.hidden = true; } };
+  document.addEventListener('click', closeMenus);
+  life.cleanup.push(() => document.removeEventListener('click', closeMenus));
   for (const cb of document.querySelectorAll('#opt input')) {
     cb.checked = !!prefs[cb.dataset.k];
     cb.onchange = () => { prefs[cb.dataset.k] = cb.checked; renderDiff(); };
@@ -428,16 +529,30 @@ async function proofView(slug, idx) {
     if (prefs.fit === 'height') { el.style.width = 'auto'; el.style.height = Math.round(imgview.clientHeight * prefs.zoom / 100) + 'px'; }
     else { el.style.height = 'auto'; el.style.width = prefs.zoom + '%'; }
   };
-  new ResizeObserver(() => { if (prefs.fit === 'height') applyZoom(); }).observe(imgview);
+  const observer = new ResizeObserver(() => { if (life.alive && prefs.fit === 'height') applyZoom(); });
+  observer.observe(imgview);
+  life.cleanup.push(() => observer.disconnect());
+  let imageVersion = 0;
   const showImage = async () => {
+    const version = ++imageVersion;
     const im = pg.image;
+    const failed = error => {
+      if (!life.alive || version !== imageVersion) return;
+      imgview.innerHTML = `<div class="imgmsg">画像を表示できません：${esc(error.message)} <button id="imgretry">再試行</button></div>`;
+      $('#imgretry').onclick = showImage;
+    };
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。◀▶で合わせてください。</div>'; return; }
-    if (im.url) { imgview.innerHTML = `<img src="${esc(im.url)}" alt="原本のページ画像">`; }
+    if (im.url) {
+      imgview.innerHTML = `<img src="${esc(im.url)}" alt="原本のページ画像">`;
+      imgview.firstElementChild.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
+    }
     else {
       imgview.innerHTML = '<div class="imgmsg">描画中…</div>';
-      pdfCanvas = await renderPdfPage(im.pdf, im.index, 1600);
+      try { pdfCanvas = await renderPdfPage(im.pdf, im.index, 1600); }
+      catch (e) { failed(e); return; }
+      if (!life.alive || version !== imageVersion) return;
       imgview.innerHTML = ''; if (pdfCanvas) imgview.appendChild(pdfCanvas); else imgview.innerHTML = '<div class="imgmsg">画像がありません</div>';
     }
     applyZoom();
@@ -446,25 +561,43 @@ async function proofView(slug, idx) {
   $('#zi').onclick = () => { prefs.zoom = Math.min(400, prefs.zoom + 15); applyZoom(); };
   $('#zf').onchange = e => { prefs.fit = e.target.value; prefs.zoom = 100; applyZoom(); };
   $('#zv').onclick = () => { prefs.zoom = 100; applyZoom(); };
+  let shifting = false, ocrBusy = false;
   const shift = async d => {
+    if (shifting || ocrBusy) return;
     const cur = pg.image ? pg.image.index : idx;
-    p = await api('POST', `/api/projects/${slug}/mapping`, {anchor: [idx, cur + d]});
-    pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
-    toast('このページ以降の画像の対応をずらしました');
-    showImage(); renderDiff();
+    if (cur + d < 0 || cur + d >= p.source.count) { toast('資料の画像範囲外です', true); return; }
+    shifting = true; $('#ocrb').disabled = true;
+    try {
+      p = await api('POST', `/api/projects/${slug}/mapping`, {anchor: [idx, cur + d]});
+      pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
+      ocr = pg.ocr;
+      toast('このページ以降の画像の対応をずらしました');
+      showImage(); renderDiff();
+    } catch (e) { if (life.alive) toast(e.message, true); }
+    finally { shifting = false; if (life.alive) $('#ocrb').disabled = !p.ocr; }
   };
   $('#shl').onclick = () => shift(-1);
   $('#shr').onclick = () => shift(1);
   showImage();
 
   // OCR + diff
-  let ocr = pg.ocr && pg.image && pg.ocr.image_index === pg.image.index ? pg.ocr : null;
+  let ocr = pg.ocr;
   let diffT;
-  const scheduleDiff = () => { clearTimeout(diffT); diffT = setTimeout(renderDiff, 400); };
+  life.cleanup.push(() => clearTimeout(diffT));
+  const scheduleDiff = () => {
+    clearTimeout(diffT);
+    $('#diff').querySelectorAll('button').forEach(b => b.disabled = true);
+    diffT = setTimeout(renderDiff, 400);
+  };
   function renderDiff() {
+    if (!life.alive) return;
     const box = $('#diff');
     $('#rawd').hidden = !ocr;
-    if (!ocr) { box.innerHTML = ''; $('#ocrb').textContent = 'Claudeで読み取る'; return; }
+    if (!ocr) {
+      box.innerHTML = ''; $('#ocrb').textContent = 'Claudeで読み取る';
+      if (!ocrBusy) $('#ocrmsg').textContent = p.ocr ? '' : 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）';
+      return;
+    }
     $('#ocrb').textContent = '読み直す';
     $('#raw').textContent = ocr.text;
     const A = textTokens(ed.value), B = ocrTokens(ocr.text);
@@ -483,7 +616,7 @@ async function proofView(slug, idx) {
         pos = at;
       } else {
         const s = A[a1].start, e = A[a2 - 1].end;
-        html += esc(text.slice(pos, s)) + `<span class="sp" data-s="${s}" data-e="${e}">${esc(text.slice(s, e))}</span>`
+        html += esc(text.slice(pos, s)) + `<button type="button" class="sp" data-s="${s}" data-e="${e}" title="入力欄の該当箇所を選択">${esc(text.slice(s, e))}</button>`
           + (alt ? `<button class="chip ar" data-b="${bi}" title="Claudeの読みに置き換える">${esc(alt)}</button>`
                  : `<button class="chip del" data-b="${bi}" title="Claudeの読みにはない語を削除">削除</button>`);
         pos = e;
@@ -491,29 +624,38 @@ async function proofView(slug, idx) {
     });
     html += esc(text.slice(pos));
     box.innerHTML = `<div class="diff ar">${html}</div>`;
-    box.querySelectorAll('.sp').forEach(sp => sp.onclick = () => { ed.focus(); ed.setSelectionRange(+sp.dataset.s, +sp.dataset.e); });
+    box.querySelectorAll('.sp').forEach(sp => sp.onclick = () => { if (ed.value !== text) { renderDiff(); return; } ed.focus(); ed.setSelectionRange(+sp.dataset.s, +sp.dataset.e); });
     box.querySelectorAll('.chip').forEach(btn => btn.onclick = () => {
+      if (ed.value !== text) { renderDiff(); return; }
       const [a1, a2, b1, b2] = blocks[+btn.dataset.b];
       const alt = B.slice(b1, b2).map(t => t.w).join(' ');
       let v = ed.value;
-      if (a1 === a2) { const at = a1 < A.length ? A[a1].start : v.length; v = v.slice(0, at) + alt + (a1 < A.length ? ' ' : '') + v.slice(at); }
+      if (a1 === a2) { const at = a1 < A.length ? A[a1].start : v.length; v = insertWords(v, at, alt); }
       else { let s = A[a1].start, e = A[a2 - 1].end; if (!alt && v[e] === ' ') e++; v = v.slice(0, s) + alt + v.slice(e); }
-      ed.value = v; save({text: v}); progress(); renderDiff();
+      ed.value = v; textChanged(); renderDiff();
     });
   }
   const runOcr = async force => {
+    if (ocrBusy || shifting) return;
     if (!p.ocr) { toast('Claude OCR は使えません（anthropic パッケージが入っていません）', true); return; }
+    ocrBusy = true;
+    const imageKey = pg.image && pg.image.key;
+    $('#shl').disabled = $('#shr').disabled = true;
     $('#ocrb').disabled = true; $('#ocrmsg').textContent = '読み取り中…（数十秒かかります）';
     try {
-      const body = {force, model: $('#ocrm').value};
+      const body = {force, model: $('#ocrm').value, image_key: imageKey};
       if (pg.image && pg.image.pdf) {
         const c = await renderPdfPage(pg.image.pdf, pg.image.index, 2000);
+        if (!life.alive) return;
+        if (!c) throw new Error('このページに対応する画像がありません');
         body.image = c.toDataURL('image/jpeg', 0.9);
       }
-      ocr = await api('POST', `/api/projects/${slug}/pages/${idx}/ocr`, body);
+      const result = await api('POST', `/api/projects/${slug}/pages/${idx}/ocr`, body);
+      if (!life.alive || pg.image.key !== imageKey) return;
+      ocr = result;
       renderDiff();
-    } catch (e) { $('#ocrmsg').textContent = ''; toast(e.message, true); }
-    finally { $('#ocrb').disabled = false; }
+    } catch (e) { if (life.alive) { $('#ocrmsg').textContent = ''; toast(e.message, true); } }
+    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !p.ocr; $('#shl').disabled = $('#shr').disabled = false; } }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
   const ocrm = $('#ocrm');
