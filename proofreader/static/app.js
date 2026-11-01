@@ -23,7 +23,7 @@ function toast(msg, err) {
 }
 
 const prefs = (() => {
-  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, zoom: 100};
+  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, zoom: 100, fit: 'width'};
   let v = def;
   try { v = Object.assign({}, def, JSON.parse(localStorage.getItem('proof-prefs') || '{}')); } catch (e) {}
   return new Proxy(v, {set(o, k, val) { o[k] = val; try { localStorage.setItem('proof-prefs', JSON.stringify(o)); } catch (e) {} return true; }});
@@ -316,7 +316,8 @@ async function proofView(slug, idx) {
   view.innerHTML = `<div class="proof">
     <section class="imgpane">
       <div class="toolbar">
-        <button id="zo">−</button><span id="zv" class="small"></span><button id="zi">+</button><button id="zf">幅に合わせる</button>
+        <button id="zo">−</button><span id="zv" class="small" title="クリックで100%に戻す" style="cursor:pointer"></span><button id="zi">+</button>
+        <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
         <span style="flex:1"></span>
         <span class="small" id="imginfo"></span>
         <button id="shl" title="画像を1枚戻す">◀</button><button id="shr" title="画像を1枚進める">▶</button>
@@ -420,9 +421,13 @@ async function proofView(slug, idx) {
   let pdfCanvas = null;
   const applyZoom = () => {
     $('#zv').textContent = prefs.zoom + '%';
+    $('#zf').value = prefs.fit;
     const el = imgview.firstElementChild;
-    if (el && (el.tagName === 'IMG' || el.tagName === 'CANVAS')) el.style.width = prefs.zoom + '%';
+    if (!el || !(el.tagName === 'IMG' || el.tagName === 'CANVAS')) return;
+    if (prefs.fit === 'height') { el.style.width = 'auto'; el.style.height = Math.round(imgview.clientHeight * prefs.zoom / 100) + 'px'; }
+    else { el.style.height = 'auto'; el.style.width = prefs.zoom + '%'; }
   };
+  new ResizeObserver(() => { if (prefs.fit === 'height') applyZoom(); }).observe(imgview);
   const showImage = async () => {
     const im = pg.image;
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
@@ -438,7 +443,8 @@ async function proofView(slug, idx) {
   };
   $('#zo').onclick = () => { prefs.zoom = Math.max(30, prefs.zoom - 15); applyZoom(); };
   $('#zi').onclick = () => { prefs.zoom = Math.min(400, prefs.zoom + 15); applyZoom(); };
-  $('#zf').onclick = () => { prefs.zoom = 100; applyZoom(); };
+  $('#zf').onchange = e => { prefs.fit = e.target.value; prefs.zoom = 100; applyZoom(); };
+  $('#zv').onclick = () => { prefs.zoom = 100; applyZoom(); };
   const shift = async d => {
     const cur = pg.image ? pg.image.index : idx;
     p = await api('POST', `/api/projects/${slug}/mapping`, {anchor: [idx, cur + d]});
