@@ -2,6 +2,13 @@
 import base64
 
 MODEL = "claude-opus-5-5"
+# Models the proofreader may choose from; label shown in the UI. Haiku has no server-side refusal fallback.
+MODELS = {
+    "claude-opus-5-5": "Opus 5.5",
+    "claude-sonnet-5-5": "Sonnet 5.5（料金 約1/2）",
+    "claude-haiku-5-5": "Haiku 5.5（料金 約1/40）",
+}
+NO_FALLBACK = {"claude-haiku-5-5"}
 
 PROMPT = """This is a scanned page of a printed Arabic book. Transcribe it exactly as printed.
 
@@ -31,13 +38,15 @@ def transcribe(image_bytes, media_type="image/jpeg", model=MODEL, effort="medium
     except ImportError as e:
         raise OCRUnavailable("anthropic パッケージが入っていません（pip install -r requirements.txt）") from e
 
+    if model not in MODELS:
+        raise OCRUnavailable(f"このモデルは使えません: {model}")
+    fallback = {} if model in NO_FALLBACK else {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
     client = anthropic.Anthropic()
     try:
         response = client.beta.messages.create(
             model=model,
             max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
+            **fallback,
             output_config={"effort": effort},
             messages=[{
                 "role": "user",

@@ -51,6 +51,7 @@ def project_view(slug):
         "done": sorted(int(k) for k, s in w["status"].items() if s.get("done")),
         "noted": sorted(int(k) for k, s in w["status"].items() if s.get("note")),
         "ocr": ocr.available(),
+        "ocr_models": ocr.MODELS,
     }
 
 
@@ -238,7 +239,7 @@ def run_ocr(h, slug, i):
             raise ApiError("PDFのページ画像が送られていません")
         mtype, data = m[1], base64.b64decode(m[2])
     try:
-        res = ocr.transcribe(data, mtype)
+        res = ocr.transcribe(data, mtype, model=b.get("model") or ocr.MODEL)
     except ocr.OCRUnavailable as e:
         raise ApiError(str(e), HTTPStatus.SERVICE_UNAVAILABLE)
     res["image_index"] = img["index"]

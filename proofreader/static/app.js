@@ -23,7 +23,7 @@ function toast(msg, err) {
 }
 
 const prefs = (() => {
-  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, zoom: 100, fit: 'width'};
+  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width'};
   let v = def;
   try { v = Object.assign({}, def, JSON.parse(localStorage.getItem('proof-prefs') || '{}')); } catch (e) {}
   return new Proxy(v, {set(o, k, val) { o[k] = val; try { localStorage.setItem('proof-prefs', JSON.stringify(o)); } catch (e) {} return true; }});
@@ -336,6 +336,7 @@ async function proofView(slug, idx) {
       <div class="ocrpane">
         <div class="ocrhead">
           <button id="ocrb" class="primary">Claudeで読み取る</button>
+          <select id="ocrm" title="読み取りに使うモデル">${Object.entries(p.ocr_models || {}).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('')}</select>
           <span id="ocrmsg" class="small muted"></span>
         </div>
         <div id="diff"></div>
@@ -469,7 +470,8 @@ async function proofView(slug, idx) {
     const A = textTokens(ed.value), B = ocrTokens(ocr.text);
     const blocks = diffBlocks(A, B);
     $('#ocrmsg').innerHTML = (blocks.length ? `<span class="badge b-warn">食い違い ${blocks.length} か所</span>` : '<span class="badge b-ok">食い違いなし</span>')
-      + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '');
+      + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '')
+      + (ocr.model ? ` ${esc(ocr.model)} の読み` : '');
     if (!blocks.length) { box.innerHTML = ''; return; }
     const text = ed.value;
     let html = '', pos = 0;
@@ -503,7 +505,7 @@ async function proofView(slug, idx) {
     if (!p.ocr) { toast('Claude OCR は使えません（anthropic パッケージが入っていません）', true); return; }
     $('#ocrb').disabled = true; $('#ocrmsg').textContent = '読み取り中…（数十秒かかります）';
     try {
-      const body = {force};
+      const body = {force, model: $('#ocrm').value};
       if (pg.image && pg.image.pdf) {
         const c = await renderPdfPage(pg.image.pdf, pg.image.index, 2000);
         body.image = c.toDataURL('image/jpeg', 0.9);
@@ -514,6 +516,10 @@ async function proofView(slug, idx) {
     finally { $('#ocrb').disabled = false; }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
+  const ocrm = $('#ocrm');
+  ocrm.value = prefs.ocrModel;
+  if (!ocrm.value) ocrm.selectedIndex = 0;
+  ocrm.onchange = () => { prefs.ocrModel = ocrm.value; };
   if (!p.ocr) { $('#ocrb').disabled = true; $('#ocrmsg').textContent = 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）'; }
   renderDiff();
   if (!ocr && p.ocr && prefs.autoOcr && pg.image && !pg.image.missing) runOcr(false);
