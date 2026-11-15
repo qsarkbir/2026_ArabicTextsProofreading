@@ -1,3 +1,4 @@
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -285,6 +286,245 @@ class RegressionTests(unittest.TestCase):
         ok = handler.redirect_request(req, None, 302, 'Found', {}, 'https://ia800000.us.archive.org/x.jpg')
         self.assertEqual(ok.full_url, 'https://ia800000.us.archive.org/x.jpg')
 
+
+    def ia_pdf_files(self, files):
+        with patch.object(sources.net, 'get_json', return_value={'files': files}):
+            return sources.ia_pdf('book')
+
+    def test_ia_pdf_selection(self):
+        f = lambda name, fmt, size, **kw: {'name': name, 'format': fmt, 'size': str(size), **kw}
+        self.assertEqual(self.ia_pdf_files([
+            f('a.pdf', 'Text PDF', 900), f('b.pdf', 'Image Container PDF', 10), f('c.pdf', 'Image Container PDF', 20),
+            f('d.pdf', 'Image Container PDF', 99, private='true'), f('e.txt', 'Text', 5000)]),
+            {'name': 'c.pdf', 'size': 20, 'format': 'Image Container PDF'})
+        self.assertEqual(self.ia_pdf_files([f('x.pdf', 'Other', 1), f('y.pdf', 'Additional Text PDF', 1), f('z.pdf', 'Text PDF', 1)])['name'], 'z.pdf')
+        self.assertEqual(self.ia_pdf_files([f('x.pdf', 'Other', 1), f('y.pdf', 'Other', 5)])['name'], 'y.pdf')
+        self.assertIsNone(self.ia_pdf_files([f('a.pdf', 'Text PDF', 1, private='true'), f('a.txt', 'Text', 1)]))
+
+    def fake_response(self, data, length=True):
+        class Resp:
+            headers = {'Content-Length': str(len(data))} if length else {}
+
+            def __init__(self):
+                self.n = 0
+
+            def read(self, n):
+                chunk, self.n = data[self.n:self.n + n], self.n + n
+                return chunk
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        return Resp()
+
+    def test_download_is_atomic_and_limited(self):
+        target = Path(self.temp.name) / 'x.pdf'
+        seen = []
+        with patch.object(net._opener, 'open', return_value=self.fake_response(b'a' * 200000)):
+            net.download('https://archive.org/download/x/x.pdf', target, 10 ** 6, lambda d, t: seen.append((d, t)))
+        self.assertEqual(target.read_bytes(), b'a' * 200000)
+        self.assertEqual(seen[-1], (200000, 200000))
+        self.assertEqual([f.name for f in Path(self.temp.name).iterdir()], ['x.pdf'])
+        other = Path(self.temp.name) / 'y.pdf'
+        for length in (True, False):
+            with patch.object(net._opener, 'open', return_value=self.fake_response(b'a' * 200000, length)):
+                with self.assertRaises(net.FetchError):
+                    net.download('https://archive.org/download/x/y.pdf', other, 100000)
+            self.assertEqual([f.name for f in Path(self.temp.name).iterdir()], ['x.pdf'])
+
+    def test_download_retries_once_after_503(self):
+        err = net.urllib.error.HTTPError('https://archive.org/x', 503, 'busy', {'Retry-After': '2'}, None)
+        target = Path(self.temp.name) / 'x.pdf'
+        with patch.object(net._opener, 'open', side_effect=[err, self.fake_response(b'ok')]), \
+                patch.object(net.time, 'sleep') as sleep:
+            net.download('https://archive.org/x', target, 100)
+        sleep.assert_called_once_with(2.0)
+        self.assertEqual(target.read_bytes(), b'ok')
+        with patch.object(net._opener, 'open', side_effect=[err, err]), patch.object(net.time, 'sleep'):
+            with self.assertRaises(net.FetchError):
+                net.download('https://archive.org/x', target, 100)
+
+    def pdf_file(self, p, content=b'%PDF-x'):
+        path = store.file_path(p['slug'], 'ia-one.pdf')
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(content)
+        return path
+
+    def test_attach_with_wrong_page_count_deletes_file(self):
+        p = self.project()
+        path = self.pdf_file(p)
+        with self.assertRaises(server.ApiError) as cm:
+            server.ia_pdf_attach(Request({'revision': 'one', 'pages': 3}), p['slug'])
+        self.assertIn('PDFのページ数（3）が資料の画像数（4）と一致しないため使えません', str(cm.exception))
+        self.assertFalse(path.exists())
+        self.assertNotIn('pdf_file', store.load(p['slug'])['source'])
+
+    def test_attach_with_stale_revision_conflicts(self):
+        p = self.project()
+        path = self.pdf_file(p)
+        with self.assertRaises(server.ApiError) as cm:
+            server.ia_pdf_attach(Request({'revision': 'old', 'pages': 4}), p['slug'])
+        self.assertEqual(cm.exception.status, 409)
+        self.assertTrue(path.exists())
+
+    def test_attached_pdf_keeps_key_legacy_ocr_and_detaches(self):
+        p = self.project()
+        store.ocr_put(p['slug'], 0, {'text': 'old', 'image_index': 0})
+        before = server.image_for(store.load(p['slug']), 0)
+        self.pdf_file(p)
+        view = server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        self.assertEqual(view['source']['pdf_file'], 'ia-one.pdf')
+        im = server.image_for(store.load(p['slug']), 0)
+        self.assertNotIn('url', im)
+        self.assertEqual(im['pdf'], f"/api/projects/{p['slug']}/files/ia-one.pdf?v=one-6")
+        self.assertEqual(im['key'], before['key'])
+        self.assertEqual(im['link'], before['link'])
+        pg = server.get_page(Request(), p['slug'], '0')
+        self.assertTrue(pg['ocr']['legacy'])
+        self.assertEqual(pg['image']['pdf'], im['pdf'])
+        with patch.object(server, 'scan_bytes') as scan_bytes, patch.object(server.ocr, 'transcribe', return_value={'text': 'n'}) as tr:
+            server.run_ocr(Request({'image': 'data:image/png;base64,aGk='}), p['slug'], '0')
+        scan_bytes.assert_not_called()
+        self.assertEqual(tr.call_args[0][:2], (b'hi', 'image/png'))
+        server.ia_pdf_detach(Request(), p['slug'])
+        self.assertNotIn('pdf_file', store.load(p['slug'])['source'])
+        self.assertTrue(store.file_path(p['slug'], 'ia-one.pdf').exists())
+        self.assertEqual(server.image_for(store.load(p['slug']), 0)['url'], before['url'])
+
+    def test_rechoosing_a_source_drops_pdf_file(self):
+        p = self.project()
+        self.pdf_file(p)
+        server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        src = {'type': 'ia', 'id': 'book', 'title': '', 'pages': [{'label': '0', 'service': 's', 'w': 1, 'h': 1}] * 4}
+        with patch.object(server.sources, 'ia_pages', return_value=src):
+            draft = server.set_ia(Request({'id': 'book'}), p['slug'])['draft']
+        self.assertNotIn('pdf_file', draft)
+        server.set_mapping(Request({'source': draft['revision']}), p['slug'])
+        self.assertNotIn('pdf_file', store.load(p['slug'])['source'])
+        self.assertIn('url', server.image_for(store.load(p['slug']), 0))
+
+    def serve(self, path, query, range_header=None):
+        out = io.BytesIO()
+        sent = []
+        h = object.__new__(server.Handler)
+        h.query, h.headers, h.wfile = query, {'Range': range_header} if range_header else {}, out
+        h.send_response = lambda code: sent.append(('status', code))
+        h.send_header = lambda k, v: sent.append((k, v))
+        h.end_headers = lambda: None
+        h._send = lambda status, data, ctype, extra=None, cache='no-store': sent.append(('_send', status, extra, cache))
+        h.send_file(path)
+        return sent, out.getvalue()
+
+    def test_send_file_range_and_cache(self):
+        path = Path(self.temp.name) / 'f.pdf'
+        path.write_bytes(bytes(range(100)))
+        sent, body = self.serve(path, {'v': ['1']})
+        self.assertEqual(body, bytes(range(100)))
+        self.assertIn(('Cache-Control', 'private, max-age=86400'), sent)
+        self.assertIn(('Accept-Ranges', 'bytes'), sent)
+        sent, body = self.serve(path, {})
+        self.assertIn(('Cache-Control', 'no-store'), sent)
+        sent, body = self.serve(path, {}, 'bytes=10-19')
+        self.assertEqual(body, bytes(range(10, 20)))
+        self.assertIn(('status', 206), sent)
+        self.assertIn(('Content-Range', 'bytes 10-19/100'), sent)
+        sent, body = self.serve(path, {}, 'bytes=90-')
+        self.assertEqual(body, bytes(range(90, 100)))
+        self.assertIn(('Content-Range', 'bytes 90-99/100'), sent)
+        sent, body = self.serve(path, {}, 'bytes=-5')
+        self.assertEqual(body, bytes(range(95, 100)))
+        for bad in ('bytes=100-', 'bytes=500-600', 'bytes=-0'):
+            sent, body = self.serve(path, {}, bad)
+            self.assertEqual(sent[0][:2], ('_send', 416), bad)
+            self.assertEqual(body, b'')
+        for ignored in ('bytes=0-1,5-6', 'bytes=20-10', 'bytes=abc', 'items=1-2', 'bytes='):
+            sent, body = self.serve(path, {}, ignored)
+            self.assertIn(('status', 200), sent, ignored)
+            self.assertEqual(body, bytes(range(100)))
+
+    def test_download_retries_after_429_and_closes_error(self):
+        class Err(net.urllib.error.HTTPError):
+            closed = False
+
+            def close(self):
+                Err.closed = True
+        err = Err('https://archive.org/x', 429, 'slow', {}, None)
+        target = Path(self.temp.name) / 'x.pdf'
+        with patch.object(net._opener, 'open', side_effect=[err, self.fake_response(b'ok')]), \
+                patch.object(net.time, 'sleep') as sleep:
+            net.download('https://archive.org/x', target, 100)
+        sleep.assert_called_once_with(5)
+        self.assertTrue(Err.closed)
+
+    def pdf_state(self):
+        for d in (server.PDF_JOBS, server.PDF_INFO, server.PDF_MISMATCH):
+            d.clear()
+            self.addCleanup(d.clear)
+
+    def test_start_twice_runs_one_download_and_status_reports_job(self):
+        p = self.project()
+        self.pdf_state()
+        info = {'name': 'b.pdf', 'size': 10, 'format': 'Image Container PDF'}
+        with patch.object(server.sources, 'ia_pdf', return_value=info), patch.object(server.threading, 'Thread') as th:
+            first = server.ia_pdf_start(Request(), p['slug'])
+            second = server.ia_pdf_start(Request(), p['slug'])
+        self.assertEqual(th.call_count, 1)
+        self.assertEqual((first['state'], second['state']), ('running', 'running'))
+        with patch.object(server.sources, 'ia_pdf', return_value=info):
+            st = server.ia_pdf_status(Request(), p['slug'])
+        self.assertEqual((st['job']['state'], st['available'], st['pending']), ('running', info, None))
+
+    def test_stale_tmp_is_removed_only_when_starting(self):
+        p = self.project()
+        self.pdf_state()
+        stale = self.pdf_file(p).with_name('ia-one.pdf.abc.tmp')
+        stale.write_bytes(b'x')
+        info = {'name': 'b.pdf', 'size': 10, 'format': ''}
+        with patch.object(server.sources, 'ia_pdf', return_value=info), patch.object(server.threading, 'Thread'):
+            server.ia_pdf_start(Request(), p['slug'])
+            self.assertFalse(stale.exists())
+            stale.write_bytes(b'x')
+            server.ia_pdf_start(Request(), p['slug'])
+        self.assertTrue(stale.exists())
+
+    def test_mismatch_is_remembered_and_stale_done_job_hidden(self):
+        p = self.project()
+        self.pdf_state()
+        info = {'name': 'b.pdf', 'size': 10, 'format': ''}
+        server.PDF_JOBS[p['slug']] = {'revision': 'one', 'state': 'done', 'bytes': 1, 'total': 1, 'error': '', 'file': 'ia-one.pdf'}
+        with patch.object(server.sources, 'ia_pdf', return_value=info):
+            self.assertIsNone(server.ia_pdf_status(Request(), p['slug'])['job'])
+            self.pdf_file(p)
+            with self.assertRaises(server.ApiError):
+                server.ia_pdf_attach(Request({'revision': 'one', 'pages': 9}), p['slug'])
+            st = server.ia_pdf_status(Request(), p['slug'])
+            self.assertEqual(st['job']['state'], 'error')
+            self.assertIn('一致しないため使えません', st['mismatch'])
+            with self.assertRaises(server.ApiError):
+                server.ia_pdf_start(Request(), p['slug'])
+
+    def test_detach_then_status_reports_pending(self):
+        p = self.project()
+        self.pdf_state()
+        self.pdf_file(p)
+        server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        again = server.ia_pdf_attach(Request({'revision': 'one', 'pages': 99}), p['slug'])
+        self.assertEqual(again['source']['pdf_file'], 'ia-one.pdf')
+        self.assertTrue(store.file_path(p['slug'], 'ia-one.pdf').exists())
+        server.ia_pdf_detach(Request(), p['slug'])
+        with patch.object(server.sources, 'ia_pdf', return_value=None):
+            st = server.ia_pdf_status(Request(), p['slug'])
+        self.assertEqual((st['attached'], st['pending']), (None, 'ia-one.pdf'))
+        self.assertTrue(st['v'].startswith('one-'))
+
+    def test_attach_with_invalid_pages_is_a_400(self):
+        p = self.project()
+        self.pdf_file(p)
+        with self.assertRaises(server.ApiError) as cm:
+            server.ia_pdf_attach(Request({'revision': 'one', 'pages': 'x'}), p['slug'])
+        self.assertEqual(cm.exception.status, 400)
 
 
 class VenvRelaunchTests(unittest.TestCase):

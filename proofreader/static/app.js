@@ -42,7 +42,7 @@ document.addEventListener('resume', beat);
 window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
 
 const prefs = (() => {
-  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width'};
+  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width', editorH: null};
   let v = def;
   try { v = Object.assign({}, def, JSON.parse(localStorage.getItem('proof-prefs') || '{}')); } catch (e) {}
   return new Proxy(v, {set(o, k, val) { o[k] = val; try { localStorage.setItem('proof-prefs', JSON.stringify(o)); } catch (e) {} return true; }});
@@ -271,6 +271,7 @@ async function setupView(slug, from, life) {
           <button id="cancel">キャンセル</button>
           <button class="primary" id="ok">${draft ? 'この資料と対応で確定する' : 'この対応で校正を続ける'}</button>
         </div>
+        ${!draft && src.type === 'ia' ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
     let previewVersion = 0;
@@ -316,6 +317,65 @@ async function setupView(slug, from, life) {
       } catch (e) { if (life.alive) { toast(e.message, true); $('#ok').disabled = false; } }
     };
     show();
+
+    const row = $('#pdfrow');
+    if (row) {
+      const base = `/api/projects/${slug}/source/ia/pdf`, mb = n => (n / 1048576).toFixed(1);
+      let timer, failure = '', verifying = false, sawRunning = false;
+      life.cleanup.push(() => clearTimeout(timer));
+      const live = () => life.alive && row.isConnected;
+      const put = html => { if (live()) row.innerHTML = `<span class="muted">作業フォルダーのPDF：</span>${html}`; };
+      const run = fn => async () => { try { await fn(); } catch (e) { if (live()) { failure = e.message; put(''); refresh(); } } };
+      const verify = async (st, file) => {
+        verifying = true; put('<span>PDFを確認しています…</span>');
+        const url = `/api/projects/${slug}/files/${encodeURIComponent(file)}?v=${encodeURIComponent(st.v)}`;
+        try {
+          const doc = await loadPdf(url), pages = doc.numPages;
+          delete pdfDocs[url]; doc.destroy();
+          p = await api('POST', `${base}/attach`, {revision: st.revision, pages});
+          if (live()) { toast('PDFを作業フォルダーに結び付けました'); show(); }
+        } catch (e) { delete pdfDocs[url]; if (live()) toast(e.message, true); }
+        finally { verifying = false; }
+        if (live()) refresh();
+      };
+      const refresh = async () => {
+        clearTimeout(timer);
+        if (verifying || !live()) return;
+        if (failure) { put(`<span>${esc(failure)}</span> <button id="pdfgo">再試行</button>`); $('#pdfgo').onclick = start; return; }
+        let st;
+        try { st = await api('GET', base); }
+        catch (e) { if (live()) { failure = e.message; refresh(); } return; }
+        if (!live()) return;
+        const job = st.job;
+        if (st.attached) {
+          put(`<span>保存済み（${esc(st.attached)}）</span> <button id="pdfoff">オンラインの画像に戻す</button>`);
+          $('#pdfoff').onclick = run(async () => { p = await api('POST', `${base}/detach`); toast('オンラインの画像に戻しました'); show(); await refresh(); });
+        } else if (job && job.state === 'running') {
+          sawRunning = true;
+          put(`<span>ダウンロード中… ${mb(job.bytes)} / ${job.total ? mb(job.total) : '?'} MB</span>`);
+          timer = setTimeout(refresh, 1500);
+        } else if (job && job.state === 'error' && !st.mismatch) {
+          failure = job.error || 'ダウンロードに失敗しました'; refresh();
+        } else if (st.mismatch) put(`<span>${esc(st.mismatch)}</span>`);
+        else if (st.pending) {
+          if (sawRunning) { sawRunning = false; verify(st, st.pending); return; }
+          put(`<span>保存したPDFがあります</span> <button id="pdfver">確認して結び付ける</button>`);
+          $('#pdfver').onclick = () => verify(st, st.pending);
+        } else if (!st.available) put('<span>この資料にはPDFがありません</span>');
+        else {
+          put(`<button id="pdfgo">PDFを作業フォルダーに保存（${mb(st.available.size)} MB）</button>`);
+          $('#pdfgo').onclick = start;
+        }
+      };
+      const start = run(async () => {
+        failure = '';
+        const b = $('#pdfgo'); if (b) b.disabled = true;
+        await api('POST', base);
+        sawRunning = true;
+        await refresh();
+      });
+      refresh();
+    }
   };
 
   if (p.source) await renderMatch(); else await renderSource();
@@ -334,6 +394,7 @@ function textTokens(text) {
   const out = [];
   for (const m of text.matchAll(/\S+/g)) {
     let w = m[0], start = m.index;
+    if (/^(\|EDITOR\||%~%|\$+|@)$/.test(w)) continue;
     const pre = w.match(/^(~~|#+\s*|\|+)/);
     if (pre) { w = w.slice(pre[0].length); start += pre[0].length; }
     if (!w || /^(ms\d+|PageV\d+P\d+|@\w+|\|+|#+|=+)$/.test(w)) continue;
@@ -432,6 +493,7 @@ async function proofView(slug, idx, life) {
       <div class="imgview" id="imgview"><div class="imgmsg">読み込み中…</div></div>
     </section>
     <section class="textpane">
+      <div class="marks" id="marks"><span class="small">記号：</span><button type="button" class="mk" data-tag="# " title="段落・韻文の行の始まり：#"><span dir="ltr">#</span></button><button type="button" class="mk" data-tag="~~" title="行の続き：~~"><span dir="ltr">~~</span></button><button type="button" class="mk" data-tag="### | " title="章の見出し：### |"><span dir="ltr">### |</span></button><button type="button" class="mk" data-tag="### || " title="節の見出し：### ||"><span dir="ltr">### ||</span></button><button type="button" class="mk" data-tag="### ||| " title="小節の見出し：### |||"><span dir="ltr">### |||</span></button><button type="button" class="mk" data-tag="### |EDITOR|" title="編集者による部分（単独の行）：### |EDITOR|"><span dir="ltr">### |EDITOR|</span></button><button type="button" class="mk" data-tag="### $ " title="伝記・辞書の項目：### $"><span dir="ltr">### $</span></button><button type="button" class="mk" data-tag="### @ " title="出来事：### @"><span dir="ltr">### @</span></button><button type="button" class="mk" data-tag="%~%" title="韻文の半句の区切り（カーソル位置）：%~%"><span dir="ltr">%~%</span></button></div>
       <textarea class="editor ar" id="ed" aria-label="校正テキスト" dir="rtl" spellcheck="false" disabled></textarea>
       <div class="status">
         <label><input type="checkbox" id="done"> 確認済み</label>
@@ -456,6 +518,17 @@ async function proofView(slug, idx, life) {
   let pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
   ed.value = pg.text;
   ed.disabled = false;
+  const narrow = matchMedia('(max-width:900px)');
+  if (prefs.editorH && !narrow.matches) ed.style.height = Math.max(120, Math.min(prefs.editorH, ed.parentElement.clientHeight * 0.8)) + 'px';
+  let edDown = null;
+  ed.addEventListener('pointerdown', () => { edDown = ed.offsetHeight; });
+  const edUp = () => {
+    const h = ed.offsetHeight;
+    if (edDown !== null && h !== edDown && h && !narrow.matches) prefs.editorH = h;
+    edDown = null;
+  };
+  window.addEventListener('pointerup', edUp);
+  life.cleanup.push(() => window.removeEventListener('pointerup', edUp));
   const originalDisplay = pg.original.replace(/\r\n?/g, '\n');
   $('#done').checked = pg.done;
   $('#note').value = pg.note;
@@ -505,6 +578,14 @@ async function proofView(slug, idx, life) {
   $('#undo').onclick = () => undo(-1); $('#redo').onclick = () => undo(1);
 
   ed.addEventListener('input', () => textChanged());
+  for (const b of document.querySelectorAll('#marks .mk')) {
+    b.onmousedown = e => e.preventDefault();
+    b.onclick = () => {
+      if (ed.disabled) return;
+      const r = insertMarkup(ed.value, ed.selectionStart, ed.selectionEnd, b.dataset.tag);
+      ed.value = r.text; ed.setSelectionRange(r.start, r.end); ed.focus(); textChanged();
+    };
+  }
   $('#note').addEventListener('input', e => save({note: e.target.value}));
   $('#done').onchange = e => save({done: e.target.checked});
   $('#revert').onclick = () => { ed.value = originalDisplay; textChanged(); renderDiff(); };

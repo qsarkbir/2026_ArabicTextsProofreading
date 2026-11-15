@@ -31,6 +31,8 @@ ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
 PRESENCE = Presence()
 CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+PDF_LIMIT = 500 * 1024 * 1024
+PDF_JOBS, PDF_INFO, PDF_MISMATCH, PDF_LOCK = {}, {}, {}, threading.Lock()  # slug -> download job / (revision, ia_pdf info) / (revision, message)
 DRAFTS = {}  # slug -> scan source chosen in setup, applied only when the mapping is confirmed
 
 
@@ -100,11 +102,16 @@ def image_for(p, i, index=None, draft=""):
         if not 0 <= idx < len(src["pages"]):
             return {"index": idx, "missing": True, "count": len(src["pages"])}
         c = src["pages"][idx]
-        return {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
-                "w": c["w"], "h": c["h"],
-                "url": f"/api/projects/{p['slug']}/scan/{idx}?w=1600&v={urllib.parse.quote(str(src.get('revision') or src['id']))}"
-                       + (f"&draft={draft}" if draft else ""),
-                "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
+        v = urllib.parse.quote(str(src.get("revision") or src["id"]))
+        out = {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
+               "w": c["w"], "h": c["h"], "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
+        if src.get("pdf_file") and not draft:
+            try:
+                v += f"-{store.file_path(p['slug'], src['pdf_file']).stat().st_size}"
+            except OSError:
+                pass
+            return out | {"pdf": f"/api/projects/{p['slug']}/files/{src['pdf_file']}?v={v}"}
+        return out | {"url": f"/api/projects/{p['slug']}/scan/{idx}?w=1600&v={v}" + (f"&draft={draft}" if draft else "")}
     return {"index": idx, "key": key, "missing": not 0 <= idx < src.get("count", 0),
             "count": src.get("count", 0), "pdf": f"/api/projects/{p['slug']}/files/{src['file']}?v={src.get('revision', 'legacy')}"}
 
@@ -215,6 +222,128 @@ def set_ia(h, slug):
     return stage(slug, src)
 
 
+def ia_source(slug):
+    p = store.load(slug)
+    src = p["source"]
+    if not src or src["type"] != "ia":
+        raise ApiError("Internet Archive の資料ではありません")
+    return p, src, f"ia-{re.sub(r'[^A-Za-z0-9._-]', '_', str(src.get('revision') or src['id']))}.pdf"
+
+
+def pdf_download(slug, revision, info, url, path):
+    def progress(done, total):
+        job = PDF_JOBS.get(slug)
+        if job and job["revision"] == revision:
+            job["bytes"], job["total"] = done, total or info["size"]
+    try:
+        net.download(url, path, PDF_LIMIT, progress)
+        end = {"state": "done", "file": path.name}
+    except net.FetchError as e:
+        end = {"state": "error", "error": f"PDFをダウンロードできませんでした: {e}"}
+    except Exception as e:
+        end = {"state": "error", "error": f"PDFを保存できませんでした: {e}"}
+    with PDF_LOCK:
+        job = PDF_JOBS.get(slug)
+        if job and job["revision"] == revision:
+            job.update(end)
+
+
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/source/ia/pdf")
+def ia_pdf_status(h, slug):
+    p, src, name = ia_source(slug)
+    rev = str(src.get("revision") or src["id"])
+    with PDF_LOCK:
+        cached = PDF_INFO.get(slug)
+    if not cached or cached[0] != rev:
+        try:
+            cached = (rev, sources.ia_pdf(src["id"]))
+        except net.FetchError as e:
+            raise ApiError(f"PDFの情報を取得できませんでした: {e}", HTTPStatus.BAD_GATEWAY)
+        with PDF_LOCK:
+            PDF_INFO[slug] = cached
+    with PDF_LOCK:
+        job = PDF_JOBS.get(slug)
+        job = dict(job) if job and job["revision"] == rev else None
+        bad = PDF_MISMATCH.get(slug)
+    path = store.file_path(slug, name)
+    exists = path.is_file()
+    if job and job["state"] == "done" and not exists:
+        job = None
+    pending = name if not src.get("pdf_file") and exists else None
+    v = f"{rev}-{path.stat().st_size}" if exists else rev
+    return {"available": cached[1], "attached": src.get("pdf_file"), "job": job, "pending": pending, "revision": rev,
+            "v": v, "mismatch": bad[1] if bad and bad[0] == rev else ""}
+
+
+@route("POST", r"/api/projects/(?P<slug>[^/]+)/source/ia/pdf")
+def ia_pdf_start(h, slug):
+    p, src, name = ia_source(slug)
+    rev = str(src.get("revision") or src["id"])
+    with PDF_LOCK:
+        job = PDF_JOBS.get(slug)
+        if job and job["revision"] == rev and job["state"] == "running":
+            return dict(job)
+        bad = PDF_MISMATCH.get(slug)
+    if bad and bad[0] == rev:
+        raise ApiError(bad[1])
+    try:
+        info = sources.ia_pdf(src["id"])
+    except net.FetchError as e:
+        raise ApiError(f"PDFの情報を取得できませんでした: {e}", HTTPStatus.BAD_GATEWAY)
+    if not info:
+        raise ApiError("この資料にはPDFがありません")
+    if info["size"] > PDF_LIMIT:
+        raise ApiError(f"PDFが大きすぎます（{info['size'] // 1048576} MB、上限 {PDF_LIMIT // 1048576} MB）")
+    path = store.file_path(slug, name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    url = f"https://archive.org/download/{urllib.parse.quote(src['id'])}/{urllib.parse.quote(info['name'])}"
+    with PDF_LOCK:
+        job = PDF_JOBS.get(slug)
+        if job and job["revision"] == rev and job["state"] == "running":
+            return dict(job)
+        for stale in path.parent.glob(f"{name}.*.tmp"):
+            stale.unlink(missing_ok=True)
+        PDF_JOBS[slug] = job = {"revision": rev, "state": "running", "bytes": 0, "total": info["size"], "error": "", "file": ""}
+        snapshot = dict(job)
+    threading.Thread(target=pdf_download, args=(slug, rev, info, url, path), daemon=True).start()
+    return snapshot
+
+
+@route("POST", r"/api/projects/(?P<slug>[^/]+)/source/ia/pdf/attach")
+def ia_pdf_attach(h, slug):
+    b = h.json()
+    p, src, name = ia_source(slug)
+    if str(b.get("revision")) != str(src.get("revision") or src["id"]):
+        raise ApiError("資料が変更されています。画面を開き直してください", HTTPStatus.CONFLICT)
+    if src.get("pdf_file") == name:
+        return project_view(slug)
+    path = store.file_path(slug, name)
+    if not path.is_file():
+        raise ApiError("保存したPDFがありません", HTTPStatus.NOT_FOUND)
+    try:
+        pages = int(b.get("pages") or 0)
+    except (TypeError, ValueError):
+        raise ApiError("ページ数が正しくありません")
+    if pages != len(src["pages"]):
+        path.unlink(missing_ok=True)
+        msg = f"PDFのページ数（{pages}）が資料の画像数（{len(src['pages'])}）と一致しないため使えません"
+        with PDF_LOCK:
+            PDF_JOBS[slug] = {"revision": str(b["revision"]), "state": "error", "bytes": 0, "total": 0, "error": msg, "file": ""}
+            PDF_MISMATCH[slug] = (str(b["revision"]), msg)
+        raise ApiError(msg)
+    src["pdf_file"] = name
+    store.save_project(slug, p)
+    return project_view(slug)
+
+
+@route("POST", r"/api/projects/(?P<slug>[^/]+)/source/ia/pdf/detach")
+def ia_pdf_detach(h, slug):
+    p, src, name = ia_source(slug)
+    src.pop("pdf_file", None)
+    store.save_project(slug, p)
+    return project_view(slug)
+
+
 @route("POST", r"/api/projects/(?P<slug>[^/]+)/source/pdf")
 def set_pdf(h, slug):
     data = h.body()
@@ -312,7 +441,7 @@ def scan(h, slug, idx):
     if draft:
         p["source"] = draft_for(slug, draft)
     img = image_for(p, 0, int(idx))
-    if not img or img.get("missing") or "service" not in img:
+    if not img or img.get("missing") or "url" not in img:
         raise ApiError("このページに対応する画像がありません", HTTPStatus.NOT_FOUND)
     try:
         width = 2000 if int(h.query.get("w", ["1600"])[0]) > 1600 else 1600
@@ -382,7 +511,7 @@ def run_ocr(h, slug, i):
         raise ApiError("画像の対応が変更されています。ページを開き直してください", HTTPStatus.CONFLICT)
     if cached and cached.get("image_key") and not b.get("force") and cached["image_key"] == img.get("key"):
         return cached
-    if p["source"]["type"] == "ia":
+    if "pdf" not in img:
         data, mtype = scan_bytes(slug, p["source"], img, 2000)
     else:
         m = re.match(r"data:(image/(?:jpeg|png));base64,(.+)", b.get("image") or "", re.S)
@@ -462,7 +591,40 @@ class Handler(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript",):
             ctype += "; charset=utf-8"
-        self._send(200, path.read_bytes(), ctype)
+        cache = "private, max-age=86400" if "v" in self.query else "no-store"
+        size = path.stat().st_size
+        start, end, status = 0, size - 1, 200
+        rng = self.headers.get("Range")
+        if rng:
+            m = re.fullmatch(r"bytes=(\d*)-(\d*)", rng.strip())
+            if m and (m[1] or m[2]) and not (m[1] and m[2] and int(m[1]) > int(m[2])):  # anything else is ignored (200)
+                if m[1]:
+                    start, end = int(m[1]), min(int(m[2] or size - 1), size - 1)
+                else:
+                    start = max(size - int(m[2]), 0)
+                    if not int(m[2]):
+                        start = size
+                if start >= size:
+                    self._send(416, b"", ctype, {"Content-Range": f"bytes */{size}"}, cache)
+                    return None
+                status = 206
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", cache)
+        if status == 206:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        with path.open("rb") as f:
+            f.seek(start)
+            left = end - start + 1
+            try:
+                while left > 0 and (chunk := f.read(min(1 << 20, left))):
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+            except ConnectionError:
+                self.close_connection = True
         return None
 
     def send_download(self, data, filename, ctype):

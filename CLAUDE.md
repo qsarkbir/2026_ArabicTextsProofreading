@@ -24,16 +24,19 @@ proofreader/
   server.py    http.server ベースの API とスタティック配信。@route(method, regex) でルート登録
   store.py     projects/<slug>/ の読み書き（project.json, original.txt, work.json, ocr/, files/）
   openiti.py   OpenITI の URI 解決・取得、yml メタデータ、ページ分割（split）と再結合（join）
-  sources.py   Internet Archive の IIIF マニフェスト・検索・ページ画像（`fetch_scan`）
+  sources.py   Internet Archive の IIIF マニフェスト・検索・ページ画像（`fetch_scan`）・PDF の URL（`ia_pdf`）
   net.py       外部への HTTP。接続先は ALLOWED のホストに限定
   presence.py  ブラウザのタブの接続状況（自動終了の判定）
   ocr.py       Claude によるページ画像の読み取り（MODEL = "claude-opus-5-5"）
-  static/      フロントエンド（index.html, app.js, app.css）。フレームワーク・ビルド無しの素の JS
+  static/      フロントエンド（index.html, app.js, app.css, core.js）。フレームワーク・ビルド無しの素の JS
 ```
 
 - フロントは `location.hash` によるルーティング（`#/`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
 - 表示設定は `prefs`（localStorage の `proof-prefs`）に保存する。新しい設定項目は `prefs` の既定値 `def` に足す。
 - pdf.js はアップロードされた PDF を開くときだけ cdnjs から読み込む。
+- 記号の挿入は `core.js` の `insertMarkup`（Node テストから読む）。`app.js` の「記号：」ボタンから呼ぶ。
+- IA の PDF 保存は `sources.ia_pdf` → `net.download` で `files/ia-<revision>.pdf` に取得する。進行状況は `server.PDF_JOBS`、ルートは `/api/projects/<slug>/source/ia/pdf`（`/attach`・`/detach` を含む）。保存したファイル名は資料の `pdf_file` に記録し、`image_for` は `pdf_file` があれば `pdf` を返す（キーは従来どおり）。
+- `send_file` は `Range` に対応する（大きな PDF を部分ずつ読む）。
 
 ## 守るべきこと
 

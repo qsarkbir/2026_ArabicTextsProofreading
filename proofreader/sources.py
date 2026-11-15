@@ -40,6 +40,28 @@ def fetch_scan(src, idx, width=1600):
         raise net.FetchError(f"IIIF と BookReader のどちらでも取得できませんでした（{first}／{e}）") from e
 
 
+PDF_FORMATS = ("Image Container PDF", "Text PDF", "Additional Text PDF")
+
+
+def ia_pdf(identifier):
+    """The item's best PDF from the metadata API: {name, size, format}, or None."""
+    d = net.get_json(f"https://archive.org/metadata/{urllib.parse.quote(identifier)}")
+    best = None
+    for f in d.get("files", []):
+        name = f.get("name") or ""
+        if not name.lower().endswith(".pdf") or str(f.get("private", "")).lower() == "true":
+            continue
+        fmt = f.get("format") or ""
+        try:
+            size = int(f.get("size") or 0)
+        except ValueError:
+            size = 0
+        rank = PDF_FORMATS.index(fmt) if fmt in PDF_FORMATS else len(PDF_FORMATS)
+        if best is None or (rank, -size) < best[0]:
+            best = ((rank, -size), {"name": name, "size": size, "format": fmt})
+    return best and best[1]
+
+
 def ia_search(query, rows=20):
     q = f"({query}) AND mediatype:texts"
     params = urllib.parse.urlencode(
