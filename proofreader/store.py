@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from . import openiti
@@ -21,6 +22,10 @@ _lock = threading.Lock()
 _cache = {}
 
 
+class Conflict(Exception):
+    pass
+
+
 def _write_json(path, data):
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -28,7 +33,7 @@ def _write_json(path, data):
 
 
 def _dir(slug):
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", slug or ""):
+    if slug in (".", "..") or not re.fullmatch(r"[A-Za-z0-9._-]+", slug or ""):
         raise KeyError(slug)
     d = ROOT / slug
     if not (d / "project.json").exists():
@@ -51,7 +56,7 @@ def create(fetched):
         "slug": slug, "uri": fetched["uri"], "raw_url": fetched.get("raw_url", ""),
         "title": openiti.title_of(meta, fetched["text"], fetched["uri"]),
         "author": openiti.author_of(meta, fetched["text"], fetched["uri"]),
-        "created": time.strftime("%Y-%m-%d %H:%M"), "meta": meta,
+        "created": time.strftime("%Y-%m-%d %H:%M"), "meta": meta, "schema_version": 2,
         "candidates": openiti.scan_links(meta), "source": None, "offset": 0, "anchors": [],
     }
     _write_json(d / "project.json", project)
@@ -81,23 +86,37 @@ def work(slug):
     return json.loads((_dir(slug) / "work.json").read_text(encoding="utf-8"))
 
 
-def update_page(slug, i, text=None, done=None, note=None):
+def update_page(slug, i, text=None, done=None, note=None, revision=None):
     with _lock:
         d = _dir(slug)
         w = json.loads((d / "work.json").read_text(encoding="utf-8"))
         key = str(i)
+        current_revision = w.get("revisions", {}).get(key, 0)
+        if revision is not None and revision != current_revision:
+            raise Conflict("別のタブで更新されています。未保存の本文をコピーしてから、最新のページを開き直してください")
+        original = parts(slug)["pages"][i]["text"]
+        previous = {"text": w["edits"].get(key, original), **w["status"].get(key, {})}
+        changed_text = text is not None and text != previous["text"]
         if text is not None:
             if text == parts(slug)["pages"][i]["text"]:
                 w["edits"].pop(key, None)
             else:
                 w["edits"][key] = text
         st = w["status"].setdefault(key, {})
+        if changed_text and st.get("done") and done is None:
+            st["done"] = False
         if done is not None:
             st["done"] = bool(done)
         if note is not None:
             st["note"] = note
         if not st.get("done") and not st.get("note"):
             w["status"].pop(key, None)
+        current = {"text": w["edits"].get(key, original), **w["status"].get(key, {})}
+        if current != previous:
+            w.setdefault("history", {}).setdefault(key, []).append(
+                {**previous, "revision": current_revision, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+            w.setdefault("revisions", {})[key] = current_revision + 1
+        w["schema_version"] = 2
         _write_json(d / "work.json", w)
         return w
 
@@ -109,7 +128,23 @@ def ocr_get(slug, i):
 
 def ocr_put(slug, i, result):
     with _lock:
+        folder = _dir(slug) / "ocr" / "history" / str(i)
+        folder.mkdir(parents=True, exist_ok=True)
+        previous = ocr_get(slug, i)
+        if previous and not previous.get("reading_id"):
+            _write_json(folder / f"{uuid.uuid4().hex}.json", previous)
+        result = {**result, "reading_id": uuid.uuid4().hex,
+                  "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        _write_json(folder / f"{result['reading_id']}.json", result)
         _write_json(_dir(slug) / "ocr" / f"{i}.json", result)
+        return result
+
+
+def ocr_history(slug, i, image_key):
+    folder = _dir(slug) / "ocr" / "history" / str(i)
+    readings = [json.loads(p.read_text(encoding="utf-8")) for p in folder.glob("*.json")]
+    return sorted((r for r in readings if r.get("image_key") == image_key),
+                  key=lambda r: (r.get("time", ""), r.get("reading_id", "")), reverse=True)
 
 
 def file_path(slug, name):

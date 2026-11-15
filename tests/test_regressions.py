@@ -74,7 +74,7 @@ class RegressionTests(unittest.TestCase):
         p = self.project()
         key = server.image_for(p, 0)['key']
         cached = {'text': 'cached', 'image_key': key, 'image_index': 0}
-        store.ocr_put(p['slug'], 0, cached)
+        cached = store.ocr_put(p['slug'], 0, cached)
         self.assertEqual(server.run_ocr(Request(), p['slug'], '0'), cached)
         p['source']['revision'] = 'two'
         store.save_project(p['slug'], p)

@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
-ALLOWED = ("raw.githubusercontent.com", "archive.org", "iiif.archive.org")
+ALLOWED = ("raw.githubusercontent.com", "archive.org", "iiif.archive.org", "api.openai.com")
 UA = "ArabicTextsProofreading/0.1 (local proofreading tool)"
 
 
@@ -101,3 +101,25 @@ def get_text(url):
 
 def get_json(url):
     return json.loads(get_text(url))
+
+
+def post_json(url, data, headers, timeout=120):
+    """Authenticated API calls must not forward credentials through redirects."""
+    _check_host(url)
+    if urllib.parse.urlparse(url).scheme != "https":
+        raise FetchError("AIへの接続にはHTTPSが必要です")
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args, **kwargs):
+            return None
+
+    req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"),
+                                 headers={"Content-Type": "application/json", **headers}, method="POST")
+    try:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=timeout) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as e:
+        e.close()
+        raise FetchError(f"AI APIエラー（{e.code}）。認証・モデル名・利用上限を確認してください") from e
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise FetchError("AIに接続できないか、応答を読み取れませんでした") from e

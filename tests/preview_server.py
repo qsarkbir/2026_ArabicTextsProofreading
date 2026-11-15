@@ -1,11 +1,12 @@
 """Isolated browser fixture: python -m tests.preview_server (no external OCR)."""
 import struct
+import os
 import tempfile
 import zlib
 from pathlib import Path
 from http.server import ThreadingHTTPServer
 
-from proofreader import ocr, server, sources, store
+from proofreader import ocr, server, sources, store, providers
 
 
 def synthetic_pdf(pages):
@@ -49,6 +50,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix='preview-', dir=Path(__file__).parent) as tmp:
         store.ROOT = Path(tmp)
         ocr.available = lambda: False
+        providers.catalog = lambda: {
+            'anthropic': {'label':'Anthropic', 'available':False, 'reason':'検証用：無効', 'models':{}, 'default':''},
+            'openai': {'label':'OpenAI（合成データ）', 'available':True, 'reason':'', 'models':{}, 'default':'fixture-model'},
+        }
+        providers.transcribe = lambda *args, **kwargs: {'text':'alpha beta extra', 'model':'fixture-model', 'provider':'openai', 'truncated':False}
         sources.fetch_scan = lambda src, idx, width=1600: (synthetic_png(), 'image/png')
         p = store.create({'uri': 'ui-fixture', 'meta': {}, 'text': '#META#Header#End#\r\nalpha beta PageV01P001\r\ngamma delta PageV01P002\r\n'})
         p['source'] = {'type': 'ia', 'id': 'synthetic', 'revision': 'fixture', 'title': 'UI test fixture',
@@ -60,8 +66,9 @@ def main():
         store.file_path(q['slug'], 'fixture.pdf').write_bytes(synthetic_pdf(5))
         q['source'] = {'type': 'pdf', 'file': 'fixture.pdf', 'revision': 'fixture', 'title': 'PDF fixture', 'count': 5}
         store.save_project(q['slug'], q)
-        with ThreadingHTTPServer(('127.0.0.1', 8772), PreviewHandler) as http:
-            print('UI fixture: http://127.0.0.1:8772/#/p/ui-fixture/0 and #/p/pdf-fixture/0', flush=True)
+        port = int(os.environ.get('PROOF_PREVIEW_PORT', '8772'))
+        with ThreadingHTTPServer(('127.0.0.1', port), PreviewHandler) as http:
+            print(f'UI fixture: http://127.0.0.1:{port}/#/p/ui-fixture/0 and #/p/pdf-fixture/0', flush=True)
             try:
                 http.serve_forever()
             except KeyboardInterrupt:

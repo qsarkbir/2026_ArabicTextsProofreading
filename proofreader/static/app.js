@@ -42,27 +42,34 @@ document.addEventListener('resume', beat);
 window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
 
 const prefs = (() => {
-  const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width', editorH: null};
+  const def = {vowels: false, ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrProvider: 'anthropic', openaiModel: '', ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width', editorH: null};
   let v = def;
   try { v = Object.assign({}, def, JSON.parse(localStorage.getItem('proof-prefs') || '{}')); } catch (e) {}
   return new Proxy(v, {set(o, k, val) { o[k] = val; try { localStorage.setItem('proof-prefs', JSON.stringify(o)); } catch (e) {} return true; }});
 })();
 
 // ---------- pdf.js (only loaded for uploaded PDFs) ----------
-let pdfLib, pdfDocs = {};
+let pdfLib, pdfLoading, pdfDocs = {}, pdfTasks = {};
 async function loadPdf(url) {
   if (!pdfLib) {
-    await new Promise((ok, ng) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      s.onload = ok; s.onerror = () => ng(new Error('pdf.js を読み込めませんでした'));
-      document.head.appendChild(s);
-    });
-    pdfLib = window.pdfjsLib;
-    pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    if (!pdfLoading) pdfLoading = import('/vendor/pdfjs/6.5.438/pdf.min.mjs')
+      .then(lib => {
+        lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/6.5.438/pdf.worker.min.mjs';
+        return lib;
+      }).catch(error => { pdfLoading = null; throw new Error('PDF表示ライブラリを読み込めませんでした: ' + error.message); });
+    pdfLib = await pdfLoading;
   }
-  if (!pdfDocs[url]) pdfDocs[url] = pdfLib.getDocument(url).promise.catch(e => { delete pdfDocs[url]; throw e; });
+  if (!pdfDocs[url]) {
+    const task = pdfLib.getDocument({url, isEvalSupported: false});
+    pdfTasks[url] = task;
+    pdfDocs[url] = task.promise.catch(e => { releasePdf(url).catch(() => {}); throw e; });
+  }
   return pdfDocs[url];
+}
+async function releasePdf(url) {
+  const task = pdfTasks[url];
+  delete pdfTasks[url]; delete pdfDocs[url];
+  if (task) await task.destroy();
 }
 async function renderPdfPage(url, index, width) {
   const doc = await loadPdf(url);
@@ -107,6 +114,7 @@ async function routeNow() {
   try {
     if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
     else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
+    else if (h[0] === 'new') await newDraftView(life);
     else await homeView(life);
   } catch (e) {
     view.innerHTML = `<div class="wrap"><div class="card">読み込めませんでした：${esc(e.message)}　<a href="#/">ホームへ</a></div></div>`;
@@ -121,7 +129,7 @@ async function homeView(life) {
   const list = await api('GET', '/api/projects');
   view.innerHTML = `<div class="wrap">
     <div class="card">
-      <h2>新しいテキストを読み込む</h2>
+      <h2>新しいテキストを読み込む</h2><p><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
       <div class="row">
         <input type="text" id="ref" aria-label="OpenITIのバージョンURIまたはGitHubのURL" placeholder="OpenITIのバージョンURI、またはGitHubのURL（例：1014IbnMaryamTilimsani.Bustan.Kraken22021817402301-ara1）">
         <button class="primary" id="go">読み込む</button>
@@ -223,17 +231,16 @@ async function setupView(slug, from, life) {
       if (sourceBusy) return;
       sourceBusy = true; lock(true);
       $('#pdfmsg').textContent = 'ページ数を確認しています…';
-      let doc;
+      let doc, url;
       try {
-        const url = URL.createObjectURL(f);
-        try { doc = await loadPdf(url); }
-        finally { URL.revokeObjectURL(url); delete pdfDocs[url]; }
+        url = URL.createObjectURL(f);
+        doc = await loadPdf(url);
         if (!life.alive) return;
         $('#pdfmsg').textContent = `${doc.numPages}ページ。アップロード中…`;
         const r = await api('POST', `/api/projects/${slug}/source/pdf`, f, {'X-Filename': encodeURIComponent(f.name), 'X-Page-Count': String(doc.numPages)});
         await renderMatch(r.draft);
       } catch (err) { if (life.alive && $('#pdfmsg')) { $('#pdfmsg').textContent = ''; toast(err.message, true); } }
-      finally { if (doc) await doc.destroy(); sourceBusy = false; lock(false); }
+      finally { if (url) { await releasePdf(url); URL.revokeObjectURL(url); } sourceBusy = false; lock(false); }
     };
     if (!p.candidates.length && terms) search();
   };
@@ -331,10 +338,10 @@ async function setupView(slug, from, life) {
         const url = `/api/projects/${slug}/files/${encodeURIComponent(file)}?v=${encodeURIComponent(st.v)}`;
         try {
           const doc = await loadPdf(url), pages = doc.numPages;
-          delete pdfDocs[url]; doc.destroy();
+          await releasePdf(url);
           p = await api('POST', `${base}/attach`, {revision: st.revision, pages});
           if (live()) { toast('PDFを作業フォルダーに結び付けました'); show(); }
-        } catch (e) { delete pdfDocs[url]; if (live()) toast(e.message, true); }
+        } catch (e) { await releasePdf(url); if (live()) toast(e.message, true); }
         finally { verifying = false; }
         if (live()) refresh();
       };
@@ -382,69 +389,19 @@ async function setupView(slug, from, life) {
 }
 
 // ---------- text comparison ----------
-const ORTHO = {'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ى': 'ي', 'ی': 'ي', 'ئ': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ک': 'ك', 'ء': ''};
-function normWord(w) {
-  let s = w.replace(/[ؐ-ًؚ-ٰٟۖ-ۭـ‌-‏]/g, '');
-  if (prefs.ortho) s = s.replace(/./g, c => ORTHO[c] ?? c);
-  if (prefs.punct) s = s.replace(/[^\p{L}\p{N}\[\]?]/gu, '');
-  return s;
-}
-// words of the page text with their offsets; OpenITI markup is skipped so only the text is compared
-function textTokens(text) {
-  const out = [];
-  for (const m of text.matchAll(/\S+/g)) {
-    let w = m[0], start = m.index;
-    if (/^(\|EDITOR\||%~%|\$+|@)$/.test(w)) continue;
-    const pre = w.match(/^(~~|#+\s*|\|+)/);
-    if (pre) { w = w.slice(pre[0].length); start += pre[0].length; }
-    if (!w || /^(ms\d+|PageV\d+P\d+|@\w+|\|+|#+|=+)$/.test(w)) continue;
-    const n = normWord(w);
-    if (!n) continue;
-    out.push({w, n, start, end: start + w.length});
-  }
-  return out;
-}
-function ocrTokens(ocrText) {
-  let lines = ocrText.split('\n');
-  const fi = lines.findIndex(l => l.trim() === '@FOOTNOTES');
-  if (fi >= 0) lines = prefs.foot ? lines.slice(0, fi).concat(lines.slice(fi + 1)) : lines.slice(0, fi);
-  lines = lines.flatMap(l => l.startsWith('@HEADER') ? (prefs.header ? [l.slice(7)] : []) : [l]);
-  return lines.join('\n').split(/\s+/).filter(Boolean).map(w => ({w, n: normWord(w)})).filter(t => t.n);
-}
-// word-level LCS; returns blocks [a1, a2, b1, b2] where the two readings differ
-function diffBlocks(A, B) {
-  const n = A.length, m = B.length, W = m + 1;
-  const L = new Uint16Array((n + 1) * W);
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
-    L[i * W + j] = A[i].n === B[j].n ? L[(i + 1) * W + j + 1] + 1 : Math.max(L[(i + 1) * W + j], L[i * W + j + 1]);
-  const blocks = [];
-  let i = 0, j = 0, cur = null;
-  const flush = () => { if (cur) { blocks.push(cur); cur = null; } };
-  while (i < n || j < m) {
-    if (i < n && j < m && A[i].n === B[j].n) { flush(); i++; j++; continue; }
-    cur = cur || [i, i, j, j];
-    if (j < m && (i === n || L[i * W + j + 1] >= L[(i + 1) * W + j])) { j++; cur[3] = j; }
-    else { i++; cur[1] = i; }
-  }
-  flush();
-  // split runs of equal length into one-word pairs so each gets its own button
-  return blocks.flatMap(([a1, a2, b1, b2]) => a2 - a1 === b2 - b1 && a2 > a1
-    ? Array.from({length: a2 - a1}, (_, k) => [a1 + k, a1 + k + 1, b1 + k, b1 + k + 1]) : [[a1, a2, b1, b2]])
-    // words run together or split apart (امابعد / اما بعد) only differ in spacing
-    .filter(([a1, a2, b1, b2]) => !prefs.space || A.slice(a1, a2).map(t => t.n).join('') !== B.slice(b1, b2).map(t => t.n).join(''));
-}
-
 // ---------- proofreading ----------
 async function proofView(slug, idx, life) {
   const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
   if (!p.source) { location.hash = `#/p/${slug}/setup`; return; }
+  const providerInfo = () => p.ocr_providers?.[$('#ocrprovider').value] || {available: p.ocr, reason:p.ocr_reason};
+  const canOcr = () => providerInfo().available && !!$('#ocrm').value.trim();
   const N = p.pages.length;
   let lastKey = `proof-last-${slug}`;
   if (idx == null || isNaN(idx)) { try { idx = parseInt(localStorage.getItem(lastKey), 10) || 0; } catch (e) { idx = 0; } }
   idx = Math.max(0, Math.min(N - 1, idx));
   try { localStorage.setItem(lastKey, idx); } catch (e) {}
-  const label = i => `V${String(p.pages[i].vol).padStart(2, '0')}P${String(p.pages[i].page).padStart(3, '0')}`;
+  const label = i => p.pages[i].unassigned ? '未割当の末尾' : `V${String(p.pages[i].vol).padStart(2, '0')}P${String(p.pages[i].page).padStart(3, '0')}`;
   document.title = `${label(idx)} - ${p.uri}`;
 
   topbar.innerHTML = `
@@ -460,11 +417,12 @@ async function proofView(slug, idx, life) {
     <span class="prog" id="prog"></span>
     <div class="grp" style="margin-left:auto">
       <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
-      <button id="findb">ページを探す</button>
+      <button id="findb">ページを探す</button><button id="bibliob">書誌</button>
       <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
         <label><input type="checkbox" data-k="punct"> 句読点・記号の違いを無視</label>
         <label><input type="checkbox" data-k="space"> 語の続け書き・分かち書きの違いを無視</label>
+        <label><input type="checkbox" data-k="vowels"> 母音記号も厳密に比較する</label>
         <label><input type="checkbox" data-k="header"> 柱・ページ番号も比較する</label>
         <label><input type="checkbox" data-k="foot"> 脚注も比較する</label>
         <label><input type="checkbox" data-k="autoOcr"> ページを開いたら自動で読み取る</label>
@@ -472,6 +430,8 @@ async function proofView(slug, idx, life) {
       <div class="menu"><button id="expb">書き出し</button><div class="pop" id="exp" hidden>
         <a href="/api/projects/${slug}/export?fmt=text"><button style="width:100%">校正済みテキスト（OpenITI形式）</button></a>
         <a href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
+        <a href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
+        <a href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
         <a href="/api/projects/${slug}/export?fmt=notes"><button style="width:100%">注記・確認状況（CSV）</button></a>
       </div></div>
     </div>`;
@@ -499,18 +459,20 @@ async function proofView(slug, idx, life) {
         <label><input type="checkbox" id="done"> 確認済み</label>
         <input type="text" class="note" id="note" aria-label="ページの注記" placeholder="注記（例：ブーバーヤ版 p.152 では … と読む）">
         <button id="undo" disabled>取り消す</button><button id="redo" disabled>やり直す</button>
-        <button id="revert" hidden>原文に戻す</button>
+        <button id="historyb">保存履歴</button><button id="revert" hidden>原文に戻す</button>
         <span class="saved" id="saved" role="status" aria-live="polite">保存済み</span><button id="retry" hidden>保存を再試行</button>
       </div>
       <div class="ocrpane">
         <div class="ocrhead">
-          <button id="ocrb" class="primary">Claudeで読み取る</button>
-          <select id="ocrm" title="読み取りに使うモデル">${Object.entries(p.ocr_models || {}).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('')}</select>
+          <button id="ocrb" class="primary">AIで読み取る</button>
+          <select id="ocrprovider" aria-label="AI提供元">${Object.entries(p.ocr_providers || {}).map(([k,v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('')}</select>
+          <input id="ocrm" list="ocrmodels" aria-label="読み取りモデル" placeholder="画像対応モデルID"><datalist id="ocrmodels"></datalist>
+          <label class="small">保存した読み <select id="readings" aria-label="保存した読み取り結果"><option value="">現在の読み</option></select></label>
           <span id="ocrmsg" class="small muted"></span>
         </div>
         <div id="diff"></div>
         <details id="rawd" hidden><summary>読み取り結果の全文</summary><div class="ocrraw ar" id="raw"></div></details>
-        <div class="help"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 確認済みにして次の未確認ページへ ／ <kbd>Alt</kbd>+<kbd>PageUp</kbd><kbd>PageDown</kbd> ページ移動 ／ 黄色の語をクリックすると入力欄のその語を選択、点線の枠をクリックするとClaudeの読みに置き換えます。</div>
+        <div class="help"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 確認済みにして次の未確認ページへ ／ <kbd>Alt</kbd>+<kbd>PageUp</kbd><kbd>PageDown</kbd> ページ移動 ／ 黄色の語をクリックすると入力欄のその語を選択、点線の枠をクリックするとAIの読みに置き換えます。</div>
       </div>
     </section></div>`;
 
@@ -518,6 +480,7 @@ async function proofView(slug, idx, life) {
   let pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
   ed.value = pg.text;
   ed.disabled = false;
+  if (pg.unassigned) toast('最後のページ記号の後に本文が残っています。未割当部分として確認してください', true);
   const narrow = matchMedia('(max-width:900px)');
   if (prefs.editorH && !narrow.matches) ed.style.height = Math.max(120, Math.min(prefs.editorH, ed.parentElement.clientHeight * 0.8)) + 'px';
   let edDown = null;
@@ -542,7 +505,9 @@ async function proofView(slug, idx, life) {
 
   // saving
   const saver = createSaver(async body => {
-    p = await api('PUT', `/api/projects/${slug}/pages/${idx}`, body);
+    p = await api('PUT', `/api/projects/${slug}/pages/${idx}`, {...body, revision: pg.revision});
+    pg.revision = p.revision;
+    $('#done').checked = p.done.includes(idx);
     progress();
   }, (state, error) => {
     if (!life.alive) return;
@@ -676,7 +641,7 @@ async function proofView(slug, idx, life) {
     };
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
-    if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。◀▶で合わせてください。</div>'; return; }
+    if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。未割当の末尾の場合は、本文を確認してページ区切りを原本に照らして整理してください。</div>'; return; }
     if (im.url) {
       imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
       const el = new Image();
@@ -707,24 +672,27 @@ async function proofView(slug, idx, life) {
   let shifting = false, ocrBusy = false;
   const shift = async d => {
     if (shifting || ocrBusy) return;
+    if (pg.unassigned) { toast('末尾の本文にはページ番号がありません', true); return; }
     const cur = pg.image ? pg.image.index : idx;
     if (cur + d < 0 || cur + d >= p.source.count) { toast('資料の画像範囲外です', true); return; }
     shifting = true; $('#ocrb').disabled = true;
     try {
       p = await api('POST', `/api/projects/${slug}/mapping`, {anchor: [idx, cur + d]});
-      pg = await api('GET', `/api/projects/${slug}/pages/${idx}`);
-      ocr = pg.ocr;
+      const mapped = await api('GET', `/api/projects/${slug}/pages/${idx}`);
+      pg = {...pg, image: mapped.image, ocr: mapped.ocr};
+      ocr = latestReading = pg.ocr;
+      await refreshReadings();
       toast('このページ以降の画像の対応をずらしました');
       showImage(); renderDiff();
     } catch (e) { if (life.alive) toast(e.message, true); }
-    finally { shifting = false; if (life.alive) $('#ocrb').disabled = !p.ocr; }
+    finally { shifting = false; if (life.alive) $('#ocrb').disabled = !canOcr(); }
   };
   $('#shl').onclick = () => shift(-1);
   $('#shr').onclick = () => shift(1);
   showImage();
 
   // OCR + diff
-  let ocr = pg.ocr;
+  let ocr = pg.ocr, latestReading = pg.ocr;
   let diffT;
   life.cleanup.push(() => clearTimeout(diffT));
   const scheduleDiff = () => {
@@ -737,14 +705,14 @@ async function proofView(slug, idx, life) {
     const box = $('#diff');
     $('#rawd').hidden = !ocr;
     if (!ocr) {
-      box.innerHTML = ''; $('#ocrb').textContent = 'Claudeで読み取る';
-      if (!ocrBusy) $('#ocrmsg').textContent = p.ocr ? '' : ocrWhy;
+      box.innerHTML = ''; $('#ocrb').textContent = 'AIで読み取る';
+      if (!ocrBusy) $('#ocrmsg').textContent = canOcr() ? '' : ocrWhy();
       return;
     }
     $('#ocrb').textContent = '読み直す';
     $('#raw').textContent = ocr.text;
-    const A = textTokens(ed.value), B = ocrTokens(ocr.text);
-    const blocks = diffBlocks(A, B);
+    const A = textTokens(ed.value, prefs), B = ocrTokens(ocr.text, prefs);
+    const blocks = diffBlocks(A, B, prefs);
     $('#ocrmsg').innerHTML = (blocks.length ? `<span class="badge b-warn">食い違い ${blocks.length} か所</span>` : '<span class="badge b-ok">食い違いなし</span>')
       + (ocr.legacy ? ' <span class="badge b-warn" title="資料・画像の識別情報がない旧形式のキャッシュです。読み取り時の資料と同じかは確かめられません。「読み直す」で新しく読み取れます。">旧形式の読み取り（この画像を読んだものか未確認）</span>' : '')
       + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '')
@@ -756,39 +724,40 @@ async function proofView(slug, idx, life) {
       const alt = B.slice(b1, b2).map(t => t.w).join(' ');
       if (a1 === a2) {
         const at = a1 < A.length ? A[a1].start : text.length;
-        html += esc(text.slice(pos, at)) + `<button class="chip ins ar" data-b="${bi}" title="Claudeの読みにある語を挿入">${esc(alt)}</button>`;
+        html += esc(text.slice(pos, at)) + `<button class="chip ins ar" data-b="${bi}" title="AIの読みにある語を挿入">${esc(alt)}</button>`;
         pos = at;
       } else {
         const s = A[a1].start, e = A[a2 - 1].end;
         html += esc(text.slice(pos, s)) + `<button type="button" class="sp" data-s="${s}" data-e="${e}" title="入力欄の該当箇所を選択">${esc(text.slice(s, e))}</button>`
-          + (alt ? `<button class="chip ar" data-b="${bi}" title="Claudeの読みに置き換える">${esc(alt)}</button>`
-                 : `<button class="chip del" data-b="${bi}" title="Claudeの読みにはない語を削除">削除</button>`);
+          + (alt ? `<button class="chip ar" data-b="${bi}" title="AIの読みに置き換える">${esc(alt)}</button>`
+                 : `<button class="chip del" data-b="${bi}" title="AIの読みにはない語を削除">削除</button>`);
         pos = e;
       }
     });
     html += esc(text.slice(pos));
     box.innerHTML = `<div class="diff ar">${html}</div>`;
     box.querySelectorAll('.sp').forEach(sp => sp.onclick = () => { if (ed.value !== text) { renderDiff(); return; } ed.focus(); ed.setSelectionRange(+sp.dataset.s, +sp.dataset.e); });
-    box.querySelectorAll('.chip').forEach(btn => btn.onclick = () => {
-      if (ed.value !== text) { renderDiff(); return; }
-      const [a1, a2, b1, b2] = blocks[+btn.dataset.b];
-      const alt = B.slice(b1, b2).map(t => t.w).join(' ');
-      let v = ed.value;
-      if (a1 === a2) { const at = a1 < A.length ? A[a1].start : v.length; v = insertWords(v, at, alt); }
-      else { let s = A[a1].start, e = A[a2 - 1].end; if (!alt && v[e] === ' ') e++; v = v.slice(0, s) + alt + v.slice(e); }
-      ed.value = v; textChanged(); renderDiff();
+    box.querySelectorAll('.chip').forEach(btn => {
+      btn.disabled = readingPatch(text, A, B, blocks[+btn.dataset.b], ocr.truncated) === null;
+      if (btn.disabled) btn.title = '構造をまたぐ変更・不完全な読取のため手動確認が必要です';
+      btn.onclick = () => {
+        if (ed.value !== text) { renderDiff(); return; }
+        const v = readingPatch(ed.value, A, B, blocks[+btn.dataset.b], ocr.truncated);
+        if (v === null) { toast('構造記号をまたぐ変更や不完全な読取は、原本を見て手動で修正してください', true); return; }
+        ed.value = v; textChanged(); renderDiff();
+      };
     });
   }
-  const ocrWhy = p.ocr_reason || 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）';
+  const ocrWhy = () => !providerInfo().available ? providerInfo().reason || 'AIの設定を確認してください' : '読み取りに使う画像対応モデルIDを入力してください';
   const runOcr = async force => {
     if (ocrBusy || shifting) return;
-    if (!p.ocr) { toast(ocrWhy, true); return; }
+    if (!canOcr()) { toast(ocrWhy(), true); return; }
     ocrBusy = true;
     const imageKey = pg.image && pg.image.key;
     $('#shl').disabled = $('#shr').disabled = true;
     $('#ocrb').disabled = true; $('#ocrmsg').textContent = '読み取り中…（数十秒かかります）';
     try {
-      const body = {force, model: $('#ocrm').value, image_key: imageKey};
+      const body = {force, provider: $('#ocrprovider').value, model: $('#ocrm').value.trim(), image_key: imageKey};
       if (pg.image && pg.image.pdf) {
         const c = await renderPdfPage(pg.image.pdf, pg.image.index, 2000);
         if (!life.alive) return;
@@ -797,19 +766,41 @@ async function proofView(slug, idx, life) {
       }
       const result = await api('POST', `/api/projects/${slug}/pages/${idx}/ocr`, body);
       if (!life.alive || pg.image.key !== imageKey) return;
-      ocr = result;
+      ocr = latestReading = result;
+      await refreshReadings();
       renderDiff();
     } catch (e) { if (life.alive) { $('#ocrmsg').textContent = ''; toast(e.message, true); } }
-    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !p.ocr; $('#shl').disabled = $('#shr').disabled = false; } }
+    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = false; } }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
-  const ocrm = $('#ocrm');
-  ocrm.value = prefs.ocrModel;
-  if (!ocrm.value) ocrm.selectedIndex = 0;
-  ocrm.onchange = () => { prefs.ocrModel = ocrm.value; };
-  if (!p.ocr) { $('#ocrb').disabled = true; $('#ocrmsg').textContent = ocrWhy; }
+  const ocrm = $('#ocrm'), providerSelect = $('#ocrprovider');
+  providerSelect.value = prefs.ocrProvider;
+  if (!providerSelect.value) providerSelect.selectedIndex = 0;
+  const configureProvider = () => {
+    const info = providerInfo();
+    prefs.ocrProvider = providerSelect.value;
+    $('#ocrmodels').innerHTML = Object.entries(info.models || {}).map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+    ocrm.value = (providerSelect.value === 'openai' ? prefs.openaiModel : prefs.ocrModel) || info.default || '';
+    $('#ocrb').disabled = !canOcr();
+    $('#ocrmsg').textContent = canOcr() ? '' : ocrWhy();
+  };
+  providerSelect.onchange = configureProvider;
+  ocrm.oninput = () => {
+    prefs[providerSelect.value === 'openai' ? 'openaiModel' : 'ocrModel'] = ocrm.value;
+    $('#ocrb').disabled = !canOcr();
+  };
+  configureProvider();
+  let readings = [];
+  const refreshReadings = async () => {
+    readings = await api('GET', `/api/projects/${slug}/pages/${idx}/readings`);
+    $('#readings').innerHTML = '<option value="">現在の読み</option>' + readings.map((r, i) => `<option value="${i}">${esc(r.time || '')} ${esc(r.provider || 'anthropic')} ${esc(r.model || '')}</option>`).join('');
+  };
+  $('#readings').onchange = e => { ocr = e.target.value === '' ? latestReading : readings[+e.target.value]; renderDiff(); };
+  refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
+  $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { ed.value = text; textChanged(); renderDiff(); await flush(); });
+  $('#bibliob').onclick = () => editBibliography(life, p, updated => { p = updated; });
   renderDiff();
-  if (!ocr && p.ocr && prefs.autoOcr && pg.image && !pg.image.missing) runOcr(false);
+  if (!ocr && canOcr() && prefs.autoOcr && pg.image && !pg.image.missing) runOcr(false);
   ed.focus({preventScroll: true});
 }
 
