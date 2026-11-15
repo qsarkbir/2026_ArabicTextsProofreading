@@ -1,4 +1,5 @@
 """Page images: Internet Archive items (via IIIF) or a PDF the proofreader uploads."""
+import http.client
 import re
 import urllib.parse
 
@@ -23,6 +24,20 @@ def ia_pages(identifier):
 
 def ia_image_url(service, width=1600):
     return f"{service}/full/{width},/0/default.jpg"
+
+
+def fetch_scan(src, idx, width=1600):
+    """Page image bytes: IIIF first (short timeout), then the BookReader URL when IIIF stalls."""
+    url = ia_image_url(src["pages"][idx]["service"], width)
+    try:
+        return net.get_bytes(url, timeout=10)
+    except (net.FetchError, OSError, http.client.HTTPException) as e:
+        first = e
+    alt = f"https://archive.org/download/{urllib.parse.quote(src['id'])}/page/n{idx}_w{width}.jpg"
+    try:
+        return net.get_bytes(alt, timeout=60)
+    except (net.FetchError, OSError, http.client.HTTPException) as e:
+        raise net.FetchError(f"IIIF と BookReader のどちらでも取得できませんでした（{first}／{e}）") from e
 
 
 def ia_search(query, rows=20):

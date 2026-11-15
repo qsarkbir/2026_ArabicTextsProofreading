@@ -118,6 +118,12 @@ def file_path(slug, name):
     return _dir(slug) / "files" / name
 
 
+def scan_path(slug, name):
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+        raise KeyError(name)
+    return _dir(slug) / "cache" / "scan" / name
+
+
 def list_projects():
     out = []
     if not ROOT.exists():

@@ -10,7 +10,7 @@ Python 3.10 以上で動きます。Claude OCR を使わないなら追加のパ
 python -m proofreader
 ```
 
-ブラウザで http://127.0.0.1:8765/ が開きます。`--port` でポートを、`--no-browser` でブラウザを開かない設定にできます。作業データは `projects/` に保存されます（環境変数 `PROOF_DATA` で変更可）。
+Windows では `start.bat` をダブルクリックしても起動できます（`.venv` があればそれを使います）。ブラウザで http://127.0.0.1:8765/ が開きます。`--port` でポートを、`--no-browser` でブラウザを開かない設定にできます。アプリの画面（タブ）をすべて閉じて約30秒たつと、サーバーは自動的に終了します（通信が途絶えた場合は3分後）。ホーム画面の「アプリを終了」ボタンでも終了できます。自動終了を止めるには `--keep-running` を付けます。作業データは `projects/` に保存されます（環境変数 `PROOF_DATA` で変更可）。
 
 ### Claude OCR を使う場合
 
@@ -26,7 +26,7 @@ API キーは、リポジトリのルート（`README.md` と同じ場所）に 
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Claude OCR を使うときは、パッケージを入れた仮想環境の Python でアプリを起動します（`activate` してから `python -m proofreader` としても同じです）。
+Claude OCR を使うときは、パッケージを入れた仮想環境の Python でアプリを起動します。システムの Python で `python -m proofreader` と実行しても、anthropic が無く `.venv` がある場合は自動的に `.venv` の Python で起動し直します（`PROOFREADER_NO_REEXEC=1` で無効）。
 
 ```bash
 .venv\Scripts\python -m proofreader
@@ -42,6 +42,8 @@ Claude OCR を使うときは、パッケージを入れた仮想環境の Pytho
 2. **ページ画像を選ぶ**：メタデータ（yml）に Internet Archive へのリンクがあれば候補に出ます。なければ Internet Archive を検索するか、識別子を直接入れるか、PDF をアップロードします。
 3. **ページの対応を合わせる**：テキストのページと同じ画像が出るまで番号を動かします。途中でずれたら、校正画面の ◀ ▶ でそのページ以降だけ直せます。
 4. **校正**：左に画像、右にそのページのテキストが出ます。入力欄の内容が確定テキストで、自動で保存されます。Claude の読み取り結果がある場合は、食い違う語が黄色で示され、点線の枠をクリックするとその読みに置き換わります。
+
+Internet Archive のページ画像は、アプリのサーバー経由で取得し、`projects/<slug>/cache/scan/` に保存して再利用します。1冊で数十〜数百 MB になることがあります。キャッシュは削除しても安全で、必要になったときに取り直します。IIIF が応答しない場合は、archive.org の BookReader の画像 URL で取り直します。
 
 ## 書き出し
 

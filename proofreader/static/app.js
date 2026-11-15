@@ -22,6 +22,25 @@ function toast(msg, err) {
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, err ? 6000 : 2500);
 }
 
+// ---------- presence (lets the server exit once the last tab is closed) ----------
+const clientId = window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+let beatT, serverGone = false;
+async function beat() {
+  if (!beatT) return;
+  try {
+    const r = await fetch('/api/heartbeat', {method: 'POST', keepalive: true, body: JSON.stringify({client: clientId})});
+    if (!r.ok) throw new Error(r.status);
+    if (serverGone) { serverGone = false; $('#offline').hidden = true; }
+  } catch (e) {
+    if (!serverGone) { serverGone = true; $('#offline').hidden = false; }
+  }
+}
+beatT = setInterval(beat, 20000); beat();
+window.addEventListener('pageshow', beat);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beat(); });
+document.addEventListener('resume', beat);
+window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
+
 const prefs = (() => {
   const def = {ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width'};
   let v = def;
@@ -119,7 +138,14 @@ async function homeView(life) {
           <td class="prog">${p.edited}</td>
           <td><a href="#/p/${p.slug}${p.source ? '' : '/setup'}"><button>${p.source ? '開く' : '設定を続ける'}</button></a></td>
         </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>'}
-    </div></div>`;
+    </div>
+    <div class="row" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
+  $('#quit').onclick = async () => {
+    if (!confirm('アプリを終了しますか？ 他のタブで開いている画面も使えなくなります。')) return;
+    try { await api('POST', '/api/shutdown'); } catch (e) { if (life.alive) toast(e.message, true); return; }
+    clearInterval(beatT); beatT = null; leave = null;
+    view.innerHTML = '<div class="wrap"><div class="card">アプリを終了しました。このタブを閉じてください。</div></div>';
+  };
   const go = async () => {
     const ref = $('#ref').value.trim(); if (!ref) return;
     $('#go').disabled = true; $('#go').textContent = '取得中…';
@@ -571,8 +597,18 @@ async function proofView(slug, idx, life) {
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。◀▶で合わせてください。</div>'; return; }
     if (im.url) {
-      imgview.innerHTML = `<img src="${esc(im.url)}" alt="原本のページ画像">`;
-      imgview.firstElementChild.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
+      imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
+      const el = new Image();
+      el.alt = '原本のページ画像';
+      el.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
+      el.onload = () => {
+        if (!life.alive || version !== imageVersion) return;
+        imgview.innerHTML = ''; imgview.appendChild(el); applyZoom();
+        // warm the server's cache for the next image; it costs no API fee
+        if (im.index + 1 < im.count) new Image().src = im.url.replace(/\/scan\/\d+/, `/scan/${im.index + 1}`);
+      };
+      el.src = im.url;
+      return;
     }
     else {
       imgview.innerHTML = '<div class="imgmsg">描画中…</div>';
@@ -621,7 +657,7 @@ async function proofView(slug, idx, life) {
     $('#rawd').hidden = !ocr;
     if (!ocr) {
       box.innerHTML = ''; $('#ocrb').textContent = 'Claudeで読み取る';
-      if (!ocrBusy) $('#ocrmsg').textContent = p.ocr ? '' : 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）';
+      if (!ocrBusy) $('#ocrmsg').textContent = p.ocr ? '' : ocrWhy;
       return;
     }
     $('#ocrb').textContent = '読み直す';
@@ -629,6 +665,7 @@ async function proofView(slug, idx, life) {
     const A = textTokens(ed.value), B = ocrTokens(ocr.text);
     const blocks = diffBlocks(A, B);
     $('#ocrmsg').innerHTML = (blocks.length ? `<span class="badge b-warn">食い違い ${blocks.length} か所</span>` : '<span class="badge b-ok">食い違いなし</span>')
+      + (ocr.legacy ? ' <span class="badge b-warn" title="資料・画像の識別情報がない旧形式のキャッシュです。読み取り時の資料と同じかは確かめられません。「読み直す」で新しく読み取れます。">旧形式の読み取り（この画像を読んだものか未確認）</span>' : '')
       + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '')
       + (ocr.model ? ` ${esc(ocr.model)} の読み` : '');
     if (!blocks.length) { box.innerHTML = ''; return; }
@@ -661,9 +698,10 @@ async function proofView(slug, idx, life) {
       ed.value = v; textChanged(); renderDiff();
     });
   }
+  const ocrWhy = p.ocr_reason || 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）';
   const runOcr = async force => {
     if (ocrBusy || shifting) return;
-    if (!p.ocr) { toast('Claude OCR は使えません（anthropic パッケージが入っていません）', true); return; }
+    if (!p.ocr) { toast(ocrWhy, true); return; }
     ocrBusy = true;
     const imageKey = pg.image && pg.image.key;
     $('#shl').disabled = $('#shr').disabled = true;
@@ -688,7 +726,7 @@ async function proofView(slug, idx, life) {
   ocrm.value = prefs.ocrModel;
   if (!ocrm.value) ocrm.selectedIndex = 0;
   ocrm.onchange = () => { prefs.ocrModel = ocrm.value; };
-  if (!p.ocr) { $('#ocrb').disabled = true; $('#ocrmsg').textContent = 'Claude OCR を使うには anthropic パッケージとAPIキーが必要です（README参照）'; }
+  if (!p.ocr) { $('#ocrb').disabled = true; $('#ocrmsg').textContent = ocrWhy; }
   renderDiff();
   if (!ocr && p.ocr && prefs.autoOcr && pg.image && !pg.image.missing) runOcr(false);
   ed.focus({preventScroll: true});

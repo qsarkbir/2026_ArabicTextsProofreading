@@ -12,13 +12,28 @@ class FetchError(Exception):
     pass
 
 
-def _open(url, timeout=60):
+def _check_host(url):
     host = urllib.parse.urlparse(url).hostname or ""
     if not any(host == h or host.endswith("." + h) for h in ALLOWED):
         raise FetchError(f"許可していない接続先です: {host}")
+
+
+class _Redirects(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only to allowed hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _check_host(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_Redirects)
+
+
+def _open(url, timeout=60):
+    _check_host(url)
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
-        return urllib.request.urlopen(req, timeout=timeout)
+        return _opener.open(req, timeout=timeout)
     except urllib.error.HTTPError as e:
         raise FetchError(f"{e.code} {e.reason}: {url}") from e
     except urllib.error.URLError as e:

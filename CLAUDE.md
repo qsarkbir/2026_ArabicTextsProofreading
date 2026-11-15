@@ -7,11 +7,13 @@ OpenITI のアラビア語テキストを、刊本のページ画像（Internet 
 ```bash
 python -m proofreader            # http://127.0.0.1:8765/ を開く
 python -m proofreader --no-browser --port 8770
+python -m proofreader --keep-running   # タブを閉じても終了しない
 ```
 
 - Python 3.10 以上。標準ライブラリだけで動く。`anthropic` パッケージ（`requirements.txt`）は Claude OCR を使うときだけ必要で、無ければ OCR が無効になるだけ。`anthropic` は `.venv` にだけ入っているので、OCR を使うときはシステムの `python` ではなく `.venv\Scripts\python -m proofreader` で起動する。
+- 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
-- プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動）。
+- プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
 - ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js`。構文確認は `node --check proofreader/static/app.js`。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
@@ -22,8 +24,9 @@ proofreader/
   server.py    http.server ベースの API とスタティック配信。@route(method, regex) でルート登録
   store.py     projects/<slug>/ の読み書き（project.json, original.txt, work.json, ocr/, files/）
   openiti.py   OpenITI の URI 解決・取得、yml メタデータ、ページ分割（split）と再結合（join）
-  sources.py   Internet Archive の IIIF マニフェスト・検索
+  sources.py   Internet Archive の IIIF マニフェスト・検索・ページ画像（`fetch_scan`）
   net.py       外部への HTTP。接続先は ALLOWED のホストに限定
+  presence.py  ブラウザのタブの接続状況（自動終了の判定）
   ocr.py       Claude によるページ画像の読み取り（MODEL = "claude-opus-5-5"）
   static/      フロントエンド（index.html, app.js, app.css）。フレームワーク・ビルド無しの素の JS
 ```
@@ -36,7 +39,7 @@ proofreader/
 
 - **元テキストの忠実さ**：`openiti.split` / `join` は、編集していないページを1文字も変えずに再結合できなければならない。ページ区切り `PageV..P..` は、その直前のテキストがそのページに属する（区切りはページの末尾に来る）。改行・BOM・空白の扱いを変えるときは、未編集のまま書き出した結果が `original.txt` と一致することを確かめる。
 - **書き込みは安全に**：JSON は `store._write_json`（一時ファイル＋`os.replace`）で書く。slug は `store._dir` で検証してからパスに使う。
-- **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。サーバは 127.0.0.1 だけで待ち受ける。
+- **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。リダイレクト先も ALLOWED で確かめ直す。IA のページ画像は `GET /api/projects/<slug>/scan/<idx>` から `sources.fetch_scan`（IIIF → BookReader の順）で取得し、`store.scan_path` のディスクキャッシュに保存する。サーバは 127.0.0.1 だけで待ち受ける。
 - **OCR**：1ページずつ、校正者がボタンを押したとき（または設定 `autoOcr` が有効でページを開いたとき）だけ実行し、結果は `ocr/<i>.json` に保存して再利用する。API の利用料がかかるため、全ページを一括で読み取るような機能は勝手に足さない。OCR のプロンプトは「刊本の綴りをそのまま写す」方針なので、正規化や補完をさせる方向には変えない。
 - **HTML への埋め込み**：利用者のデータやテキストをテンプレート文字列に入れるときは `esc()` を通す。
 

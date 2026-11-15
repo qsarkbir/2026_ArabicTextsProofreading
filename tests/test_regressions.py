@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from proofreader import openiti, server, store
+from proofreader import net, ocr, openiti, server, sources, store
+from proofreader.presence import Presence
 
 
 class Request:
@@ -21,6 +22,9 @@ class Request:
 
     def send_download(self, data, *args):
         return data
+
+    def _send(self, status, data, ctype, extra=None, cache='no-store'):
+        self.sent = (status, data, ctype, cache)
 
 
 class RegressionTests(unittest.TestCase):
@@ -77,15 +81,37 @@ class RegressionTests(unittest.TestCase):
         with self.assertRaises(server.ApiError):
             server.run_ocr(Request({'image_key': key}), p['slug'], '0')
 
-    def test_legacy_cache_is_not_trusted(self):
+    def test_legacy_cache_is_shown_for_ia_with_same_image_index(self):
         p = self.project()
         store.ocr_put(p['slug'], 0, {'text': 'old', 'image_index': 0})
-        self.assertIsNone(server.get_page(Request(), p['slug'], '0')['ocr'])
-        p['offset'] = 99
+        ocr = server.get_page(Request(), p['slug'], '0')['ocr']
+        self.assertEqual((ocr['text'], ocr['legacy']), ('old', True))
+        self.assertNotIn('legacy', store.ocr_get(p['slug'], 0))
+
+    def test_legacy_cache_is_hidden_when_image_index_differs(self):
+        p = self.project()
+        store.ocr_put(p['slug'], 0, {'text': 'old', 'image_index': 0})
+        p['offset'] = 1
         store.save_project(p['slug'], p)
         self.assertIsNone(server.get_page(Request(), p['slug'], '0')['ocr'])
-        with self.assertRaises(server.ApiError):
-            server.run_ocr(Request(), p['slug'], '0')
+        store.ocr_put(p['slug'], 0, {'text': 'old'})
+        self.assertIsNone(server.get_page(Request(), p['slug'], '0')['ocr'])
+
+    def test_legacy_cache_is_never_shown_for_pdf(self):
+        p = self.project()
+        self.choose_pdf(p['slug'])
+        store.ocr_put(p['slug'], 0, {'text': 'old', 'image_index': 0})
+        self.assertIsNone(server.get_page(Request(), p['slug'], '0')['ocr'])
+
+    def test_legacy_cache_is_not_a_hit_for_run_ocr(self):
+        p = self.project()
+        store.ocr_put(p['slug'], 0, {'text': 'old', 'image_index': 0})
+        with patch.object(server.net, 'get_bytes', return_value=(b'image', 'image/jpeg')), \
+                patch.object(server.ocr, 'transcribe', return_value={'text': 'new'}) as transcribe:
+            res = server.run_ocr(Request(), p['slug'], '0')
+        transcribe.assert_called_once()
+        self.assertEqual(res['text'], 'new')
+        self.assertNotIn('legacy', res)
 
     def test_ocr_is_discarded_if_mapping_changes_during_request(self):
         p = self.project()
@@ -167,6 +193,235 @@ class RegressionTests(unittest.TestCase):
                                 ({'filter': ['todo']}, [1]), ({'filter': ['noted']}, [1]),
                                 ({'filter': ['edited']}, [0]), ({'q': ['check']}, [1])]:
             self.assertEqual([r['i'] for r in server.search_pages(Request(query=query), p['slug'])], expected)
+
+    def scan(self, p, idx=0, query=None):
+        req = Request(query=query)
+        server.scan(req, p['slug'], str(idx))
+        return req.sent
+
+    def test_scan_is_cached_on_disk(self):
+        p = self.project()
+        with patch.object(server.net, 'get_bytes', return_value=(b'jpeg', 'image/jpeg')) as get:
+            first = self.scan(p, 1)
+            second = self.scan(p, 1)
+        self.assertEqual(get.call_count, 1)
+        self.assertEqual(first, (200, b'jpeg', 'image/jpeg', 'private, max-age=86400'))
+        self.assertEqual(second, first)
+        self.assertEqual([f.suffix for f in (store.ROOT / p['slug'] / 'cache' / 'scan').iterdir()], ['.jpg'])
+
+    def test_scan_falls_back_to_bookreader(self):
+        p = self.project()
+        calls = []
+
+        def get(url, timeout=60):
+            calls.append(url)
+            if 'iiif' in url:
+                raise net.FetchError('timeout')
+            return b'jpeg', 'image/jpeg'
+        with patch.object(server.net, 'get_bytes', side_effect=get):
+            self.assertEqual(self.scan(p, 2)[1], b'jpeg')
+        self.assertEqual(calls, ['https://iiif.archive.org/test/full/1600,/0/default.jpg',
+                                 'https://archive.org/download/book/page/n2_w1600.jpg'])
+
+    def test_scan_reports_failure_of_both_sources(self):
+        p = self.project()
+        with patch.object(server.net, 'get_bytes', side_effect=TimeoutError('slow')):
+            with self.assertRaises(server.ApiError) as cm:
+                self.scan(p, 0)
+        self.assertEqual(cm.exception.status, server.HTTPStatus.BAD_GATEWAY)
+        self.assertFalse((store.ROOT / p['slug'] / 'cache' / 'scan').exists())
+
+    def test_scan_uses_draft_source(self):
+        p = self.project()
+        draft = {'type': 'ia', 'id': 'other', 'revision': 'two', 'pages': [
+            {'label': '0', 'service': 'https://iiif.archive.org/other', 'w': 1, 'h': 1}]}
+        server.DRAFTS[p['slug']] = draft
+        self.assertIn('draft=two', server.preview_image(Request(query={'draft': ['two']}), p['slug'])['url'])
+        with patch.object(server.net, 'get_bytes', return_value=(b'jpeg', 'image/jpeg')) as get:
+            self.scan(p, 0, {'draft': ['two']})
+            with self.assertRaises(server.ApiError):
+                self.scan(p, 1, {'draft': ['two']})
+        get.assert_called_once_with('https://iiif.archive.org/other/full/1600,/0/default.jpg', timeout=10)
+
+    def test_image_url_points_to_scan_api(self):
+        p = self.project()
+        self.assertEqual(server.image_for(p, 0)['url'], f"/api/projects/{p['slug']}/scan/0?w=1600&v=one")
+
+    def test_scan_url_changes_with_source_revision(self):
+        p = self.project()
+        before = server.image_for(p, 0)['url']
+        p['source']['revision'] = 'two'
+        after = server.image_for(p, 0)['url']
+        self.assertNotEqual(before, after)
+        self.assertIn('/scan/0?', after)
+
+    def test_scan_does_not_cache_non_images(self):
+        p = self.project()
+        with patch.object(server.net, 'get_bytes', return_value=(b'<html>', 'text/html')):
+            with self.assertRaises(server.ApiError) as cm:
+                self.scan(p, 0)
+        self.assertEqual(cm.exception.status, server.HTTPStatus.BAD_GATEWAY)
+        self.assertFalse((store.ROOT / p['slug'] / 'cache' / 'scan').exists())
+
+    def test_cached_png_is_served_as_png(self):
+        p = self.project()
+        png = b'xPNGrest'
+        with patch.object(server.net, 'get_bytes', return_value=(png, 'image/png')):
+            self.scan(p, 0)
+        with patch.object(server.net, 'get_bytes', side_effect=AssertionError('network')):
+            self.assertEqual(self.scan(p, 0)[1:3], (png, 'image/png'))
+
+    def test_scan_survives_failing_replace(self):
+        p = self.project()
+        with patch.object(server.net, 'get_bytes', return_value=(b'jpeg', 'image/jpeg')),                 patch.object(server.os, 'replace', side_effect=PermissionError):
+            self.assertEqual(self.scan(p, 0)[1], b'jpeg')
+        self.assertEqual(list((store.ROOT / p['slug'] / 'cache' / 'scan').iterdir()), [])
+
+    def test_redirects_are_limited_to_allowed_hosts(self):
+        handler = net._Redirects()
+        req = net.urllib.request.Request('https://archive.org/download/x')
+        with self.assertRaises(net.FetchError):
+            handler.redirect_request(req, None, 302, 'Found', {}, 'https://evil.example.com/x.jpg')
+        ok = handler.redirect_request(req, None, 302, 'Found', {}, 'https://ia800000.us.archive.org/x.jpg')
+        self.assertEqual(ok.full_url, 'https://ia800000.us.archive.org/x.jpg')
+
+
+
+class VenvRelaunchTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def venv(self):
+        py = self.root / '.venv' / 'Scripts' / 'python.exe'
+        py.parent.mkdir(parents=True)
+        py.write_text('')
+        return py
+
+    def test_relaunches_when_anthropic_is_missing(self):
+        py = self.venv()
+        self.assertEqual(server.venv_python(self.root, self.root / 'system.exe', {}, False), py)
+
+    def test_no_relaunch_when_disabled_current_available_or_no_venv(self):
+        py = self.venv()
+        self.assertIsNone(server.venv_python(self.root, self.root / 'system.exe', {'PROOFREADER_NO_REEXEC': '1'}, False))
+        self.assertIsNone(server.venv_python(self.root, py, {}, False))
+        self.assertIsNone(server.venv_python(self.root, self.root / 'system.exe', {}, True))
+        self.assertIsNone(server.venv_python(self.root / 'none', self.root / 'system.exe', {}, False))
+
+    def test_project_view_reports_ocr_reason(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as d, patch.object(store, 'ROOT', Path(d)):
+            store._cache.clear()
+            p = store.create({'uri': 'fixture', 'text': 'alpha PageV01P001\n', 'meta': {}})
+            with patch.object(ocr, 'available', return_value=False):
+                self.assertIn('anthropic', server.project_view(p['slug'])['ocr_reason'])
+            with patch.object(ocr, 'available', return_value=True):
+                self.assertIsNone(server.project_view(p['slug'])['ocr_reason'])
+            store._cache.clear()
+
+    def test_reason_depends_on_virtual_environment(self):
+        with patch.object(ocr, 'available', return_value=False):
+            with patch.object(ocr.sys, 'prefix', 'a'), patch.object(ocr.sys, 'base_prefix', 'b'):
+                self.assertIn('pip install', ocr.reason())
+            with patch.object(ocr.sys, 'prefix', 'a'), patch.object(ocr.sys, 'base_prefix', 'a'):
+                self.assertIn('start.bat', ocr.reason())
+        with patch.object(ocr, 'available', return_value=True):
+            self.assertIsNone(ocr.reason())
+
+    def test_relaunch_runs_child_and_exits_with_its_status(self):
+        calls = []
+
+        class Child:
+            def wait(self):
+                return 3
+
+        def popen(argv, **kw):
+            calls.append((argv, kw))
+            return Child()
+
+        py = server.ENV_FILE.parent / '.venv' / 'Scripts' / 'python.exe'
+        with patch.object(server.subprocess, 'Popen', popen), patch.object(server.sys, 'argv', ['x', '--port', '1']):
+            with self.assertRaises(SystemExit) as cm:
+                server.relaunch(py)
+        argv, kw = calls[0]
+        self.assertEqual((cm.exception.code, argv[1:3], argv[3:]), (3, ['-m', 'proofreader'], ['--port', '1']))
+        self.assertEqual(kw['env']['PROOFREADER_NO_REEXEC'], '1')
+        self.assertEqual(Path(kw['cwd']), server.ENV_FILE.parent)
+
+
+class PresenceTests(unittest.TestCase):
+    def test_exit_rules(self):
+        p = Presence()
+        self.assertFalse(p.should_exit(1000))
+        p.beat('a', 0)
+        self.assertFalse(p.should_exit(100))
+        p.bye('a', 100)
+        self.assertFalse(p.should_exit(129))
+        self.assertTrue(p.should_exit(130))
+        p.beat('a', 131)
+        self.assertFalse(p.should_exit(200))
+
+    def test_two_clients_and_silence(self):
+        p = Presence()
+        p.beat('a', 0)
+        p.beat('b', 0)
+        p.bye('a', 10)
+        self.assertFalse(p.should_exit(100))
+        self.assertFalse(p.should_exit(179))
+        self.assertTrue(p.should_exit(180))
+
+    def test_inflight_blocks_exit(self):
+        p = Presence()
+        p.beat('a', 0)
+        p.bye('a', 0)
+        p.request_started()
+        self.assertFalse(p.should_exit(500))
+        p.request_finished()
+        self.assertTrue(p.should_exit(500))
+
+    def test_dispatch_counts_failing_route(self):
+        class Stub:
+            path = '/api/boom'
+            sent = []
+            _send = lambda self, status, *a, **k: self.sent.append(status)
+        def boom(h):
+            raise RuntimeError('x')
+        saved, server.PRESENCE = server.PRESENCE, Presence()
+        try:
+            with patch.object(server, 'ROUTES', [('GET', server.re.compile('^/api/boom$'), boom)]):
+                with self.assertRaises(RuntimeError):
+                    server.Handler.dispatch(Stub(), 'GET')
+            self.assertEqual(server.PRESENCE.inflight, 0)
+            self.assertEqual(Stub.sent, [500])
+        finally:
+            server.PRESENCE = saved
+
+    def test_wait_idle(self):
+        p = Presence()
+        p.request_started()
+        naps = []
+        self.assertFalse(server.wait_idle(p, 1, naps.append, 0.5))
+        self.assertEqual(len(naps), 2)
+        naps.clear()
+        self.assertTrue(server.wait_idle(p, 1, lambda s: p.request_finished(), 0.5))
+        self.assertTrue(server.wait_idle(Presence(), 1, naps.append))
+        self.assertEqual(naps, [])
+
+    def test_routes(self):
+        saved = server.PRESENCE
+        server.PRESENCE = Presence()
+        try:
+            self.assertEqual(server.heartbeat(Request({'client': 'abc-123'})), {})
+            self.assertEqual(server.bye(Request({'client': 'abc-123'})), {})
+            self.assertIn('abc-123', server.PRESENCE.clients)
+            for bad in ({}, {'client': ''}, {'client': 'a/b'}, {'client': 'x' * 65}, {'client': 5}):
+                with self.assertRaises(server.ApiError):
+                    server.heartbeat(Request(bad))
+        finally:
+            server.PRESENCE = saved
 
 
 if __name__ == '__main__':

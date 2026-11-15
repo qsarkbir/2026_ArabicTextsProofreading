@@ -1,5 +1,6 @@
 """Transcribe one page image with Claude, as an independent second reading for proofreading."""
 import base64
+import sys
 
 MODEL = "claude-opus-5-5"
 # Models the proofreader may choose from; label shown in the UI. Haiku has no server-side refusal fallback.
@@ -30,6 +31,15 @@ def available():
         return True
     except ImportError:
         return False
+
+
+def reason():
+    """None when OCR can run; otherwise the complete Japanese reason for the UI."""
+    if available():
+        return None
+    if sys.prefix != sys.base_prefix:
+        return "この仮想環境には anthropic パッケージが入っていません。pip install -r requirements.txt を実行してください"
+    return f"anthropic パッケージが入っていない Python で起動しています（{sys.executable}）。start.bat か .venv\\Scripts\\python -m proofreader で起動してください"
 
 
 def transcribe(image_bytes, media_type="image/jpeg", model=MODEL, effort="medium"):

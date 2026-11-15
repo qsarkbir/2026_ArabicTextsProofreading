@@ -1,9 +1,11 @@
 """Isolated browser fixture: python -m tests.preview_server (no external OCR)."""
+import struct
 import tempfile
+import zlib
 from pathlib import Path
 from http.server import ThreadingHTTPServer
 
-from proofreader import ocr, server, store
+from proofreader import ocr, server, sources, store
 
 
 def synthetic_pdf(pages):
@@ -27,11 +29,6 @@ def synthetic_pdf(pages):
 class PreviewHandler(server.Handler):
     failed_once = False
 
-    def do_GET(self):
-        if self.path.startswith('/scan/'):
-            return self._send(200, b'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="white"/><text x="50" y="100" font-size="32">Synthetic scan for UI testing</text></svg>', 'image/svg+xml')
-        return super().do_GET()
-
     def do_PUT(self):
         if not PreviewHandler.failed_once:
             PreviewHandler.failed_once = True
@@ -40,10 +37,19 @@ class PreviewHandler(server.Handler):
         return super().do_PUT()
 
 
+def synthetic_png(width=600, height=800):
+    """A plain page-coloured PNG with a dark band, standing in for a scan (cached and served as an image)."""
+    rows = b''.join(b'\x00' + (b'\x40' if 80 <= y < 120 else b'\xf4') * width for y in range(height))
+    chunk = lambda kind, data: struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 0, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix='preview-', dir=Path(__file__).parent) as tmp:
         store.ROOT = Path(tmp)
         ocr.available = lambda: False
+        sources.fetch_scan = lambda src, idx, width=1600: (synthetic_png(), 'image/png')
         p = store.create({'uri': 'ui-fixture', 'meta': {}, 'text': '#META#Header#End#\r\nalpha beta PageV01P001\r\ngamma delta PageV01P002\r\n'})
         p['source'] = {'type': 'ia', 'id': 'synthetic', 'revision': 'fixture', 'title': 'UI test fixture',
                        'pages': [{'label': str(i + 1), 'service': f'http://127.0.0.1:8772/scan/{i}', 'w': 600, 'h': 800} for i in range(4)]}

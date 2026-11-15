@@ -93,6 +93,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px}
 .help{font-size:12px;color:var(--muted);line-height:1.7}
 kbd{border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:11px;background:var(--bg)}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50;max-width:90vw}
+.offline{position:fixed;top:0;left:0;right:0;background:var(--bad);color:var(--bad-ink);padding:8px 14px;font-size:13px;text-align:center;z-index:60}
 .toast.err{background:var(--bad-ink);color:#fff}
 dialog{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(720px,95vw);max-height:85vh}
 dialog::backdrop{background:#0006}

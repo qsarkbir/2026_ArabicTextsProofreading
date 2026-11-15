@@ -12,7 +12,10 @@ import json
 import mimetypes
 import os
 import re
+import subprocess
 import sys
+import threading
+import time
 import urllib.parse
 import webbrowser
 import uuid
@@ -21,10 +24,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import net, ocr, openiti, sources, store
+from .presence import Presence
 
 STATIC = Path(__file__).resolve().parent / "static"
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
+PRESENCE = Presence()
+CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")
 DRAFTS = {}  # slug -> scan source chosen in setup, applied only when the mapping is confirmed
 
 
@@ -57,6 +63,7 @@ def project_view(slug):
         "done": sorted(int(k) for k, s in w["status"].items() if s.get("done")),
         "noted": sorted(int(k) for k, s in w["status"].items() if s.get("note")),
         "ocr": ocr.available(),
+        "ocr_reason": ocr.reason(),
         "ocr_models": ocr.MODELS,
     }
 
@@ -82,7 +89,7 @@ def stage(slug, src):
     return project_view(slug) | {"draft": source_view(src)}
 
 
-def image_for(p, i, index=None):
+def image_for(p, i, index=None, draft=""):
     src = p["source"]
     if not src:
         return None
@@ -94,10 +101,41 @@ def image_for(p, i, index=None):
             return {"index": idx, "missing": True, "count": len(src["pages"])}
         c = src["pages"][idx]
         return {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
-                "w": c["w"], "h": c["h"], "url": sources.ia_image_url(c["service"], 1600),
+                "w": c["w"], "h": c["h"],
+                "url": f"/api/projects/{p['slug']}/scan/{idx}?w=1600&v={urllib.parse.quote(str(src.get('revision') or src['id']))}"
+                       + (f"&draft={draft}" if draft else ""),
                 "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
     return {"index": idx, "key": key, "missing": not 0 <= idx < src.get("count", 0),
             "count": src.get("count", 0), "pdf": f"/api/projects/{p['slug']}/files/{src['file']}?v={src.get('revision', 'legacy')}"}
+
+
+# ---------- presence ----------
+
+def client_id(h):
+    c = h.json()
+    c = c.get("client") if isinstance(c, dict) else c
+    if not isinstance(c, str) or not CLIENT_ID.match(c):
+        raise ApiError("client が正しくありません")
+    return c
+
+
+@route("POST", r"/api/heartbeat")
+def heartbeat(h):
+    PRESENCE.beat(client_id(h), time.monotonic())
+    return {}
+
+
+@route("POST", r"/api/bye")
+def bye(h):
+    PRESENCE.bye(client_id(h), time.monotonic())
+    return {}
+
+
+@route("POST", r"/api/shutdown")
+def shutdown(h):
+    srv = h.server
+    h.after_response = lambda: threading.Thread(target=srv.shutdown, daemon=True).start()
+    return {}
 
 
 # ---------- projects ----------
@@ -228,7 +266,60 @@ def preview_image(h, slug):
     draft = h.query.get("draft", [""])[0]
     if draft:
         p["source"] = draft_for(slug, draft)
-    return image_for(p, 0, int(h.query.get("index", ["0"])[0]))
+    return image_for(p, 0, int(h.query.get("index", ["0"])[0]), draft)
+
+
+_scan_locks, _scan_locks_guard = {}, threading.Lock()
+
+
+def _sniff(data):
+    return "image/png" if data[1:4] == b"PNG" else "image/jpeg"
+
+
+def scan_bytes(slug, src, img, width):
+    """Page image from the disk cache, fetched (and cached) on first use."""
+    path = store.scan_path(slug, f"{img['key']}-{width}.jpg")
+    with _scan_locks_guard:
+        lock = _scan_locks.setdefault(path, threading.Lock())
+    with lock:
+        try:
+            data = path.read_bytes()
+            return data, _sniff(data)
+        except OSError:
+            pass
+        try:
+            data, mtype = sources.fetch_scan(src, img["index"], width)
+        except net.FetchError as e:
+            raise ApiError(f"ページ画像を取得できませんでした: {e}", HTTPStatus.BAD_GATEWAY)
+        if not (mtype or "").startswith("image/"):
+            raise ApiError("ページ画像として読めない応答でした", HTTPStatus.BAD_GATEWAY)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            tmp.write_bytes(data)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+        finally:
+            tmp.unlink(missing_ok=True)
+        return data, mtype
+
+
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/scan/(?P<idx>\d+)")
+def scan(h, slug, idx):
+    p = store.load(slug)
+    draft = h.query.get("draft", [""])[0]
+    if draft:
+        p["source"] = draft_for(slug, draft)
+    img = image_for(p, 0, int(idx))
+    if not img or img.get("missing") or "service" not in img:
+        raise ApiError("このページに対応する画像がありません", HTTPStatus.NOT_FOUND)
+    try:
+        width = 2000 if int(h.query.get("w", ["1600"])[0]) > 1600 else 1600
+    except ValueError:
+        raise ApiError("幅の指定が正しくありません")
+    data, mtype = scan_bytes(slug, p["source"], img, width)
+    h._send(200, data, mtype, cache="private, max-age=86400")
 
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/search")
@@ -257,7 +348,12 @@ def get_page(h, slug, i):
     st = w["status"].get(str(i), {})
     img = image_for(p, i)
     cached = store.ocr_get(slug, i)
-    if cached and (not img or img.get("missing") or not cached.get("image_key") or cached["image_key"] != img.get("key")):
+    if cached and (not img or img.get("missing")):
+        cached = None
+    elif cached and not cached.get("image_key"):
+        legacy = p["source"]["type"] == "ia" and cached.get("image_index") == img.get("index")
+        cached = {**cached, "legacy": True} if legacy else None
+    elif cached and cached["image_key"] != img.get("key"):
         cached = None
     return {"i": i, "vol": pg["vol"], "page": pg["page"], "marker": pg["marker"],
             "original": pg["text"], "text": w["edits"].get(str(i), pg["text"]),
@@ -287,10 +383,7 @@ def run_ocr(h, slug, i):
     if cached and cached.get("image_key") and not b.get("force") and cached["image_key"] == img.get("key"):
         return cached
     if p["source"]["type"] == "ia":
-        try:
-            data, mtype = net.get_bytes(sources.ia_image_url(img["service"], 2000), timeout=120)
-        except net.FetchError as e:
-            raise ApiError(f"ページ画像を取得できませんでした: {e}")
+        data, mtype = scan_bytes(slug, p["source"], img, 2000)
     else:
         m = re.match(r"data:(image/(?:jpeg|png));base64,(.+)", b.get("image") or "", re.S)
         if not m:
@@ -338,6 +431,7 @@ def export(h, slug):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "Proofreader/0.1"
+    after_response = None
 
     def log_message(self, fmt, *args):
         if "/api/" in self.path and not self.path.endswith(("/files/source.pdf",)):
@@ -354,11 +448,11 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             raise ApiError("JSONとして読めません")
 
-    def _send(self, status, data, ctype, extra=None):
+    def _send(self, status, data, ctype, extra=None, cache="no-store"):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -385,6 +479,7 @@ class Handler(BaseHTTPRequestHandler):
         for m, rx, fn in ROUTES:
             mt = rx.match(path) if m == method else None
             if mt:
+                PRESENCE.request_started()
                 try:
                     res = fn(self, **mt.groupdict())
                     if res is not None:
@@ -396,6 +491,11 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:  # keep the server alive and tell the page what broke
                     self._send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     raise
+                finally:
+                    PRESENCE.request_finished()
+                after, self.after_response = self.after_response, None
+                if after:
+                    after()
                 return
         self._send(404, b'{"error":"not found"}', "application/json")
 
@@ -434,10 +534,59 @@ def load_env(path=ENV_FILE):
     return keys
 
 
+def venv_python(root, executable, env, has_anthropic):
+    """The repository .venv's python to relaunch with when anthropic is missing here, else None."""
+    if has_anthropic or env.get("PROOFREADER_NO_REEXEC"):
+        return None
+    for rel in (".venv/Scripts/python.exe", ".venv/bin/python"):
+        py = Path(root) / rel
+        if py.is_file():
+            return py if Path(executable).resolve() != py.resolve() else None
+    return None
+
+
+def relaunch(py):
+    """Run this app again under py, wait for it, and exit with its status."""
+    print(f"  note: anthropic is missing here; restarting with {py.relative_to(ENV_FILE.parent)}", flush=True)
+    child = subprocess.Popen([str(py), "-m", "proofreader", *sys.argv[1:]], cwd=ENV_FILE.parent,
+                             env={**os.environ, "PROOFREADER_NO_REEXEC": "1"})
+    while True:
+        try:
+            sys.exit(child.wait())
+        except KeyboardInterrupt:
+            continue
+
+
+def watch(srv, presence=None, interval=5):
+    """Shut the server down once no browser tab is left."""
+    presence = presence or PRESENCE
+    while True:
+        time.sleep(interval)
+        if presence.should_exit(time.monotonic()):
+            print("  no browser window is open; shutting down", flush=True)
+            srv.shutdown()
+            return
+
+
+def wait_idle(presence, timeout=120, sleep=time.sleep, interval=0.2):
+    """Wait for in-flight requests to finish (up to timeout seconds); True if none remain."""
+    waited = 0
+    while presence.inflight and waited < timeout:
+        if not waited:
+            print("  waiting for running requests to finish", flush=True)
+        sleep(interval)
+        waited += interval
+    return not presence.inflight
+
+
 def main():
+    py = venv_python(ENV_FILE.parent, sys.executable, os.environ, ocr.available())
+    if py and not {"-h", "--help"} & set(sys.argv[1:]):
+        relaunch(py)
     ap = argparse.ArgumentParser(description="OpenITI proofreading app")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--keep-running", action="store_true", help="do not exit when the browser tabs are closed")
     a = ap.parse_args()
     env_keys = load_env()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
@@ -451,10 +600,14 @@ def main():
             print(r"        start it with the virtual environment instead: .venv\Scripts\python -m proofreader")
     if not a.no_browser:
         webbrowser.open(url)
+    if not a.keep_running:
+        threading.Thread(target=watch, args=(srv,), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    wait_idle(PRESENCE)
+    srv.server_close()
 
 
 if __name__ == "__main__":
