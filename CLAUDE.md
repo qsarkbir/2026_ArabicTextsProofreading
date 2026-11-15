@@ -14,7 +14,7 @@ python -m proofreader --keep-running   # タブを閉じても終了しない
 - 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
-- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js`。構文確認は `node --check proofreader/static/app.js`。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
+- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js tests/compare.test.js`。構文確認は `node --check proofreader/static/app.js`。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
 ## 構成
@@ -33,7 +33,7 @@ proofreader/
 
 - フロントは `location.hash` によるルーティング（`#/`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
 - 表示設定は `prefs`（localStorage の `proof-prefs`）に保存する。新しい設定項目は `prefs` の既定値 `def` に足す。
-- pdf.js はアップロードされた PDF を開くときだけ cdnjs から読み込む。
+- PDF.js 6.5.438はstatic/vendor/に本体とworkerを同梱。isEvalSupportedはfalse。版を揃えて更新しApache-2.0のLICENSEを保持する。
 - 記号の挿入は `core.js` の `insertMarkup`（Node テストから読む）。`app.js` の「記号：」ボタンから呼ぶ。
 - IA の PDF 保存は `sources.ia_pdf` → `net.download` で `files/ia-<revision>.pdf` に取得する。進行状況は `server.PDF_JOBS`、ルートは `/api/projects/<slug>/source/ia/pdf`（`/attach`・`/detach` を含む）。保存したファイル名は資料の `pdf_file` に記録し、`image_for` は `pdf_file` があれば `pdf` を返す（キーは従来どおり）。
 - `send_file` は `Range` に対応する（大きな PDF を部分ずつ読む）。
@@ -50,10 +50,19 @@ proofreader/
 
 - 既存のコードに合わせる：Python は短い関数と docstring 1行程度、JS は `const`・アロー関数・`$()` ヘルパーを使った簡潔な書き方。コメントは少なめ。
 - UI の文言・エラーメッセージ・トースト（`toast()`）は日本語。アラビア語の表示部分は `dir="rtl"` と `.ar` クラス（Noto Naskh Arabic）を使う。
-- 比較（差分表示）用の正規化は `app.js` の `ORTHO` / `normWord` にある。表示のための正規化であって、保存するテキストは正規化しない。
+- 比較（差分表示）用の正規化は `compare.js` の `ORTHO` / `normWord` にある。表示のための正規化であって、保存するテキストは正規化しない。
 
 ## リポジトリ
 
 - `main` ブランチで開発し、`origin`（GitHub: qsarkbir/2026_ArabicTextsProofreading）へ push する。
 - `build-scripts/` と `bustan-proofreader.html` は git 管理外の実験的なもの（Bustan 1点を hOCR と突き合わせて単一 HTML にする試作）。本体のアプリとは独立している。
 - ライセンスはコードが MIT。OpenITI のテキストは CC BY-NC-SA 4.0 なので、テキストやその一部をリポジトリに含めない。
+
+## 拡張機能の確認事項
+
+- providers/ はAnthropicとOpenAIの共通結果を返す。OpenAIはResponses API、OPENAI_API_KEYとOPENAI_OCR_MODEL。キーは出力しない。有料の実API検証は既定で行わない。
+- importers/draft.py はPDFの選択範囲から仮IDの本文を作る。正式なOpenITI登録ではない。
+- exporters/tei.py は基本TEI P5出力。ページ末尾マーカーを先頭のpbへ移し、未対応タグは残す。tests.validate_teiで公式スキーマ検証。
+- 保存APIはページrevisionが必須。work.jsonのhistory/revisionsは旧データには無く、初回保存時に追加する。元のoriginal.txtは変えない。
+- static/workflows.jsは新規作成・書誌・履歴、compare.jsは比較と構造保全。
+- python -m tests.browser_smoke はPlaywrightで合成データのブラウザ検証。preview_serverのAIは模擬結果であり有料APIを呼ばない。

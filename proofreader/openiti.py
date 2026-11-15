@@ -34,6 +34,7 @@ def resolve(ref):
         elif u.netloc != "raw.githubusercontent.com":
             raise ValueError("GitHub上のOpenITIファイルのURLを指定してください")
         uri = urllib.parse.unquote(ref.rstrip("/").rsplit("/", 1)[-1])
+        uri = re.sub(r"\.(mARkdown|completed|inProgress)$", "", uri)
         return ref, uri
     m = URI_RE.match(ref)
     if not m:
@@ -110,7 +111,11 @@ def split(text):
     for m in PAGE_RE.finditer(body):
         pages.append({"vol": int(m[1]), "page": int(m[2]), "marker": m[0], "text": body[pos:m.start()]})
         pos = m.end()
-    return {"header": header, "pages": pages, "tail": body[pos:]}
+    tail = body[pos:]
+    if pages and tail.strip():
+        pages.append({"vol": None, "page": None, "marker": "", "text": tail, "unassigned": True})
+        tail = ""
+    return {"header": header, "pages": pages, "tail": tail}
 
 
 def join(parts, edits=None):

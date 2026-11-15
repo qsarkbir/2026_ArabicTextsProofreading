@@ -19,12 +19,15 @@ import time
 import urllib.parse
 import webbrowser
 import uuid
+import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import net, ocr, openiti, sources, store
+from . import net, ocr, openiti, sources, store, providers
 from .presence import Presence
+from .exporters import tei
+from .importers import draft
 
 STATIC = Path(__file__).resolve().parent / "static"
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -60,13 +63,15 @@ def project_view(slug):
     return {
         **{k: p[k] for k in ("slug", "uri", "raw_url", "title", "author", "created", "candidates", "offset", "anchors")},
         "source": source_view(p["source"]),
-        "pages": [{"vol": pg["vol"], "page": pg["page"]} for pg in pages],
+        "pages": [{"vol": pg["vol"], "page": pg["page"], "unassigned": pg.get("unassigned", False)} for pg in pages],
         "edited": sorted(int(k) for k in w["edits"]),
         "done": sorted(int(k) for k, s in w["status"].items() if s.get("done")),
         "noted": sorted(int(k) for k, s in w["status"].items() if s.get("note")),
         "ocr": ocr.available(),
         "ocr_reason": ocr.reason(),
         "ocr_models": ocr.MODELS,
+        "ocr_providers": providers.catalog(),
+        "bibliography": p.get("bibliography", {}), "draft": p.get("draft", False),
     }
 
 
@@ -92,6 +97,9 @@ def stage(slug, src):
 
 
 def image_for(p, i, index=None, draft=""):
+    pages = store.parts(p["slug"])["pages"]
+    if index is None and 0 <= i < len(pages) and pages[i].get("unassigned"):
+        return None
     src = p["source"]
     if not src:
         return None
@@ -188,6 +196,36 @@ def get_project(h, slug):
 
 # ---------- scan source ----------
 
+@route("POST", r"/api/projects/new-pdf")
+def create_pdf_draft(h):
+    data = h.body()
+    if not data.startswith(b"%PDF") or len(data) > PDF_LIMIT:
+        raise ApiError("500 MB以下のPDFを選択してください")
+    try:
+        metadata = json.loads(urllib.parse.unquote(h.headers.get("X-Metadata", "{}")))
+        fetched, details = draft.build(metadata)
+    except (ValueError, TypeError, AttributeError):
+        raise ApiError("書名、PDFの対象範囲、巻と印刷ページ番号を確認してください")
+    p = store.create(fetched)
+    store.file_path(p["slug"], "source.pdf").write_bytes(data)
+    p.update(details)
+    p["source"] = {"type": "pdf", "file": "source.pdf", "revision": uuid.uuid4().hex,
+                   "title": metadata.get("filename", "source.pdf"), "count": int(metadata["count"])}
+    store.save_project(p["slug"], p)
+    return project_view(p["slug"])
+
+
+@route("PUT", r"/api/projects/(?P<slug>[^/]+)/bibliography")
+def save_bibliography(h, slug):
+    b = h.json()
+    if any(not isinstance(b.get(k, ""), str) for k in ("title", "author", "edition", "source", "rights")):
+        raise ApiError("書誌情報は文字列で指定してください")
+    p = store.load(slug)
+    p.update({k: b.get(k, "").strip() for k in ("title", "author")})
+    p["bibliography"] = {k: b.get(k, "").strip() for k in ("edition", "source", "rights")}
+    store.save_project(slug, p)
+    return project_view(slug)
+
 @route("GET", r"/api/ia/search")
 def ia_search(h):
     q = h.query.get("q", [""])[0].strip()
@@ -246,6 +284,7 @@ def pdf_download(slug, revision, info, url, path):
         job = PDF_JOBS.get(slug)
         if job and job["revision"] == revision:
             job.update(end)
+    PRESENCE.request_finished()
 
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/source/ia/pdf")
@@ -305,7 +344,14 @@ def ia_pdf_start(h, slug):
             stale.unlink(missing_ok=True)
         PDF_JOBS[slug] = job = {"revision": rev, "state": "running", "bytes": 0, "total": info["size"], "error": "", "file": ""}
         snapshot = dict(job)
-    threading.Thread(target=pdf_download, args=(slug, rev, info, url, path), daemon=True).start()
+    PRESENCE.request_started()
+    try:
+        threading.Thread(target=pdf_download, args=(slug, rev, info, url, path), daemon=False).start()
+    except Exception:
+        PRESENCE.request_finished()
+        with PDF_LOCK:
+            PDF_JOBS.pop(slug, None)
+        raise
     return snapshot
 
 
@@ -465,7 +511,7 @@ def search_pages(h, slug):
         text = w["edits"].get(key, pg["text"])
         if query and query not in text.casefold() and query not in st.get("note", "").casefold():
             continue
-        found.append({"i": i, "marker": pg["marker"], "note": st.get("note", "")})
+        found.append({"i": i, "marker": pg["marker"] or "未割当の末尾", "note": st.get("note", "")})
     return found
 
 @route("GET", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)")
@@ -484,7 +530,8 @@ def get_page(h, slug, i):
         cached = {**cached, "legacy": True} if legacy else None
     elif cached and cached["image_key"] != img.get("key"):
         cached = None
-    return {"i": i, "vol": pg["vol"], "page": pg["page"], "marker": pg["marker"],
+    return {"i": i, "vol": pg["vol"], "page": pg["page"], "marker": pg["marker"] or "未割当の末尾",
+            "revision": w.get("revisions", {}).get(str(i), 0), "unassigned": pg.get("unassigned", False),
             "original": pg["text"], "text": w["edits"].get(str(i), pg["text"]),
             "done": bool(st.get("done")), "note": st.get("note", ""),
             "ocr": cached, "image": img}
@@ -494,8 +541,28 @@ def get_page(h, slug, i):
 def put_page(h, slug, i):
     i = page_index(slug, i)
     b = h.json()
-    store.update_page(slug, i, text=b.get("text"), done=b.get("done"), note=b.get("note"))
-    return project_view(slug) | {"page": i}
+    if type(b.get("revision")) is not int:
+        raise ApiError("画面を再読み込みしてください（保存元の版がありません）", HTTPStatus.PRECONDITION_REQUIRED)
+    if any(k in b and not isinstance(b[k], str) for k in ("text", "note")):
+        raise ApiError("本文と注記は文字列で指定してください")
+    try:
+        w = store.update_page(slug, i, text=b.get("text"), done=b.get("done"), note=b.get("note"), revision=b["revision"])
+    except store.Conflict as e:
+        raise ApiError(str(e), HTTPStatus.CONFLICT)
+    return project_view(slug) | {"page": i, "revision": w.get("revisions", {}).get(str(i), 0)}
+
+
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)/history")
+def page_history(h, slug, i):
+    i = page_index(slug, i)
+    return store.work(slug).get("history", {}).get(str(i), [])
+
+
+@route("GET", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)/readings")
+def reading_history(h, slug, i):
+    i = page_index(slug, i)
+    image = image_for(store.load(slug), i)
+    return store.ocr_history(slug, i, image.get("key")) if image and not image.get("missing") else []
 
 
 @route("POST", r"/api/projects/(?P<slug>[^/]+)/pages/(?P<i>\d+)/ocr")
@@ -509,7 +576,9 @@ def run_ocr(h, slug, i):
         raise ApiError("このページに対応する画像がありません")
     if b.get("image_key") and b["image_key"] != (img or {}).get("key"):
         raise ApiError("画像の対応が変更されています。ページを開き直してください", HTTPStatus.CONFLICT)
-    if cached and cached.get("image_key") and not b.get("force") and cached["image_key"] == img.get("key"):
+    if (cached and cached.get("image_key") and not b.get("force") and cached["image_key"] == img.get("key")
+            and (not b.get("provider") or cached.get("provider", "anthropic") == b["provider"])
+            and (not b.get("model") or cached.get("requested_model", cached.get("model")) == b["model"])):
         return cached
     if "pdf" not in img:
         data, mtype = scan_bytes(slug, p["source"], img, 2000)
@@ -519,15 +588,14 @@ def run_ocr(h, slug, i):
             raise ApiError("PDFのページ画像が送られていません")
         mtype, data = m[1], base64.b64decode(m[2])
     try:
-        res = ocr.transcribe(data, mtype, model=b.get("model") or ocr.MODEL)
+        res = providers.transcribe(data, mtype, provider=b.get("provider") or "anthropic", model=b.get("model"))
     except ocr.OCRUnavailable as e:
         raise ApiError(str(e), HTTPStatus.SERVICE_UNAVAILABLE)
     res["image_index"] = img["index"]
     res["image_key"] = img["key"]
     if (image_for(store.load(slug), i) or {}).get("key") != img["key"]:
         raise ApiError("読み取り中に画像の対応が変更されました。もう一度読み取ってください", HTTPStatus.CONFLICT)
-    store.ocr_put(slug, i, res)
-    return res
+    return store.ocr_put(slug, i, res)
 
 
 # ---------- export ----------
@@ -538,6 +606,24 @@ def export(h, slug):
     p = store.load(slug)
     parts = store.parts(slug)
     w = store.work(slug)
+    if fmt == "tei":
+        try:
+            data, warnings = tei.export(p, parts, w)
+        except ValueError as e:
+            raise ApiError(str(e))
+        return h.send_download(data, f"{p['uri']}.tei.xml", "application/xml; charset=utf-8")
+    if fmt == "package":
+        buf = io.BytesIO()
+        bib = p.get("bibliography", {})
+        fields = {"00#VERS#URI######": p["uri"], "80#VERS#BASED####": bib.get("edition", ""),
+                  "80#VERS#LINKS####": bib.get("source", ""), "90#VERS#COMMENT##": "ローカル作業用。OpenITI提出用URIと書誌を確認してください。"}
+        yml = "\n".join(f"{k}: {json.dumps(v, ensure_ascii=False)}" for k, v in fields.items()) + "\n"
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(f"{slug}.mARkdown", openiti.join(parts, w["edits"]))
+            z.writestr(f"{slug}.yml", yml)
+            z.writestr("bibliography.json", json.dumps({"title": p["title"], "author": p["author"], **bib}, ensure_ascii=False, indent=2))
+            z.writestr("README.txt", "ローカル作業用パッケージです。OpenITIへ登録済みではありません。\n提出前にURI・著者/作品の既存レコード・版のYAML・権利条件・未確認ページを確認してください。\n")
+        return h.send_download(buf.getvalue(), f"{slug}.draft.zip", "application/zip")
     if fmt == "text":
         return h.send_download(openiti.join(parts, w["edits"]).encode("utf-8"), f"{p['uri']}.corrected", "text/plain; charset=utf-8")
     if fmt == "diff":
@@ -568,6 +654,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def body(self):
         n = int(self.headers.get("Content-Length") or 0)
+        if n < 0 or n > PDF_LIMIT:
+            raise ApiError("送信データが大きすぎます（上限500 MB）", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         return self.rfile.read(n) if n else b""
 
     def json(self):
