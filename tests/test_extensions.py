@@ -47,6 +47,29 @@ class ExtensionTests(unittest.TestCase):
         self.save(1, text=entries[0]['text'])
         self.assertNotIn('0', store.work(self.slug)['edits'])
 
+    def test_autosaves_share_history_entry_until_window_or_checkpoint(self):
+        for n, text in enumerate(['one', 'two', 'three']):
+            self.save(n, text=text)
+        entries = store.work(self.slug)['history']['0']
+        self.assertEqual([e['text'] for e in entries], ['# alpha beta\n'])
+        self.save(3, text='restored', checkpoint=True)
+        self.assertEqual([e['text'] for e in store.work(self.slug)['history']['0']], ['# alpha beta\n', 'three'])
+        with patch.object(store, 'HISTORY_WINDOW', 0):
+            self.save(4, text='later')
+        self.assertEqual(store.work(self.slug)['history']['0'][-1]['text'], 'restored')
+        self.assertEqual(server.get_page(Request(), self.slug, '0')['revision'], 5)
+
+    def test_history_is_capped_per_page(self):
+        with patch.object(store, 'HISTORY_WINDOW', 0), patch.object(store, 'HISTORY_LIMIT', 3):
+            for n in range(6):
+                self.save(n, text=f'v{n}')
+        self.assertEqual([e['text'] for e in store.work(self.slug)['history']['0']], ['v2', 'v3', 'v4'])
+
+    def test_module_scripts_are_served_as_javascript(self):
+        import mimetypes
+        self.assertEqual(mimetypes.guess_type('pdf.min.mjs')[0], 'text/javascript')
+        self.assertEqual(mimetypes.guess_type('app.js')[0], 'text/javascript')
+
     def test_missing_revision_rejected(self):
         with self.assertRaises(server.ApiError) as error:
             server.put_page(Request({'text':'unsafe'}), self.slug, '0')

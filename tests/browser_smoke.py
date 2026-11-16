@@ -1,6 +1,7 @@
 """Optional real-browser checks: pip install playwright; python -m tests.browser_smoke."""
 import io
 import os
+import re
 import signal
 import shutil
 import socket
@@ -68,11 +69,15 @@ def main():
             expect(editor).to_have_value('first tab wins')
             print('PASS stale tab conflict', flush=True)
 
+            # saves within a few minutes share one entry: the latest is the text before this burst of edits
             page.get_by_role('button', name='保存履歴', exact=True).click()
-            expect(page.locator('dialog .history-preview')).to_have_text('alpha edited beta')
+            expect(page.locator('dialog .history-preview')).to_have_text('alpha beta')
             page.get_by_role('button', name='この本文を復元').click()
-            expect(editor).to_have_value('alpha edited beta')
+            expect(editor).to_have_value(re.compile(r'^\s*alpha beta\s*$'))
             expect(page.locator('#saved')).to_have_text('保存済み')
+            page.get_by_role('button', name='保存履歴', exact=True).click()
+            expect(page.locator('dialog .history-preview')).to_have_text('first tab wins')
+            page.locator('dialog').get_by_role('button', name='閉じる').click()
             print('PASS persistent history restoration', flush=True)
 
             page.get_by_label('AI提供元').select_option('openai')

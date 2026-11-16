@@ -797,7 +797,7 @@ async function proofView(slug, idx, life) {
   };
   $('#readings').onchange = e => { ocr = e.target.value === '' ? latestReading : readings[+e.target.value]; renderDiff(); };
   refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
-  $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { ed.value = text; textChanged(); renderDiff(); await flush(); });
+  $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { await flush(); ed.value = text; textChanged(); save({checkpoint: true}); renderDiff(); await flush(); });
   $('#bibliob').onclick = () => editBibliography(life, p, updated => { p = updated; });
   renderDiff();
   if (!ocr && canOcr() && prefs.autoOcr && pg.image && !pg.image.missing) runOcr(false);

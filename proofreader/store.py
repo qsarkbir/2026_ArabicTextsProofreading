@@ -7,6 +7,7 @@ projects/<slug>/
   ocr/<i>.json   Claude readings, one per page
   files/         uploaded PDFs
 """
+import calendar
 import json
 import os
 import re
@@ -24,6 +25,10 @@ _cache = {}
 
 class Conflict(Exception):
     pass
+
+
+HISTORY_WINDOW = 300  # seconds: autosaves within this span share one history entry
+HISTORY_LIMIT = 100   # entries kept per page; the original text is always restorable
 
 
 def _write_json(path, data):
@@ -86,7 +91,7 @@ def work(slug):
     return json.loads((_dir(slug) / "work.json").read_text(encoding="utf-8"))
 
 
-def update_page(slug, i, text=None, done=None, note=None, revision=None):
+def update_page(slug, i, text=None, done=None, note=None, revision=None, checkpoint=False):
     with _lock:
         d = _dir(slug)
         w = json.loads((d / "work.json").read_text(encoding="utf-8"))
@@ -113,12 +118,25 @@ def update_page(slug, i, text=None, done=None, note=None, revision=None):
             w["status"].pop(key, None)
         current = {"text": w["edits"].get(key, original), **w["status"].get(key, {})}
         if current != previous:
-            w.setdefault("history", {}).setdefault(key, []).append(
-                {**previous, "revision": current_revision, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+            _record_history(w.setdefault("history", {}).setdefault(key, []), previous, current_revision, checkpoint)
             w.setdefault("revisions", {})[key] = current_revision + 1
         w["schema_version"] = 2
         _write_json(d / "work.json", w)
         return w
+
+
+def _record_history(entries, previous, revision, checkpoint):
+    """Keep the state before each editing burst; a checkpoint (e.g. a restore) always gets its own entry."""
+    now = time.time()
+    if entries and not checkpoint:
+        try:
+            last = calendar.timegm(time.strptime(entries[-1]["time"], "%Y-%m-%dT%H:%M:%SZ"))
+        except (KeyError, TypeError, ValueError):
+            last = None
+        if last is not None and 0 <= now - last < HISTORY_WINDOW:
+            return
+    entries.append({**previous, "revision": revision, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))})
+    del entries[:-HISTORY_LIMIT]
 
 
 def ocr_get(slug, i):

@@ -30,6 +30,10 @@ from .exporters import tei
 from .importers import draft
 
 STATIC = Path(__file__).resolve().parent / "static"
+# Windows registry entries can map these to text/plain, which browsers refuse for ES modules
+for _ext in (".js", ".mjs"):
+    mimetypes.add_type("text/javascript", _ext)
+mimetypes.add_type("text/css", ".css")
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
 PRESENCE = Presence()
@@ -546,7 +550,8 @@ def put_page(h, slug, i):
     if any(k in b and not isinstance(b[k], str) for k in ("text", "note")):
         raise ApiError("本文と注記は文字列で指定してください")
     try:
-        w = store.update_page(slug, i, text=b.get("text"), done=b.get("done"), note=b.get("note"), revision=b["revision"])
+        w = store.update_page(slug, i, text=b.get("text"), done=b.get("done"), note=b.get("note"), revision=b["revision"],
+                              checkpoint=b.get("checkpoint") is True)
     except store.Conflict as e:
         raise ApiError(str(e), HTTPStatus.CONFLICT)
     return project_view(slug) | {"page": i, "revision": w.get("revisions", {}).get(str(i), 0)}
