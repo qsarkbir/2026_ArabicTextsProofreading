@@ -41,7 +41,10 @@ test('scripts load into one global scope without redeclaration errors', () => {
   }
   assert.equal(typeof vm.runInContext('OpenITI.split', ctx), 'function');
   assert.equal(typeof vm.runInContext('Work.applyUpdate', ctx), 'function');
+  assert.equal(typeof vm.runInContext('Bundle.parse', ctx), 'function');
+  assert.equal(typeof vm.runInContext('TEI.export', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalStore.savePage', ctx), 'function');
+  assert.equal(typeof vm.runInContext('LocalStore.importBundle', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalRouter.handle', ctx), 'function');
   assert.equal(vm.runInContext('PROOF_MODE', ctx), 'browser');
 });

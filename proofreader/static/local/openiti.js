@@ -189,7 +189,7 @@ const OpenITI = (() => {
     return found;
   };
 
-  return {HEADER_END, PAGE_RE, URI_RE, RAW_BASE, PLACEHOLDERS, repoFor, resolve, ymlUrls, parseYml, headerMeta, camelWords, fetchText, split, join, titleOf, authorOf, scanLinks, pyStrip, pyInt};
+  return {HEADER_END, PAGE_RE, URI_RE, RAW_BASE, PLACEHOLDERS, repoFor, resolve, ymlUrls, parseYml, headerMeta, camelWords, fetchText, split, join, titleOf, authorOf, scanLinks, pyStrip, pyInt, splitLines, WS};
 })();
 
 if (typeof module !== 'undefined') module.exports = OpenITI;

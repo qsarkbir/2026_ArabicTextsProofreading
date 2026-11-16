@@ -47,27 +47,44 @@ def _dir(slug):
     return d
 
 
-def create(fetched):
+def slug_base(uri):
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", uri)[:120] or "text"
+
+
+def install(base, text, make_project, work):
+    """Create a project folder under a free slug derived from base; make_project(slug) returns project.json."""
     ROOT.mkdir(parents=True, exist_ok=True)
-    base = re.sub(r"[^A-Za-z0-9._-]+", "_", fetched["uri"])[:120] or "text"
-    slug, n = base, 2
-    while (ROOT / slug).exists():
-        slug, n = f"{base}_{n}", n + 1
-    d = ROOT / slug
-    (d / "ocr").mkdir(parents=True)
-    (d / "files").mkdir()
-    (d / "original.txt").write_text(fetched["text"], encoding="utf-8", newline="")
-    meta = fetched["meta"]
-    project = {
-        "slug": slug, "uri": fetched["uri"], "raw_url": fetched.get("raw_url", ""),
-        "title": openiti.title_of(meta, fetched["text"], fetched["uri"]),
-        "author": openiti.author_of(meta, fetched["text"], fetched["uri"]),
-        "created": time.strftime("%Y-%m-%d %H:%M"), "meta": meta, "schema_version": 2,
-        "candidates": openiti.scan_links(meta), "source": None, "offset": 0, "anchors": [],
-    }
-    _write_json(d / "project.json", project)
-    _write_json(d / "work.json", {"edits": {}, "status": {}})
+    with _lock:
+        slug, n = base, 2
+        while (ROOT / slug).exists():
+            slug, n = f"{base}_{n}", n + 1
+        d = ROOT / slug
+        project = make_project(slug)
+        (d / "ocr").mkdir(parents=True)
+        (d / "files").mkdir()
+        (d / "original.txt").write_text(text, encoding="utf-8", newline="")
+        _write_json(d / "work.json", work)
+        _write_json(d / "project.json", project)  # written last: the folder is not a project until then
     return project
+
+
+def create(fetched):
+    meta = fetched["meta"]
+
+    def make(slug):
+        return {
+            "slug": slug, "uri": fetched["uri"], "raw_url": fetched.get("raw_url", ""),
+            "title": openiti.title_of(meta, fetched["text"], fetched["uri"]),
+            "author": openiti.author_of(meta, fetched["text"], fetched["uri"]),
+            "created": time.strftime("%Y-%m-%d %H:%M"), "meta": meta, "schema_version": 2,
+            "candidates": openiti.scan_links(meta), "source": None, "offset": 0, "anchors": [],
+        }
+    return install(slug_base(fetched["uri"]), fetched["text"], make, {"edits": {}, "status": {}})
+
+
+def original_text(slug):
+    with (_dir(slug) / "original.txt").open(encoding="utf-8", newline="") as f:
+        return f.read()
 
 
 def load(slug):
@@ -83,8 +100,7 @@ def save_project(slug, project):
 def parts(slug):
     """Split original text, cached per slug since it never changes."""
     if slug not in _cache:
-        with (_dir(slug) / "original.txt").open(encoding="utf-8", newline="") as f:
-            _cache[slug] = openiti.split(f.read())
+        _cache[slug] = openiti.split(original_text(slug))
     return _cache[slug]
 
 
@@ -201,3 +217,10 @@ def image_index(project, i):
         if a_page <= i and (best is None or a_page > best[0]):
             best = (a_page, a_img)
     return best[1] + (i - best[0]) if best else project.get("offset", 0) + i
+
+
+def create_from_bundle(project, text, work):
+    """Install a validated backup (bundle.parse) as a new project; the incoming slug is never used."""
+    def make(slug):
+        return {**project, "slug": slug, "created": project.get("created") or time.strftime("%Y-%m-%d %H:%M")}
+    return install(slug_base(project["uri"]), text, make, work)

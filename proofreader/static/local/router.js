@@ -53,12 +53,13 @@ const LocalRouter = (() => {
 
   // ---------- projects ----------
   route('GET', '/api/projects', async () => {
-    const out = [];
+    const out = [], backups = await LocalStore.backupTimes();
     for (const p of (await LocalStore.listProjects()).sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))) {
       try {
         const parts = await LocalStore.parts(p.slug), records = await LocalStore.pages(p.slug);
         out.push({slug: p.slug, uri: p.uri, title: p.title, author: p.author, created: p.created, source: !!p.source,
-          pages: parts.pages.length, done: keysOf(records, r => r.done).length, edited: keysOf(records, r => r.text !== undefined).length});
+          pages: parts.pages.length, done: keysOf(records, r => r.done).length, edited: keysOf(records, r => r.text !== undefined).length,
+          backup: backups[p.slug] || null});
       } catch { /* 壊れたプロジェクトは一覧から外す（server.py と同じ） */ }
     }
     return out;
@@ -71,6 +72,11 @@ const LocalRouter = (() => {
     let fetched;
     try { fetched = await OpenITI.fetchText(ref); } catch (e) { throw err(`テキストを取得できませんでした: ${e.message}`); }
     return createFrom(fetched);
+  });
+
+  route('POST', '/api/projects/import-bundle', async ({body}) => {
+    const data = typeof body === 'string' ? (() => { try { return JSON.parse(body); } catch { throw err('JSONとして読めません'); } })() : body;
+    return projectView((await LocalStore.importBundle(Bundle.parse(data))).slug);
   });
 
   route('POST', '/api/projects/upload-text', async ({body, headers}) => {
@@ -172,7 +178,17 @@ const LocalRouter = (() => {
       return file(`${p.uri}.corrected`, 'text/plain; charset=utf-8', OpenITI.join(parts, edits));
     }
     if (fmt === 'notes') return file(`${p.uri}.notes.csv`, 'text/csv; charset=utf-8', notesCsv(parts, records));
-    if (['tei', 'package', 'diff'].includes(fmt)) throw err(UNSUPPORTED, 501);
+    if (fmt === 'tei') {
+      try { return {filename: `${p.uri}.tei.xml`, type: 'application/xml; charset=utf-8', data: TEI.export(p, parts, Work.recordsToWork(records)).data}; }
+      catch (e) { throw err(e.message); }
+    }
+    if (fmt === 'bundle') {
+      const src = await LocalStore.bundleSource(slug), now = new Date();
+      const out = file(`${slug}.proofreader.json`, 'application/json; charset=utf-8', JSON.stringify(Bundle.build({...src, now}), null, 1));
+      await LocalStore.setSetting(`backup:${slug}`, now.toISOString());
+      return out;
+    }
+    if (['package', 'diff'].includes(fmt)) throw err(UNSUPPORTED, 501);
     throw err('不明な形式です');
   });
 

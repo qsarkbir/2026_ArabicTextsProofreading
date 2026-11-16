@@ -1,0 +1,68 @@
+{
+ "format": "openiti-proofreader-project",
+ "format_version": 1,
+ "exported": "2026-11-16T00:00:00Z",
+ "app": {
+  "mode": "http",
+  "version": "0.1.0"
+ },
+ "project": {
+  "slug": "0999SyntheticAuthor.SyntheticBook.Test0001-ara1",
+  "uri": "0999SyntheticAuthor.SyntheticBook.Test0001-ara1",
+  "raw_url": "https://example.org/x",
+  "title": "Synthetic Book",
+  "author": "Synthetic Author",
+  "created": "2026-11-16 00:00",
+  "meta": {},
+  "schema_version": 2,
+  "candidates": [],
+  "source": {
+   "type": "pdf",
+   "file": "gone.pdf",
+   "revision": "r",
+   "title": "Synthetic",
+   "count": 3
+  },
+  "offset": 0,
+  "anchors": [],
+  "bibliography": {
+   "edition": "Synthetic edition"
+  }
+ },
+ "original": "﻿#META#Header#End#\r\n# alpha beta PageV01P001\r\n# gamma\r\n~~ delta PageV01P002\r\n# epsilon PageV02P001\r\n",
+ "work": {
+  "edits": {
+   "0": "edited alpha"
+  },
+  "status": {
+   "0": {
+    "done": true,
+    "note": "synthetic note"
+   },
+   "2": {
+    "note": "note only"
+   }
+  },
+  "history": {
+   "0": [
+    {
+     "text": "\r\n# alpha beta ",
+     "revision": 0,
+     "time": "2027-01-15T08:00:00Z"
+    }
+   ],
+   "2": [
+    {
+     "text": "\r\n# epsilon ",
+     "revision": 0,
+     "time": "2027-01-15T08:00:00Z"
+    }
+   ]
+  },
+  "revisions": {
+   "0": 1,
+   "2": 1
+  },
+  "schema_version": 2
+ }
+}

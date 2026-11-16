@@ -14,8 +14,8 @@ python -m proofreader --keep-running   # タブを閉じても終了しない
 - 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
-- 静的ブラウザ版（段階1a の途中）：`python -m http.server -d proofreader/static 8780` で配信して開く。同じ画面が IndexedDB に保存し、IA・PDF・OCR・TEI などは「この機能はローカル版で利用できます」（501）になる。設計は `docs/static-design.md`。検証は `python -m tests.browser_static_smoke`（合成データ、Python の API なし）。
-- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/*.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js`・`local/openiti.js`・`local/work.js` も同様）。`tests/fixtures/openiti/` の合成データと expected.json は Python（`tests/test_parity.py`）と JS（`tests/openiti.test.js`）の共通の基準で、`openiti.py` を意図して変えたら `UPDATE_FIXTURES=1 python -m unittest tests.test_parity` で作り直し、`local/openiti.js` も合わせる。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
+- 静的ブラウザ版（段階1a 完了）：`python -m http.server -d proofreader/static 8780` で配信して開く（`main` へのマージ後は GitHub Pages にも配信される）。同じ画面が IndexedDB に保存し、IA・PDF・OCR・ZIP・差分などは「この機能はローカル版で利用できます」（501）になる。TEI とバックアップ（`.proofreader.json`、`bundle.py` / `local/bundle.js`）は両方の版にある。設計は `docs/static-design.md`。検証は `python -m tests.browser_static_smoke`（合成データ、Python の API なし）。`index.html` の CSP（`<meta>`）は、インラインのスクリプトを許可しない。接続先を足すときは CSP とこの文書の D-14 も直す。
+- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/*.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js`・`local/` の各ファイル・`tests/tei_fixtures.js` も同様）。`tests/fixtures/tei/`（TEI）と `tests/fixtures/bundle/`（バックアップ）も同じ作りで、`UPDATE_FIXTURES=1 python -m unittest tests.test_tei_parity tests.test_bundle` で作り直す。CI の TEI 検証は `node tests/tei_fixtures.js <dir>` が書く `tei.js` の出力も `python -m tests.validate_tei <rng> <dir>` で検証する。`tests/fixtures/openiti/` の合成データと expected.json は Python（`tests/test_parity.py`）と JS（`tests/openiti.test.js`）の共通の基準で、`openiti.py` を意図して変えたら `UPDATE_FIXTURES=1 python -m unittest tests.test_parity` で作り直し、`local/openiti.js` も合わせる。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
 ## 構成
@@ -32,11 +32,12 @@ proofreader/
   providers/   AI 提供元の切り替え（Anthropic は ocr.py、OpenAI は Responses API）
   importers/   draft.py：PDF の選択範囲から仮 ID の空の本文を作る
   exporters/   tei.py：基本 TEI P5 出力
-  static/local/  ブラウザ版のロジック（openiti.js・work.js …）。Python と同じ結果になることをテストで確かめる。名前空間を1つ公開する
+  bundle.py    プロジェクトのバックアップ（<slug>.proofreader.json）の書き出しと検証。`store.install` / `create_from_bundle` で保存する
+  static/local/  ブラウザ版のロジック（openiti.js・work.js・bundle.js・tei.js …）。Python と同じ結果になることをテストで確かめる。名前空間を1つ公開する
   static/      フロントエンド（index.html, app.js, app.css, core.js, compare.js, workflows.js, vendor/pdfjs/）。フレームワーク・ビルド無しの素の JS
     mode.js      静的版では 'browser'。サーバーは同じ /mode.js に 'http' を返す（server.static）
     backend.js   api() の実体（'http' は fetch、'browser' は local/router.js）と書き出しのダウンロード
-    local/       静的ブラウザ版：openiti.js / work.js（純粋なロジック）、store.js（IndexedDB）、router.js（server.py のルートの代わり）
+    local/       静的ブラウザ版：openiti.js / work.js / bundle.js / tei.js（純粋なロジック）、store.js（IndexedDB）、router.js（server.py のルートの代わり）
 ```
 
 - フロントは `location.hash` によるルーティング（`#/`、`#/new`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `newDraftView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。

@@ -117,10 +117,32 @@ async function routeNow() {
 }
 
 // ---------- home ----------
+const megabytes = n => `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`;
+async function storageNote() {
+  try {
+    const {usage, quota} = await navigator.storage.estimate();
+    const kept = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    return `使用量：${megabytes(usage)}（上限の目安 ${megabytes(quota)}）。ブラウザによる自動削除の保護：${kept ? 'あり' : 'なし'}`;
+  } catch (e) { return ''; }
+}
+const backupLabel = t => { const d = t ? new Date(t) : null; return d && !isNaN(d) ? d.toLocaleString('ja-JP') : '未バックアップ'; };
+
 async function homeView(life) {
   const api = life.api;
   document.title = 'OpenITI 校正';
-  const list = await api('GET', '/api/projects');
+  const table = async () => {
+    const list = await api('GET', '/api/projects');
+    return list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th>${browserMode ? '<th>最後のバックアップ</th>' : ''}<th></th></tr></thead><tbody>
+        ${list.map(p => `<tr>
+          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div></td>
+          <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
+          <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
+          <td class="prog">${p.edited}</td>
+          ${browserMode ? `<td class="small">${esc(backupLabel(p.backup))}</td>` : ''}
+          <td><a href="#/p/${esc(p.slug)}${p.source || browserMode ? '' : '/setup'}"><button>${p.source || browserMode ? '開く' : '設定を続ける'}</button></a>
+            <a href="/api/projects/${esc(p.slug)}/export?fmt=bundle" data-bundle><button>バックアップを書き出す</button></a></td>
+        </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>';
+  };
   view.innerHTML = `<div class="wrap">
     <div class="card">
       <h2>新しいテキストを読み込む</h2><p class="needs-server"><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
@@ -129,20 +151,39 @@ async function homeView(life) {
         <button class="primary" id="go">読み込む</button>
       </div>
       <div class="row" style="margin-top:8px"><label class="muted small" for="file">または手元のOpenITI形式ファイル：</label><input type="file" id="file" accept=".txt,.mARkdown,.completed,.inProgress,text/plain"></div>
+      <div class="row" style="margin-top:8px"><label class="muted small" for="bundle">バックアップから読み込む（.proofreader.json）：</label><input type="file" id="bundle" accept=".json,application/json"></div>
     </div>
     <div class="card">
       <h2>校正中のテキスト</h2>
-      ${browserMode ? '<p class="muted small">このブラウザの中に保存されます。サイトのデータを消したり、容量が足りなくなったりすると失われることがあります。</p>' : ''}
-      ${list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th><th></th></tr></thead><tbody>
-        ${list.map(p => `<tr>
-          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div></td>
-          <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
-          <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
-          <td class="prog">${p.edited}</td>
-          <td><a href="#/p/${p.slug}${p.source || browserMode ? '' : '/setup'}"><button>${p.source || browserMode ? '開く' : '設定を続ける'}</button></a></td>
-        </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>'}
+      ${browserMode ? '<p class="muted small">このブラウザの中に保存されます。サイトのデータを消したり、容量が足りなくなったりすると失われることがあります。「バックアップを書き出す」で定期的にファイルへ保存してください。</p><p class="muted small" id="usage"></p>' : ''}
+      <div id="plist">${await table()}</div>
     </div>
     <div class="row needs-server" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
+  const refresh = async () => { $('#plist').innerHTML = await table(); if (browserMode) $('#usage').textContent = await storageNote(); };
+  if (browserMode) {
+    storageNote().then(t => { if (life.alive) $('#usage').textContent = t; });
+    if (typeof BroadcastChannel !== 'undefined') { // 別のタブでの保存・作成・バックアップを一覧に反映する
+      const channel = new BroadcastChannel('proofreader');
+      channel.onmessage = () => refresh().catch(() => {});
+      life.cleanup.push(() => channel.close());
+    }
+  }
+  $('#plist').addEventListener('click', async e => {
+    const link = e.target.closest('a[data-bundle]');
+    if (!link || !browserMode) return;
+    e.preventDefault();
+    try { await saveDownload(link.getAttribute('href')); await refresh(); } catch (err) { if (life.alive) toast(err.message, true); }
+  });
+  $('#bundle').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      let data;
+      try { data = JSON.parse(await f.text()); } catch (err) { throw new Error('JSONとして読めません。バックアップのファイルを選んでください'); }
+      const p = await api('POST', '/api/projects/import-bundle', data);
+      toast('バックアップから読み込みました');
+      location.hash = browserMode || p.source ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`;
+    } catch (err) { if (life.alive) { toast(err.message, true); e.target.value = ''; } }
+  };
   $('#quit').onclick = async () => {
     if (!confirm('アプリを終了しますか？ 他のタブで開いている画面も使えなくなります。')) return;
     try { await api('POST', '/api/shutdown'); } catch (e) { if (life.alive) toast(e.message, true); return; }
@@ -425,9 +466,10 @@ async function proofView(slug, idx, life) {
       <div class="menu"><button id="expb">書き出し</button><div class="pop" id="exp" hidden>
         <a href="/api/projects/${slug}/export?fmt=text"><button style="width:100%">校正済みテキスト（OpenITI形式）</button></a>
         <a class="needs-server" href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
-        <a class="needs-server" href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
+        <a href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
         <a class="needs-server" href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
         <a href="/api/projects/${slug}/export?fmt=notes"><button style="width:100%">注記・確認状況（CSV）</button></a>
+        <a href="/api/projects/${slug}/export?fmt=bundle"><button style="width:100%">バックアップを書き出す（.proofreader.json）</button></a>
       </div></div>
     </div>`;
 

@@ -1,0 +1,1662 @@
+[
+ {
+  "name": "minimal",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "no-work-tables",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00"
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {}
+  }
+ },
+ {
+  "name": "messy-but-valid",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "slug": "../evil",
+    "unknown_field": {
+     "k": [
+      1,
+      2
+     ]
+    },
+    "bibliography": {
+     "edition": "E"
+    },
+    "source": {
+     "type": "pdf",
+     "file": "gone.pdf",
+     "count": 3,
+     "revision": "r"
+    },
+    "anchors": [
+     [
+      1,
+      2
+     ]
+    ],
+    "offset": -1
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "0": "\ufeff# a ",
+     "1": "changed b"
+    },
+    "status": {
+     "0": {
+      "done": false,
+      "note": ""
+     },
+     "1": {
+      "done": true,
+      "note": "check"
+     }
+    },
+    "history": {
+     "1": [
+      {
+       "text": "old",
+       "revision": 0,
+       "time": "2026-01-01T00:00:00Z",
+       "done": false,
+       "note": "n"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 0,
+     "1": 3
+    },
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "ia-source-with-pdf-file",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "revision": "r",
+     "pages": [
+      {
+       "label": "1"
+      }
+     ],
+     "pdf_file": "ia-r.pdf"
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-capped",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "v0",
+       "revision": 0,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v1",
+       "revision": 1,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v2",
+       "revision": 2,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v3",
+       "revision": 3,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v4",
+       "revision": 4,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v5",
+       "revision": 5,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v6",
+       "revision": 6,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v7",
+       "revision": 7,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v8",
+       "revision": 8,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v9",
+       "revision": 9,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v10",
+       "revision": 10,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v11",
+       "revision": 11,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v12",
+       "revision": 12,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v13",
+       "revision": 13,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v14",
+       "revision": 14,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v15",
+       "revision": 15,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v16",
+       "revision": 16,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v17",
+       "revision": 17,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v18",
+       "revision": 18,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v19",
+       "revision": 19,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v20",
+       "revision": 20,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v21",
+       "revision": 21,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v22",
+       "revision": 22,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v23",
+       "revision": 23,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v24",
+       "revision": 24,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v25",
+       "revision": 25,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v26",
+       "revision": 26,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v27",
+       "revision": 27,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v28",
+       "revision": 28,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v29",
+       "revision": 29,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v30",
+       "revision": 30,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v31",
+       "revision": 31,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v32",
+       "revision": 32,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v33",
+       "revision": 33,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v34",
+       "revision": 34,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v35",
+       "revision": 35,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v36",
+       "revision": 36,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v37",
+       "revision": 37,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v38",
+       "revision": 38,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v39",
+       "revision": 39,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v40",
+       "revision": 40,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v41",
+       "revision": 41,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v42",
+       "revision": 42,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v43",
+       "revision": 43,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v44",
+       "revision": 44,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v45",
+       "revision": 45,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v46",
+       "revision": 46,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v47",
+       "revision": 47,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v48",
+       "revision": 48,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v49",
+       "revision": 49,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v50",
+       "revision": 50,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v51",
+       "revision": 51,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v52",
+       "revision": 52,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v53",
+       "revision": 53,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v54",
+       "revision": 54,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v55",
+       "revision": 55,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v56",
+       "revision": 56,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v57",
+       "revision": 57,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v58",
+       "revision": 58,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v59",
+       "revision": 59,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v60",
+       "revision": 60,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v61",
+       "revision": 61,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v62",
+       "revision": 62,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v63",
+       "revision": 63,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v64",
+       "revision": 64,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v65",
+       "revision": 65,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v66",
+       "revision": 66,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v67",
+       "revision": 67,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v68",
+       "revision": 68,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v69",
+       "revision": 69,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v70",
+       "revision": 70,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v71",
+       "revision": 71,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v72",
+       "revision": 72,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v73",
+       "revision": 73,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v74",
+       "revision": 74,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v75",
+       "revision": 75,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v76",
+       "revision": 76,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v77",
+       "revision": 77,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v78",
+       "revision": 78,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v79",
+       "revision": 79,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v80",
+       "revision": 80,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v81",
+       "revision": 81,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v82",
+       "revision": 82,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v83",
+       "revision": 83,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v84",
+       "revision": 84,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v85",
+       "revision": 85,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v86",
+       "revision": 86,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v87",
+       "revision": 87,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v88",
+       "revision": 88,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v89",
+       "revision": 89,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v90",
+       "revision": 90,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v91",
+       "revision": 91,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v92",
+       "revision": 92,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v93",
+       "revision": 93,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v94",
+       "revision": 94,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v95",
+       "revision": 95,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v96",
+       "revision": 96,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v97",
+       "revision": 97,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v98",
+       "revision": 98,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v99",
+       "revision": 99,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v100",
+       "revision": 100,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v101",
+       "revision": 101,
+       "time": "2026-01-01T00:00:00Z"
+      },
+      {
+       "text": "v102",
+       "revision": 102,
+       "time": "2026-01-01T00:00:00Z"
+      }
+     ]
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "not-an-object",
+  "bundle": [
+   1
+  ]
+ },
+ {
+  "name": "not-a-bundle",
+  "bundle": {
+   "format": "other"
+  }
+ },
+ {
+  "name": "no-format-version",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "format-version-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": "1",
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "format-version-zero",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 0,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "format-version-float",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1.5,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "format-version-bool",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": true,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "format-version-newer",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "project-schema-newer",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 3
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "work-schema-newer",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 3
+   }
+  }
+ },
+ {
+  "name": "project-schema-bad",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": "x"
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "project-missing",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "work-not-dict",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": []
+  }
+ },
+ {
+  "name": "original-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": 5,
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "original-no-pages",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "no markers",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "original-lone-surrogate",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "a\ud800 PageV01P001",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "uri-missing",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "uri-empty",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "created-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": 5,
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "meta-array",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "meta": []
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "anchors-bad",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "anchors": [
+     [
+      1
+     ]
+    ]
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-bad-type",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "zip"
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-no-pages",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia"
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "bibliography-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "bibliography": "x"
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "offset-float",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "offset": 1.5
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edit-key-out-of-range",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "2": "x"
+    },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edit-key-leading-zero",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "01": "x"
+    },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edit-key-not-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "a": "x"
+    },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edit-value-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "0": 1
+    },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edits-array",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": [],
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "note-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "note": 5
+     }
+    },
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-bad-entry",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "x"
+      }
+     ]
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-not-list",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": {}
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "revision-negative",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {
+     "0": -1
+    },
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "revision-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {
+     "0": "1"
+    },
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "edit-lone-surrogate",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {
+     "0": "x\udc00"
+    },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ }
+]
