@@ -59,6 +59,7 @@ proofreader/
 
 - `origin` は GitHub の qsarkbir/2026_ArabicTextsProofreading。`main` はルールセットで保護されており、直接 push・force push・削除はできない。
 - 作業用ブランチで開発して push し、PR を作って `main` にマージする。マージ前に GitHub Actions のテストが成功していることを確かめる。
+- 静的ブラウザ版の設計は `docs/static-design.md`。決定事項・段階の状態・保存形式の版を変えたら、その文書も同じ PR で更新する（決定事項は消さずに置き換え済みと書く）。
 - `build-scripts/` と `bustan-proofreader.html` は git 管理外の実験的なもの（Bustan 1点を hOCR と突き合わせて単一 HTML にする試作）。本体のアプリとは独立している。
 - ライセンスはコードが MIT。OpenITI のテキストは CC BY-NC-SA 4.0 なので、テキストやその一部をリポジトリに含めない。
 
