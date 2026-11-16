@@ -21,4 +21,5 @@ async function saveDownload(url) {
   a.download = file.filename;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  if (file.done) await file.done();
 }

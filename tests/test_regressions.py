@@ -463,6 +463,26 @@ class RegressionTests(unittest.TestCase):
             d.clear()
             self.addCleanup(d.clear)
 
+    def test_status_reports_attached_only_while_the_file_exists(self):
+        p = self.project()
+        self.pdf_state()
+        self.pdf_file(p)
+        server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        with patch.object(server.sources, 'ia_pdf', return_value=None):
+            self.assertEqual(server.ia_pdf_status(Request(), p['slug'])['attached'], 'ia-one.pdf')
+            store.file_path(p['slug'], 'ia-one.pdf').unlink()  # e.g. a project restored from a backup
+            st = server.ia_pdf_status(Request(), p['slug'])
+        self.assertEqual((st['attached'], st['pending']), (None, None))
+
+    def test_attach_of_the_recorded_name_still_needs_the_file(self):
+        p = self.project()
+        self.pdf_file(p)
+        server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        store.file_path(p['slug'], 'ia-one.pdf').unlink()
+        with self.assertRaises(server.ApiError) as cm:
+            server.ia_pdf_attach(Request({'revision': 'one', 'pages': 4}), p['slug'])
+        self.assertEqual(cm.exception.status, 404)
+
     def test_start_twice_runs_one_download_and_status_reports_job(self):
         p = self.project()
         self.pdf_state()
@@ -626,6 +646,7 @@ class PresenceTests(unittest.TestCase):
         class Stub:
             path = '/api/boom'
             sent = []
+            origin_ok = lambda self, method: True
             _send = lambda self, status, *a, **k: self.sent.append(status)
         def boom(h):
             raise RuntimeError('x')

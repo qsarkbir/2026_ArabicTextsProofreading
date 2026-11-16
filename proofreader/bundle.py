@@ -23,8 +23,22 @@ class BundleError(ValueError):
     pass
 
 
+SAFE = 2 ** 53 - 1  # what a JS number holds exactly
+
+
 def _int(v):
-    return isinstance(v, int) and not isinstance(v, bool)
+    return isinstance(v, int) and not isinstance(v, bool) and abs(v) <= SAFE
+
+
+def _integral(v):
+    """JSON 1.0 is the integer 1 in JS: read integral floats the same way so that both versions accept and return the same data."""
+    if isinstance(v, float) and v.is_integer() and abs(v) <= SAFE:
+        return int(v)
+    if isinstance(v, list):
+        return [_integral(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _integral(x) for k, x in v.items()}
+    return v
 
 
 def _status(entry):
@@ -54,14 +68,32 @@ def _version(obj, what):
         raise BundleError(NEWER)
 
 
+def _str(v):
+    return isinstance(v, str)
+
+
+def _page(c):
+    return (isinstance(c, dict) and _str(c.get("service")) and (_str(c.get("label")) or _int(c.get("label")))
+            and all(c.get(k) is None or _int(c[k]) for k in ("w", "h")))
+
+
+def _source(v):
+    if v is None:
+        return True
+    if not isinstance(v, dict) or v.get("type") not in ("ia", "pdf") or not all(_str(v[k]) for k in ("revision", "pdf_file", "title") if k in v):
+        return False
+    if v["type"] == "ia":
+        return _str(v.get("id")) and isinstance(v.get("pages"), list) and all(map(_page, v["pages"]))
+    return _str(v.get("file")) and _int(v.get("count"))
+
+
 PROJECT_FIELDS = (  # key, default, check
     ("raw_url", "", lambda v: isinstance(v, str)), ("title", "", lambda v: isinstance(v, str)),
     ("author", "", lambda v: isinstance(v, str)), ("meta", {}, lambda v: isinstance(v, dict)),
-    ("candidates", [], lambda v: isinstance(v, list)), ("offset", 0, _int),
+    ("candidates", [], lambda v: isinstance(v, list) and all(map(_str, v))), ("offset", 0, _int),
     ("anchors", [], lambda v: isinstance(v, list) and all(isinstance(a, list) and len(a) == 2 and all(map(_int, a)) for a in v)),
-    ("source", None, lambda v: v is None or isinstance(v, dict) and v.get("type") in ("ia", "pdf")
-     and (v["type"] != "ia" or isinstance(v.get("pages"), list))),
-    ("bibliography", {}, lambda v: isinstance(v, dict)),
+    ("source", None, _source),
+    ("bibliography", {}, lambda v: isinstance(v, dict) and all(map(_str, v.values()))),
 )
 
 
@@ -127,6 +159,7 @@ def parse(data):
     """Validate a backup and return (project, original text, work); BundleError carries a message for the user."""
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise BundleError(NOT_BUNDLE)
+    data = _integral(data)
     version = data.get("format_version")
     if not _int(version) or version < 1:
         raise BundleError("バックアップの形式の版番号が正しくありません")

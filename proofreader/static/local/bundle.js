@@ -8,7 +8,7 @@ const Bundle = (() => {
   const NOT_BUNDLE = 'このファイルは校正プロジェクトのバックアップではありません';
   const INDEX = /^(0|[1-9][0-9]*)$/;
   const err = message => new Work.ApiError(message, 400);
-  const isInt = v => typeof v === 'number' && Number.isInteger(v);
+  const isInt = v => Number.isSafeInteger(v); // bundle.py と同じ。1.0 も整数として読む（Python 側は整数に直す）
   const isDict = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   const isStr = v => typeof v === 'string';
   const has = (o, k) => Object.hasOwn(o, k);
@@ -28,12 +28,20 @@ const Bundle = (() => {
     if (v > SCHEMA_VERSION) throw err(NEWER);
   };
 
+  const isPage = c => isDict(c) && isStr(c.service) && (isStr(c.label) || isInt(c.label)) && ['w', 'h'].every(k => c[k] == null || isInt(c[k]));
+  const isSource = v => {
+    if (v === null) return true;
+    if (!isDict(v) || !['ia', 'pdf'].includes(v.type) || !['revision', 'pdf_file', 'title'].every(k => !has(v, k) || isStr(v[k]))) return false;
+    if (v.type === 'ia') return isStr(v.id) && Array.isArray(v.pages) && v.pages.every(isPage);
+    return isStr(v.file) && isInt(v.count);
+  };
+
   const PROJECT_FIELDS = [ // key, default, check
     ['raw_url', () => '', isStr], ['title', () => '', isStr], ['author', () => '', isStr],
-    ['meta', () => ({}), isDict], ['candidates', () => [], Array.isArray], ['offset', () => 0, isInt],
+    ['meta', () => ({}), isDict], ['candidates', () => [], v => Array.isArray(v) && v.every(isStr)], ['offset', () => 0, isInt],
     ['anchors', () => [], v => Array.isArray(v) && v.every(a => Array.isArray(a) && a.length === 2 && a.every(isInt))],
-    ['source', () => null, v => v === null || isDict(v) && ['ia', 'pdf'].includes(v.type) && (v.type !== 'ia' || Array.isArray(v.pages))],
-    ['bibliography', null, isDict],
+    ['source', () => null, isSource],
+    ['bibliography', null, v => isDict(v) && Object.values(v).every(isStr)],
   ];
 
   const cleanProject = project => {

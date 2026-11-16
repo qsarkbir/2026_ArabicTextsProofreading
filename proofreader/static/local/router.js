@@ -184,9 +184,9 @@ const LocalRouter = (() => {
     }
     if (fmt === 'bundle') {
       const src = await LocalStore.bundleSource(slug), now = new Date();
-      const out = file(`${slug}.proofreader.json`, 'application/json; charset=utf-8', JSON.stringify(Bundle.build({...src, now}), null, 1));
-      await LocalStore.setSetting(`backup:${slug}`, now.toISOString());
-      return out;
+      // バックアップ日時は、ダウンロードを始めた後に saveDownload が done() で記録する
+      return {...file(`${slug}.proofreader.json`, 'application/json; charset=utf-8', JSON.stringify(Bundle.build({...src, now}), null, 1)),
+              done: () => LocalStore.setSetting(`backup:${slug}`, now.toISOString())};
     }
     if (['package', 'diff'].includes(fmt)) throw err(UNSUPPORTED, 501);
     throw err('不明な形式です');

@@ -130,6 +130,8 @@ test('bundle export and import follow the server routes', async () => {
   assert.deepEqual([bundle.format, bundle.format_version, bundle.app.mode], ['openiti-proofreader-project', 1, 'browser']);
   assert.equal(bundle.original, TEXT);
   assert.deepEqual(bundle.work.status, {1: {done: true, note: 'check'}});
+  assert.equal((await router.handle('GET', '/api/projects')).find(p => p.slug === slug).backup, null);  // recorded only once the download has started
+  await exported.done();
   assert.ok((await router.handle('GET', '/api/projects')).find(p => p.slug === slug).backup);
   const view = await router.handle('POST', '/api/projects/import-bundle', bundle);
   assert.deepEqual([view.slug, view.edited, view.done, view.noted], ['a_b_2', [1], [1], [1]]);

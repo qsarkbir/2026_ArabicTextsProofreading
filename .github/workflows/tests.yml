@@ -52,6 +52,9 @@ jobs:
     needs: [core, browser-and-tei]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       contents: read  # checkout (needed when the repository is private)
       pages: write

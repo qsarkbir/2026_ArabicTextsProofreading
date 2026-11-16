@@ -118,7 +118,8 @@
     "revision": "r",
     "pages": [
      {
-      "label": "1"
+      "label": "1",
+      "service": "https://iiif.archive.org/x"
      }
     ],
     "pdf_file": "ia-r.pdf"
@@ -771,5 +772,153 @@
  },
  "edit-lone-surrogate": {
   "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306b\u4e0d\u6b63\u306a\u6587\u5b57\uff08\u5bfe\u306b\u306a\u3063\u3066\u3044\u306a\u3044\u30b5\u30ed\u30b2\u30fc\u30c8\uff09\u304c\u542b\u307e\u308c\u3066\u3044\u307e\u3059"
+ },
+ "source-ia-int-label-null-size": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "source": {
+    "type": "ia",
+    "id": "x",
+    "pages": [
+     {
+      "label": 7,
+      "service": "https://iiif.archive.org/x",
+      "w": null,
+      "h": 10
+     },
+     {
+      "label": "1",
+      "service": "https://iiif.archive.org/x",
+      "w": 600,
+      "h": 800
+     }
+    ]
+   },
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": []
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  }
+ },
+ "integral-floats": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "offset": 2,
+   "anchors": [
+    [
+     1,
+     2
+    ]
+   ],
+   "source": {
+    "type": "pdf",
+    "file": "f.pdf",
+    "count": 3
+   },
+   "raw_url": "",
+   "meta": {},
+   "candidates": []
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {
+    "1": [
+     {
+      "text": "t",
+      "revision": 1,
+      "time": "2026-01-01T00:00:00Z"
+     }
+    ]
+   },
+   "revisions": {
+    "0": 3
+   },
+   "schema_version": 2
+  }
+ },
+ "source-ia-id-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-id-missing": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-page-not-dict": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-page-no-service": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-service-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-label-bool": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-label-missing": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-size-string": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-ia-size-float": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-no-file": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-file-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-no-count": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-count-string": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-count-float": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-revision-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-pdf-file-field-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-title-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "source-not-object": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "bibliography-value-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300cbibliography\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "candidates-item-number": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300ccandidates\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "offset-unsafe-float": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300coffset\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "offset-unsafe-int": {
+  "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300coffset\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
  }
 }

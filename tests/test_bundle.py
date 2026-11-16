@@ -137,6 +137,13 @@ class BundleTests(unittest.TestCase):
         self.assertIn("url", image)
         self.assertNotIn("pdf", image)
 
+    def test_failed_install_leaves_no_folder_and_frees_the_slug(self):
+        with patch.object(store, "_write_json", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                store.create({"uri": "doomed", "text": ORIGINAL, "meta": {}})
+        self.assertEqual(list(store.ROOT.iterdir()), [])
+        self.assertEqual(store.create({"uri": "doomed", "text": ORIGINAL, "meta": {}})["slug"], "doomed")
+
     def test_constants_match_bundle_js(self):
         js = (STATIC / "local" / "bundle.js").read_text(encoding="utf-8")
         for name in ("FORMAT", "APP_VERSION"):

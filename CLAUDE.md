@@ -51,7 +51,7 @@ proofreader/
 
 - **元テキストの忠実さ**：`openiti.split` / `join` は、編集していないページを1文字も変えずに再結合できなければならない。ページ区切り `PageV..P..` は、その直前のテキストがそのページに属する（区切りはページの末尾に来る）。改行・BOM・空白の扱いを変えるときは、未編集のまま書き出した結果が `original.txt` と一致することを確かめる。
 - **書き込みは安全に**：JSON は `store._write_json`（一時ファイル＋`os.replace`）で書く。slug は `store._dir` で検証してからパスに使う。
-- **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。リダイレクト先も ALLOWED で確かめ直す。IA のページ画像は `GET /api/projects/<slug>/scan/<idx>` から `sources.fetch_scan`（IIIF → BookReader の順）で取得し、`store.scan_path` のディスクキャッシュに保存する。サーバは 127.0.0.1 だけで待ち受ける。
+- **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。リダイレクト先も ALLOWED で確かめ直す。IA のページ画像は `GET /api/projects/<slug>/scan/<idx>` から `sources.fetch_scan`（IIIF → BookReader の順）で取得し、`store.scan_path` のディスクキャッシュに保存する。サーバは 127.0.0.1 だけで待ち受け、`Handler.dispatch` が `Host`（127.0.0.1/localhost:待ち受けポート）と、GET 以外の `Origin` を検証して他のサイトからの要求を 403 にする（`tests/test_security.py`）。この検証を外さない。
 - **OCR**：1ページずつ、校正者がボタンを押したとき（または設定 `autoOcr` が有効でページを開いたとき）だけ実行し、結果は `ocr/<i>.json` に保存して再利用する（過去の読みは `ocr/history/<i>/`）。API の利用料がかかるため、全ページを一括で読み取るような機能は勝手に足さない。OCR のプロンプトは「刊本の綴りをそのまま写す」方針なので、正規化や補完をさせる方向には変えない。
 - **ルートの追加**：`server.py` にルートを足したら `local/router.js` も直す（静的版で対応しないものは 501 のままにし、画面では `needs-server` クラスで隠す）。
 - **HTML への埋め込み**：利用者のデータやテキストをテンプレート文字列に入れるときは `esc()` を通す。

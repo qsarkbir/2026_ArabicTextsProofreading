@@ -12,6 +12,7 @@ import calendar
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -60,11 +61,15 @@ def install(base, text, make_project, work):
             slug, n = f"{base}_{n}", n + 1
         d = ROOT / slug
         project = make_project(slug)
-        (d / "ocr").mkdir(parents=True)
-        (d / "files").mkdir()
-        (d / "original.txt").write_text(text, encoding="utf-8", newline="")
-        _write_json(d / "work.json", work)
-        _write_json(d / "project.json", project)  # written last: the folder is not a project until then
+        try:
+            (d / "ocr").mkdir(parents=True)
+            (d / "files").mkdir()
+            (d / "original.txt").write_text(text, encoding="utf-8", newline="")
+            _write_json(d / "work.json", work)
+            _write_json(d / "project.json", project)  # written last: the folder is not a project until then
+        except BaseException:
+            shutil.rmtree(d, ignore_errors=True)  # do not leave a half-made folder that would hold the slug
+            raise
     return project
 
 

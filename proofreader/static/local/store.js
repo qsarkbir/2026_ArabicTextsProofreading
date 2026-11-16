@@ -23,10 +23,12 @@ const LocalStore = (() => {
       const fail = e => { dbPromise = null; reject(e && e.name === 'VersionError' ? apiError(NEWER) : apiError(`ブラウザの保存領域を開けませんでした: ${e && e.message || e}`)); };
       try {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
+        let rejected = false;
         req.onupgradeneeded = e => { for (let v = e.oldVersion; v < DB_VERSION; v++) MIGRATIONS[v](req.result, req.transaction); };
-        req.onblocked = () => { dbPromise = null; reject(apiError(BLOCKED)); };
+        req.onblocked = () => { rejected = true; dbPromise = null; reject(apiError(BLOCKED)); };
         req.onsuccess = () => {
           const db = req.result;
+          if (rejected) { db.close(); return; } // 拒否した後に開けた接続は使われないので閉じる（ほかのタブの更新を止めない）
           db.onversionchange = () => { db.close(); dbPromise = null; };
           db.onclose = () => { dbPromise = null; }; // ブラウザが接続を閉じたら、次の操作で開き直す
           resolve(db);

@@ -143,7 +143,8 @@
      "revision": "r",
      "pages": [
       {
-       "label": "1"
+       "label": "1",
+       "service": "https://iiif.archive.org/x"
       }
      ],
      "pdf_file": "ia-r.pdf"
@@ -1652,6 +1653,836 @@
     "edits": {
      "0": "x\udc00"
     },
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-int-label-null-size",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": 7,
+       "service": "https://iiif.archive.org/x",
+       "w": null,
+       "h": 10
+      },
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x",
+       "w": 600,
+       "h": 800
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "integral-floats",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1.0,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2.0,
+    "offset": 2.0,
+    "anchors": [
+     [
+      1.0,
+      2
+     ]
+    ],
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf",
+     "count": 3.0
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "1": [
+      {
+       "text": "t",
+       "revision": 1.0,
+       "time": "2026-01-01T00:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3.0
+    },
+    "schema_version": 2.0
+   }
+  }
+ },
+ {
+  "name": "source-ia-id-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": 5,
+     "pages": [
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-id-missing",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "pages": [
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-page-not-dict",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      "x"
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-page-no-service",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": "1"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-service-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": "1",
+       "service": 1
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-label-bool",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": true,
+       "service": "https://iiif.archive.org/x"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-label-missing",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "service": "s"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-size-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x",
+       "w": "600"
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-ia-size-float",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x",
+       "h": 1.5
+      }
+     ]
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-no-file",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "count": 3
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-file-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": 3,
+     "count": 3
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-no-count",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf"
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-count-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf",
+     "count": "3"
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-count-float",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf",
+     "count": 1.5
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-revision-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf",
+     "count": 3,
+     "revision": 1
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-pdf-file-field-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "ia",
+     "id": "x",
+     "pages": [
+      {
+       "label": "1",
+       "service": "https://iiif.archive.org/x"
+      }
+     ],
+     "pdf_file": 1
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-title-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": {
+     "type": "pdf",
+     "file": "f.pdf",
+     "count": 3,
+     "title": 1
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "source-not-object",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "source": "x"
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "bibliography-value-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "bibliography": {
+     "edition": 1
+    }
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "candidates-item-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "candidates": [
+     "a",
+     1
+    ]
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "offset-unsafe-float",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "offset": 1e+300
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "offset-unsafe-int",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2,
+    "offset": 1152921504606846976
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
     "status": {},
     "history": {},
     "revisions": {},

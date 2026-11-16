@@ -116,7 +116,7 @@ def image_for(p, i, index=None, draft=""):
         c = src["pages"][idx]
         v = urllib.parse.quote(str(src.get("revision") or src["id"]))
         out = {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
-               "w": c["w"], "h": c["h"], "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
+               "w": c.get("w"), "h": c.get("h"), "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
         if src.get("pdf_file") and not draft:
             try:  # a project restored from a backup has no PDF until it is attached again; use the online image meanwhile
                 v += f"-{store.file_path(p['slug'], src['pdf_file']).stat().st_size}"
@@ -323,7 +323,7 @@ def ia_pdf_status(h, slug):
         job = None
     pending = name if not src.get("pdf_file") and exists else None
     v = f"{rev}-{path.stat().st_size}" if exists else rev
-    return {"available": cached[1], "attached": src.get("pdf_file"), "job": job, "pending": pending, "revision": rev,
+    return {"available": cached[1], "attached": src.get("pdf_file") if exists else None, "job": job, "pending": pending, "revision": rev,
             "v": v, "mismatch": bad[1] if bad and bad[0] == rev else ""}
 
 
@@ -374,11 +374,11 @@ def ia_pdf_attach(h, slug):
     p, src, name = ia_source(slug)
     if str(b.get("revision")) != str(src.get("revision") or src["id"]):
         raise ApiError("資料が変更されています。画面を開き直してください", HTTPStatus.CONFLICT)
-    if src.get("pdf_file") == name:
-        return project_view(slug)
     path = store.file_path(slug, name)
     if not path.is_file():
         raise ApiError("保存したPDFがありません", HTTPStatus.NOT_FOUND)
+    if src.get("pdf_file") == name:
+        return project_view(slug)
     try:
         pages = int(b.get("pages") or 0)
     except (TypeError, ValueError):
@@ -737,7 +737,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, data, ctype, {"Content-Disposition": f"attachment; filename*=UTF-8''{q}"})
         return None
 
+    def origin_ok(self, method):
+        """Only pages served from this server may use it: Host must be local (DNS rebinding), and so must Origin when it is sent and the request changes something (CSRF)."""
+        port = self.server.server_address[1]
+        local = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        origin = self.headers.get("Origin")
+        return self.headers.get("Host") in local and (method == "GET" or origin is None or origin in {f"http://{h}" for h in local})
+
     def dispatch(self, method):
+        if not self.origin_ok(method):
+            return self._send(403, json.dumps({"error": "このサーバーには、同じアドレスで開いたページからだけアクセスできます"}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
         u = urllib.parse.urlparse(self.path)
         self.query = urllib.parse.parse_qs(u.query)
         path = u.path
