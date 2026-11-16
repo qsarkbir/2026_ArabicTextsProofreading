@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 文書の状態 | 段階1a・1b は実装済み（PR 未作成）。段階2 以降は設計のみ |
+| 文書の状態 | 段階1a・1b は実装済み（[#5](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/5)）。段階2 以降は設計のみ |
 | 対象 | 段階1（ブラウザ内での校正と、手元の PDF を資料にすること）。段階2以降は概要のみ |
 | 最終更新 | 2026-11-16 |
 | 関連 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md) |
@@ -58,8 +58,8 @@
 
 | 段階 | 内容 | 状態 |
 |---|---|---|
-| 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（PR 未作成）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
-| 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（PR 未作成）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
+| 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（#5）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
+| 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（#5）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
 | 2 | Internet Archive 連携（マニフェスト、検索、ページ画像、PDF） | 未着手（CORS の確認が先） |
 | 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 未着手 |
 
