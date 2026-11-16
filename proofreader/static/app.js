@@ -87,6 +87,20 @@ function reattachControl(box, {slug, source, api, life, done}) {
     finally { await releasePdf(url); URL.revokeObjectURL(url); }
   };
 }
+// IA のページ画像（<img>）の読み込み。ブラウザ版は IIIF が 504 などで失敗しやすいので、間を置いて数回読み直し、だめなら D-27 の案内を出す
+// （ローカル版はサーバーが予備の経路まで試すので、失敗はそのまま表示する）
+const SCAN_TRIES = 4;
+function loadScan(el, url, {current, onload, onfail}) {
+  let tries = 0;
+  el.onload = () => { if (current()) onload(); };
+  el.onerror = () => {
+    if (!current()) return;
+    if (!browserMode) { onfail(new Error('ネットワークと資料の公開状態を確認してください')); return; }
+    if (++tries < SCAN_TRIES) setTimeout(() => { if (current()) el.src = url; }, Sources.retry.delay);
+    else onfail(new Error(Sources.UNAVAILABLE));
+  };
+  el.src = url;
+}
 async function renderPdfPage(url, index, width) {
   const doc = await loadPdf(url);
   if (index < 0 || index >= doc.numPages) return null;
@@ -256,7 +270,7 @@ async function setupView(slug, from, life) {
       <div class="card">
         <div class="row"><h2>ページ画像を選ぶ</h2><span style="flex:1"></span><button id="cancel">キャンセル</button></div>
         ${p.source ? '<p class="help">資料を選んでも、次の画面で対応を確定するまで現在の資料・対応は変わりません。</p>' : ''}
-        <div class="needs-server">
+        ${browserMode ? '<p class="muted small">検索とページ画像は、このブラウザから Internet Archive へ直接つなぎます（検索語と画像の取得先が Internet Archive に伝わります）。</p>' : ''}
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
@@ -264,7 +278,6 @@ async function setupView(slug, from, life) {
         <div id="results" class="results"></div>
         <h3>識別子・URLを直接指定</h3>
         <div class="row"><input type="text" id="iaid" aria-label="Internet Archiveの識別子またはURL" placeholder="例：ElBoustane または https://archive.org/details/ElBoustane"><button id="useid">使う</button></div>
-        </div>
         <h3>手元のPDFをアップロード</h3>
         ${browserMode ? '<p class="muted small">PDFはこのブラウザの中に保存されます（容量に注意してください）。バックアップには含まれないので、別の環境では選び直します。</p>' : ''}
         <div class="row"><input type="file" id="pdf" aria-label="ページ画像のPDF" accept="application/pdf"><span id="pdfmsg" class="muted small" role="status"></span></div>
@@ -334,7 +347,6 @@ async function setupView(slug, from, life) {
     let img = !draft && pg.image ? pg.image.index : ref;
     const initialImg = img;
     const total = src.count;
-    const noImage = browserMode && src.type === 'ia'; // 画像を出せないので、対応を動かす操作はできない（いまの対応を壊さない）
     view.innerHTML = `<div class="wrap">
       <div class="steps"><span>1. テキスト ✓</span>›<span>2. ページ画像 ✓</span>›<span class="on">3. ページの対応</span></div>
       <div class="card">
@@ -352,8 +364,7 @@ async function setupView(slug, from, life) {
           <button id="cancel">キャンセル</button>
           <button class="primary" id="ok">${draft ? 'この資料と対応で確定する' : 'この対応で校正を続ける'}</button>
         </div>
-        ${noImage ? '<p class="help">Internet Archive の画像はブラウザ版では表示できないため、ここでは対応を変えられません（現在の対応は保たれています）。手元のPDFを選ぶか、ローカル版を使ってください。</p>' : ''}
-        ${!draft && src.type === 'ia' && !browserMode ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
+        ${!draft && src.type === 'ia' ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
     let previewVersion = 0;
@@ -369,7 +380,6 @@ async function setupView(slug, from, life) {
         $('#mretry').onclick = show;
       };
       box.innerHTML = '<div class="imgmsg">読み込み中…</div>';
-      if (noImage) { box.innerHTML = '<div class="imgmsg">Internet Archive の画像は、ブラウザ版では表示できません。手元のPDFを選ぶか、ローカル版を使ってください</div>'; return; }
       try {
         const image = await api('GET', `/api/projects/${slug}/image?index=${img}${draftQ}`);
         if (!current()) return;
@@ -382,9 +392,7 @@ async function setupView(slug, from, life) {
         if (image.url) {
           const el = new Image();
           el.alt = '原本のページ画像';
-          el.onload = () => { if (current()) box.replaceChildren(el); };
-          el.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
-          el.src = image.url;
+          loadScan(el, image.url, {current, onload: () => box.replaceChildren(el), onfail: failed});
         } else {
           const c = await renderPdfPage(image.pdf, img, 900);
           if (!current()) return;
@@ -394,11 +402,9 @@ async function setupView(slug, from, life) {
     };
     for (const [id, d] of [['m10', -10], ['m1', -1], ['p1', 1], ['p10', 10]]) $('#' + id).onclick = () => { img += d; show(); };
     $('#imgn').onchange = e => { img = (parseInt(e.target.value, 10) || 1) - 1; show(); };
-    if (noImage) for (const id of ['m10', 'm1', 'p1', 'p10', 'imgn', 'ok']) $('#' + id).disabled = true;
     $('#chg').onclick = () => { if (browserMode) LocalRouter.clearDrafts(null); renderSource().catch(e => { if (life.alive) toast(e.message, true); }); };
     $('#cancel').onclick = cancel;
     $('#ok').onclick = async () => {
-      if (noImage) return;
       $('#ok').disabled = true;
       try {
         if (draft) await api('POST', `/api/projects/${slug}/mapping`, {source: draft.revision, offset: img - ref, clear_anchors: true});
@@ -409,7 +415,47 @@ async function setupView(slug, from, life) {
     show();
 
     const row = $('#pdfrow');
-    if (row) {
+    if (row && browserMode) {
+      // ブラウザ版：IA の PDF はブラウザから取得できないので、利用者がダウンロードして選ぶ。選んだ PDF は Blob として保存し、画像の代わりに使う
+      const base = `/api/projects/${slug}/source/ia/pdf`, mb = n => (n / 1048576).toFixed(1);
+      const live = () => life.alive && row.isConnected;
+      const put = html => { if (live()) row.innerHTML = `<span class="muted">PDF（任意）：</span>${html}`; };
+      const refresh = async () => {
+        put('<span>PDFの情報を確認しています…</span>');
+        let st;
+        try { st = await api('GET', base); }
+        catch (e) { put(`<span>${esc(e.message)}</span> <button id="pdfgo">再試行</button>`); if (live()) $('#pdfgo').onclick = refresh; return; }
+        if (!live()) return;
+        if (st.attached) {
+          put(`<span>保存済み（${esc(st.attached)}）</span> <button id="pdfoff">オンラインの画像に戻す</button>`);
+          $('#pdfoff').onclick = async () => {
+            try { p = await api('POST', `${base}/detach`); toast('オンラインの画像に戻しました'); show(); await refresh(); } catch (e) { if (live()) toast(e.message, true); }
+          };
+          return;
+        }
+        if (!st.available) { put('<span>この資料にはPDFがありません</span>'); return; }
+        const a = st.available, href = `https://archive.org/download/${encodeURIComponent(src.id)}/${encodeURIComponent(a.name)}`;
+        put(`<span>${esc(a.name)}（${mb(a.size)} MB）</span> <a target="_blank" rel="noopener" href="${esc(href)}">Internet Archive でPDFをダウンロード</a>
+          <span class="muted">ブラウザからは直接保存できません。ダウンロードしたPDFを選ぶと、このブラウザに保存して画像の代わりに使います。</span>
+          <input type="file" id="pdfpick" aria-label="ダウンロードしたPDFを選ぶ" accept="application/pdf"> <span id="pdfpickmsg" role="status"></span>`);
+        $('#pdfpick').onchange = async e => {
+          const f = e.target.files[0]; if (!f) return;
+          const input = e.target, msg = $('#pdfpickmsg'), url = URL.createObjectURL(f);
+          input.disabled = true; msg.textContent = 'PDFを確認しています…';
+          try {
+            const pages = (await loadPdf(url)).numPages;
+            if (!live()) return;
+            msg.textContent = '保存しています…';
+            p = await api('POST', `${base}/attach`, f, {'X-Revision': st.revision, 'X-Page-Count': String(pages)});
+            toast('PDFをこのブラウザに保存しました'); show();
+          } catch (err) { if (live()) { toast(err.message, true); msg.textContent = ''; input.value = ''; input.disabled = false; } return; }
+          finally { await releasePdf(url); URL.revokeObjectURL(url); }
+          if (live()) refresh();
+        };
+      };
+      refresh();
+    }
+    if (row && !browserMode) {
       const base = `/api/projects/${slug}/source/ia/pdf`, mb = n => (n / 1048576).toFixed(1);
       let timer, failure = '', verifying = false, sawRunning = false;
       life.cleanup.push(() => clearTimeout(timer));
@@ -738,21 +784,17 @@ async function proofView(slug, idx, life) {
     };
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
-    if (browserMode && p.source && p.source.type === 'ia') { imgview.innerHTML = '<div class="imgmsg">この資料は Internet Archive の画像です。ブラウザ版では表示できません。ローカル版（python -m proofreader）で開くか、「資料・ページ対応」から手元のPDFを選んでください。</div>'; return; }
     if (im && im.no_file) { reattachPrompt(im); return; }
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。未割当の末尾の場合は、本文を確認してページ区切りを原本に照らして整理してください。</div>'; return; }
     if (im.url) {
       imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
       const el = new Image();
       el.alt = '原本のページ画像';
-      el.onerror = () => failed(new Error('ネットワークと資料の公開状態を確認してください'));
-      el.onload = () => {
-        if (!life.alive || version !== imageVersion) return;
+      loadScan(el, im.url, {current: () => life.alive && version === imageVersion, onfail: failed, onload: () => {
         imgview.innerHTML = ''; imgview.appendChild(el); applyZoom();
-        // warm the server's cache for the next image; it costs no API fee
-        if (im.index + 1 < im.count) new Image().src = im.url.replace(/\/scan\/\d+/, `/scan/${im.index + 1}`);
-      };
-      el.src = im.url;
+        // warm the server's cache for the next image; it costs no API fee（ブラウザ版は IA に余分な要求を送らない）
+        if (!browserMode && im.index + 1 < im.count) new Image().src = im.url.replace(/\/scan\/\d+/, `/scan/${im.index + 1}`);
+      }});
       return;
     }
     else {
@@ -788,8 +830,6 @@ async function proofView(slug, idx, life) {
   };
   $('#shl').onclick = () => shift(-1);
   $('#shr').onclick = () => shift(1);
-  const shiftOff = browserMode && !!p.source && p.source.type === 'ia'; // 画像を見られないままずらさない
-  if (shiftOff) { $('#shl').disabled = $('#shr').disabled = true; $('#shl').title = $('#shr').title = 'ブラウザ版では Internet Archive の画像を表示できないため、対応をずらせません'; }
   showImage();
 
   // OCR + diff
@@ -871,7 +911,7 @@ async function proofView(slug, idx, life) {
       await refreshReadings();
       renderDiff();
     } catch (e) { if (life.alive) { $('#ocrmsg').textContent = ''; toast(e.message, true); } }
-    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = shiftOff; } }
+    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = false; } }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
   const ocrm = $('#ocrm'), providerSelect = $('#ocrprovider');

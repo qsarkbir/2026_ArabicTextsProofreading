@@ -1,0 +1,402 @@
+{
+ "manifests": [
+  {
+   "id": "synthetic-book",
+   "requested": [
+    "https://iiif.archive.org/iiif/synthetic-book/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "synthetic-book",
+    "title": "Synthetic Book",
+    "pages": [
+     {
+      "label": "Cover",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0"
+     },
+     {
+      "label": "1",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F1"
+     },
+     {
+      "label": "2",
+      "w": 900,
+      "h": null,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2"
+     }
+    ]
+   },
+   "images": [
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F1/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F2/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/800,/0/default.jpg"
+   ]
+  },
+  {
+   "id": "synthetic.en_label-2",
+   "requested": [
+    "https://iiif.archive.org/iiif/synthetic.en_label-2/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "synthetic.en_label-2",
+    "title": "English Title",
+    "pages": [
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0"
+     },
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F1"
+     },
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2"
+     },
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F3"
+     }
+    ]
+   },
+   "images": [
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F1/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F2/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F3/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/800,/0/default.jpg"
+   ]
+  },
+  {
+   "id": "both-labels",
+   "requested": [
+    "https://iiif.archive.org/iiif/both-labels/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "both-labels",
+    "title": "Fallback Title",
+    "pages": [
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0"
+     }
+    ]
+   },
+   "images": [
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/800,/0/default.jpg"
+   ]
+  },
+  {
+   "id": "missing-services",
+   "requested": [
+    "https://iiif.archive.org/iiif/missing-services/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "missing-services",
+    "title": "Holes",
+    "pages": [
+     {
+      "label": "ok",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2"
+     },
+     {
+      "label": "last",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F3"
+     }
+    ]
+   },
+   "images": [
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F2/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F3/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F2/full/800,/0/default.jpg"
+   ]
+  },
+  {
+   "id": "no-title",
+   "requested": [
+    "https://iiif.archive.org/iiif/no-title/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "no-title",
+    "title": "",
+    "pages": [
+     {
+      "label": "",
+      "w": 1000,
+      "h": 1500,
+      "service": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0"
+     }
+    ]
+   },
+   "images": [
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/1600,/0/default.jpg",
+    "https://iiif.example.invalid/image/iiif/3/synthetic%2F0/full/800,/0/default.jpg"
+   ]
+  },
+  {
+   "id": "empty",
+   "requested": [
+    "https://iiif.archive.org/iiif/empty/manifest.json"
+   ],
+   "result": {
+    "type": "ia",
+    "id": "empty",
+    "title": "Nothing",
+    "pages": []
+   },
+   "images": []
+  }
+ ],
+ "metadata": [
+  {
+   "id": "pdf-formats",
+   "requested": [
+    "https://archive.org/metadata/pdf-formats"
+   ],
+   "result": {
+    "name": "d.pdf",
+    "size": 300,
+    "format": "Image Container PDF"
+   }
+  },
+  {
+   "id": "pdf-private",
+   "requested": [
+    "https://archive.org/metadata/pdf-private"
+   ],
+   "result": {
+    "name": "Open.PDF",
+    "size": 20,
+    "format": "Text PDF"
+   }
+  },
+  {
+   "id": "pdf-unknown-format",
+   "requested": [
+    "https://archive.org/metadata/pdf-unknown-format"
+   ],
+   "result": {
+    "name": "y.pdf",
+    "size": 7,
+    "format": ""
+   }
+  },
+  {
+   "id": "pdf-sizes",
+   "requested": [
+    "https://archive.org/metadata/pdf-sizes"
+   ],
+   "result": {
+    "name": "s5.pdf",
+    "size": 40,
+    "format": "Text PDF"
+   }
+  },
+  {
+   "id": "pdf-none",
+   "requested": [
+    "https://archive.org/metadata/pdf-none"
+   ],
+   "result": null
+  },
+  {
+   "id": "pdf-no-files",
+   "requested": [
+    "https://archive.org/metadata/pdf-no-files"
+   ],
+   "result": null
+  }
+ ],
+ "searches": [
+  {
+   "query": "بستان سعدي",
+   "requested": [
+    {
+     "url": "https://archive.org/advancedsearch.php",
+     "query": [
+      [
+       "q",
+       "(بستان سعدي) AND mediatype:texts"
+      ],
+      [
+       "rows",
+       "20"
+      ],
+      [
+       "output",
+       "json"
+      ],
+      [
+       "fl[]",
+       "identifier"
+      ],
+      [
+       "fl[]",
+       "title"
+      ],
+      [
+       "fl[]",
+       "creator"
+      ],
+      [
+       "fl[]",
+       "date"
+      ],
+      [
+       "fl[]",
+       "imagecount"
+      ],
+      [
+       "fl[]",
+       "language"
+      ]
+     ]
+    }
+   ],
+   "result": [
+    {
+     "id": "synthetic-book",
+     "title": "Synthetic",
+     "creator": "A; B",
+     "date": "1900",
+     "imagecount": 120,
+     "thumb": "https://archive.org/services/img/synthetic-book"
+    },
+    {
+     "id": "other.item_1",
+     "title": "T1; T2",
+     "creator": "",
+     "date": "",
+     "imagecount": null,
+     "thumb": "https://archive.org/services/img/other.item_1"
+    },
+    {
+     "id": "bare",
+     "title": "",
+     "creator": "",
+     "date": "",
+     "imagecount": null,
+     "thumb": "https://archive.org/services/img/bare"
+    }
+   ]
+  },
+  {
+   "query": "a & b = c+d",
+   "requested": [
+    {
+     "url": "https://archive.org/advancedsearch.php",
+     "query": [
+      [
+       "q",
+       "(a & b = c+d) AND mediatype:texts"
+      ],
+      [
+       "rows",
+       "5"
+      ],
+      [
+       "output",
+       "json"
+      ],
+      [
+       "fl[]",
+       "identifier"
+      ],
+      [
+       "fl[]",
+       "title"
+      ],
+      [
+       "fl[]",
+       "creator"
+      ],
+      [
+       "fl[]",
+       "date"
+      ],
+      [
+       "fl[]",
+       "imagecount"
+      ],
+      [
+       "fl[]",
+       "language"
+      ]
+     ]
+    }
+   ],
+   "result": []
+  },
+  {
+   "query": "no response key",
+   "requested": [
+    {
+     "url": "https://archive.org/advancedsearch.php",
+     "query": [
+      [
+       "q",
+       "(no response key) AND mediatype:texts"
+      ],
+      [
+       "rows",
+       "20"
+      ],
+      [
+       "output",
+       "json"
+      ],
+      [
+       "fl[]",
+       "identifier"
+      ],
+      [
+       "fl[]",
+       "title"
+      ],
+      [
+       "fl[]",
+       "creator"
+      ],
+      [
+       "fl[]",
+       "date"
+      ],
+      [
+       "fl[]",
+       "imagecount"
+      ],
+      [
+       "fl[]",
+       "language"
+      ]
+     ]
+    }
+   ],
+   "result": []
+  }
+ ]
+}

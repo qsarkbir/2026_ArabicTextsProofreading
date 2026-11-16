@@ -37,7 +37,8 @@ const LocalRouter = (() => {
 
   // ---------- 資料（PDF）：server.py の source_view / image_for / DRAFTS に相当 ----------
   const PDF_LIMIT = 500 * 1024 * 1024;
-  const DRAFTS = new Map(); // slug -> {src, blob}。確定（mapping）するまで保存しない
+  const PDF_INFO = new Map(); // slug -> [revision, ia_pdf の結果]（server.py の PDF_INFO）
+  const DRAFTS = new Map(); // slug -> {src, blob}。確定（mapping）するまで保存しない。IA の資料の blob は null
   const header = (headers, name) => { const k = Object.keys(headers).find(h => h.toLowerCase() === name.toLowerCase()); return k === undefined ? undefined : headers[k]; };
   const unquote = v => { try { return decodeURIComponent(v); } catch { return v; } };
   const int = v => { try { return Draft.pyInt(v); } catch { throw err('整数で指定してください'); } };
@@ -81,8 +82,8 @@ const LocalRouter = (() => {
     return blob ? objectUrl(key, blob) : null;
   };
 
-  // image_for：IA の資料は画像を取得せず、server.image_for と同じ index・key・count・label・link だけを返す（url・service・w・h は無い）。
-  // PDF の Blob が無い（バックアップから戻した）ときは pdf: null, no_file: true
+  // image_for：server.image_for と同じ項目を返す。IA の資料は、付け直した PDF の Blob があれば pdf（object URL）、無ければ IIIF の画像を直接指す url
+  // （サーバーの /scan/<idx> の代わり。<img> が読むだけで、ブラウザ版は画像を取得しない）。PDF の資料で Blob が無い（バックアップから戻した）ときは pdf: null, no_file: true
   const pyStr = v => Draft.pyStr(v);
   const identity = src => {
     const has = k => Object.prototype.hasOwnProperty.call(src, k); // Python の dict.get(k, default) と同じく、null でも「ある」とみなす
@@ -98,7 +99,13 @@ const LocalRouter = (() => {
     if (src.type === 'ia') {
       const n = (src.pages || []).length;
       if (!(idx >= 0 && idx < n)) return {index: idx, missing: true, count: n};
-      return {index: idx, key, count: n, label: src.pages[idx].label, link: `https://archive.org/details/${src.id}/page/n${idx}/mode/1up`};
+      const c = src.pages[idx];
+      const out = {index: idx, key, count: n, label: c.label, service: c.service, w: c.w ?? null, h: c.h ?? null, link: `https://archive.org/details/${src.id}/page/n${idx}/mode/1up`};
+      if (src.pdf_file && !draft) { // バックアップから戻した資料は PDF が無いので、付け直すまではオンラインの画像を使う
+        const url = await fileUrl(p.slug, src.pdf_file);
+        if (url) return {...out, pdf: url};
+      }
+      return {...out, url: Sources.imageUrl(c.service)};
     }
     const count = src.count ?? 0;
     const out = {index: idx, key, missing: !(idx >= 0 && idx < count), count};
@@ -182,6 +189,85 @@ const LocalRouter = (() => {
     return projectView(p.slug);
   });
 
+  // 選んだ資料を確定（mapping）まで脇に置く（server.py の stage）
+  const stage = async (slug, src, blob) => {
+    const old = DRAFTS.get(slug);
+    if (old) forget(`draft:${slug}:${old.src.revision}`);
+    DRAFTS.set(slug, {src, blob});
+    return {...(await projectView(slug)), draft: sourceView(src)};
+  };
+
+  // ---------- Internet Archive（server.py の ia_search / set_ia / ia_pdf_*）：ブラウザから直接取得する（D-27） ----------
+  route('GET', '/api/ia/search', async ({query}) => {
+    const q = OpenITI.pyStrip(query.get('q') || '');
+    if (!q) throw err('検索語を入力してください');
+    try { return await Sources.search(q); } catch (e) { throw err(`Internet Archive を検索できませんでした: ${e.message}`); }
+  });
+
+  route('POST', '/api/projects/(?<slug>[^/]+)/source/ia', async ({slug, body}) => {
+    let ident = OpenITI.pyStrip(String(object(body).id || ''));
+    const m = /archive\.org\/(?:details|download)\/([A-Za-z0-9._-]+)/.exec(ident);
+    ident = m ? m[1] : ident;
+    if (!/^[A-Za-z0-9._-]+$/.test(ident)) throw err('Internet Archive の識別子かURLを入力してください');
+    let src;
+    try { src = await Sources.iaPages(ident); } catch (e) { throw err(`この資料のページ画像を取得できませんでした: ${e.message}`); }
+    if (!src.pages.length) throw err('この資料にはページ画像がありません');
+    await loadProject(slug);
+    return stage(slug, {...src, revision: uuidHex()}, null);
+  });
+
+  const iaSource = async slug => {
+    const p = await loadProject(slug), src = p.source;
+    if (!src || src.type !== 'ia') throw err('Internet Archive の資料ではありません');
+    const rev = String(src.revision || src.id);
+    return {p, src, rev, name: `ia-${rev.replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`};
+  };
+
+  // 状態は資料情報（metadata API）から。ブラウザからは PDF をダウンロードできないので、job・pending・mismatch は常に空（保存は利用者がダウンロードして選ぶ）
+  route('GET', '/api/projects/(?<slug>[^/]+)/source/ia/pdf', async ({slug}) => {
+    const {src, rev, name} = await iaSource(slug);
+    let cached = PDF_INFO.get(slug);
+    if (!cached || cached[0] !== rev) {
+      try { cached = [rev, await Sources.iaPdf(src.id)]; } catch (e) { throw err(`PDFの情報を取得できませんでした: ${e.message}`, 502); }
+      PDF_INFO.set(slug, cached);
+    }
+    const blob = await LocalStore.getFile(slug, name);
+    return {available: cached[1], attached: blob ? src.pdf_file ?? null : null, job: null, pending: !src.pdf_file && blob ? name : null,
+      revision: rev, v: blob ? `${rev}-${blob.size}` : rev, mismatch: ''};
+  });
+
+  // ブラウザ版だけの本体：利用者が選んだ PDF（Blob）。サーバーは保存済みのファイルを検証して結び付けるが、ここは選ばれた Blob を検証して保存と結び付けを1つのトランザクションで行う
+  // （X-Revision は GET の revision、X-Page-Count は画面が数えたページ数）
+  route('POST', '/api/projects/(?<slug>[^/]+)/source/ia/pdf/attach', async ({slug, body, headers}) => {
+    tooLarge(body);
+    const {src, rev, name} = await iaSource(slug);
+    if (String(header(headers, 'X-Revision')) !== rev) throw err('資料が変更されています。画面を開き直してください', 409);
+    if (!(await isPdf(body))) throw err('PDFファイルではありません');
+    let pages;
+    try { pages = Draft.pyInt(header(headers, 'X-Page-Count') || 0); } catch { throw err('ページ数が正しくありません'); }
+    if (pages !== src.pages.length) throw err(`PDFのページ数（${pages}）が資料の画像数（${src.pages.length}）と一致しないため使えません`);
+    await LocalStore.updateProject(slug, p => {
+      if (!p.source || p.source.type !== 'ia' || String(p.source.revision || p.source.id) !== rev) throw err('資料が変更されています。画面を開き直してください', 409);
+      p.source = {...p.source, pdf_file: name};
+      return {put: [{name, blob: body.slice(0, body.size, 'application/pdf')}]};
+    });
+    forget(`${slug}/${name}`);
+    return projectView(slug);
+  });
+
+  // PDF の Blob も同じトランザクションで消す（ブラウザの容量は限られる）
+  route('POST', '/api/projects/(?<slug>[^/]+)/source/ia/pdf/detach', async ({slug}) => {
+    const {name} = await iaSource(slug);
+    let gone = [];
+    await LocalStore.updateProject(slug, p => {
+      gone = [...new Set([name, p.source.pdf_file].filter(Boolean))];
+      delete p.source.pdf_file;
+      return {remove: gone};
+    });
+    for (const n of gone) forget(`${slug}/${n}`);
+    return projectView(slug);
+  });
+
   route('POST', '/api/projects/(?<slug>[^/]+)/source/pdf', async ({slug, body, headers}) => {
     tooLarge(body);
     if (!(await isPdf(body))) throw err('PDFファイルではありません');
@@ -189,10 +275,7 @@ const LocalRouter = (() => {
     if (count < 1) throw err('PDFのページ数を確認できませんでした');
     await loadProject(slug);
     const name = `source-${uuidHex()}.pdf`, src = {type: 'pdf', file: name, title: unquote(header(headers, 'X-Filename') ?? name), count, revision: uuidHex()};
-    const old = DRAFTS.get(slug);
-    if (old) forget(`draft:${slug}:${old.src.revision}`);
-    DRAFTS.set(slug, {src, blob: body.slice(0, body.size, 'application/pdf')});
-    return {...(await projectView(slug)), draft: sourceView(src)};
+    return stage(slug, src, body.slice(0, body.size, 'application/pdf'));
   });
 
   // ブラウザ版だけの経路：バックアップから戻した PDF の資料に、同じ名前で PDF を付け直す（ローカル版は files/ のファイルをそのまま使う）
@@ -231,23 +314,23 @@ const LocalRouter = (() => {
       const files = {};
       oldFile = null;
       if (staged) {
-        if (p.source && p.source.type === 'pdf' && p.source.file !== staged.src.file) { files.remove = [p.source.file]; oldFile = p.source.file; }
+        const old = p.source && (p.source.type === 'pdf' ? p.source.file : p.source.type === 'ia' ? p.source.pdf_file : null); // 置き換える資料の PDF
+        if (old && old !== staged.src.file) { files.remove = [old]; oldFile = old; }
         p.source = {...staged.src}; p.offset = 0; p.anchors = [];
-        files.put = [{name: staged.src.file, blob: staged.blob}];
+        if (staged.blob) files.put = [{name: staged.src.file, blob: staged.blob}];
       }
       if (offset !== null) p.offset = offset;
       if (b.clear_anchors) p.anchors = [];
       if (anchor) p.anchors = p.anchors.filter(a => a[0] !== anchor[0]).concat([anchor]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
       return files;
     });
-    if (staged) { DRAFTS.delete(slug); forget(`draft:${slug}:${staged.src.revision}`); forget(`${slug}/${staged.src.file}`); if (oldFile) forget(`${slug}/${oldFile}`); }
+    if (staged) { DRAFTS.delete(slug); forget(`draft:${slug}:${staged.src.revision}`); if (staged.src.file) forget(`${slug}/${staged.src.file}`); if (oldFile) forget(`${slug}/${oldFile}`); }
     return projectView(slug);
   });
 
   route('GET', '/api/projects/(?<slug>[^/]+)/image', async ({slug, query}) => {
     const p = await loadProject(slug), draftRevision = query.get('draft') || '';
     const draft = draftRevision ? draftFor(slug, draftRevision) : null;
-    const src = draft ? draft.src : p.source;
     return imageFor(p, 0, int(query.get('index') ?? '0'), draft);
   });
 

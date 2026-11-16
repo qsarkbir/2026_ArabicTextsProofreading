@@ -28,6 +28,7 @@ jobs:
       - run: node --check proofreader/static/local/bundle.js
       - run: node --check proofreader/static/local/tei.js
       - run: node --check proofreader/static/local/draft.js
+      - run: node --check proofreader/static/local/sources.js
       - run: node --check proofreader/static/local/router.js
       - run: node --check proofreader/static/backend.js
       - run: node --check proofreader/static/mode.js

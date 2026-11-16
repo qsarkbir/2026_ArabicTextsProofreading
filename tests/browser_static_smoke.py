@@ -8,8 +8,11 @@ import json
 import os
 import re
 import shutil
+import struct
 import tempfile
 import threading
+import zlib
+from urllib.parse import unquote
 from pathlib import Path
 
 from unittest.mock import patch
@@ -55,6 +58,63 @@ def fulfill(route):
     return route.fulfill(status=404, body='', headers=cors)
 
 
+def png(width=40, height=60, shade=30):
+    raw = b''.join(b'\x00' + bytes([shade]) * width for _ in range(height))
+    chunk = lambda kind, data: struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 0, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+
+# A synthetic Internet Archive: no request leaves the machine. archive.org and iiif.archive.org are served from here, and anything else is refused
+IA_ORIGIN = re.compile(r'^https://([a-z0-9-]+\.)*archive\.org/')
+IA_CORS = {'access-control-allow-origin': '*'}
+IA_PAGES = 4
+ia = {'manifest_failures': 0, 'image_failures': {}, 'dead': set(), 'images': {}, 'manifests': 0, 'searches': [], 'metadata': [], 'unexpected': [], 'private_pdf': True}
+
+
+def ia_manifest(identifier):
+    def canvas(n):
+        return {'id': f'https://iiif.archive.org/iiif/{identifier}/canvas/{n}', 'type': 'Canvas', 'label': {'none': [str(n)]}, 'width': 400, 'height': 600,
+                'items': [{'type': 'AnnotationPage', 'items': [{'type': 'Annotation', 'body': {'type': 'Image', 'service': [
+                    {'id': f'https://iiif.archive.org/image/iiif/3/{identifier}%2Fp{n}', 'type': 'ImageService3'}]}}]}]}
+    return {'label': {'none': ['Smoke Book']}, 'items': [canvas(n) for n in range(IA_PAGES)]}
+
+
+def ia_route(route):
+    url = route.request.url
+    path = url.split('archive.org', 1)[1]
+    json_reply = lambda data: route.fulfill(status=200, body=json.dumps(data), content_type='application/json', headers=IA_CORS)
+    if path.startswith('/advancedsearch.php'):
+        ia['searches'].append(url)
+        return json_reply({'response': {'docs': [
+            {'identifier': 'smoke-book', 'title': '<b>Smoke</b> book', 'creator': ['A', 'B'], 'date': '1900', 'imagecount': IA_PAGES},
+            {'identifier': 'smoke-two', 'title': ['Two', 'parts']}]}})
+    if path.startswith('/metadata/'):
+        ia['metadata'].append(url)
+        files = [{'name': 'smoke-book.pdf', 'format': 'Image Container PDF', 'size': '1048576'}, {'name': 'smoke-book_text.pdf', 'format': 'Text PDF', 'size': '2000'}]
+        if ia['private_pdf']:
+            files.append({'name': 'locked.pdf', 'format': 'Image Container PDF', 'size': '9999999', 'private': 'true'})
+        return json_reply({'files': files})
+    m = re.match(r'^/iiif/([A-Za-z0-9._-]+)/manifest\.json$', path) if url.startswith('https://iiif.') else None
+    if m:
+        ia['manifests'] += 1
+        if ia['manifest_failures'] > 0:
+            ia['manifest_failures'] -= 1
+            return route.fulfill(status=504, body='')  # the real one has no CORS header either: the page sees "Failed to fetch"
+        return json_reply(ia_manifest(m.group(1)))
+    m = re.match(r'^/image/iiif/3/[^/]+%2F([^/]+)/full/1600,/0/default\.jpg$', path) if url.startswith('https://iiif.') else None
+    if m:
+        name = m.group(1)
+        ia['images'][name] = ia['images'].get(name, 0) + 1
+        if name in ia['dead'] or ia['image_failures'].get(name, 0) > 0:
+            ia['image_failures'][name] = ia['image_failures'].get(name, 0) - 1
+            return route.fulfill(status=504, body='')
+        return route.fulfill(status=200, body=png(), content_type='image/png', headers=IA_CORS)
+    if path.startswith('/services/img/'):
+        return route.fulfill(status=200, body=png(20, 30), content_type='image/png')
+    ia['unexpected'].append(url)  # e.g. /download/<id>/<file>.pdf: the page must only link to it
+    return route.abort()
+
+
 def main():
     handler = functools.partial(Quiet, directory=str(STATIC))
     httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
@@ -68,6 +128,7 @@ def main():
                                          proxy={'server': proxy, 'bypass': '127.0.0.1,localhost'} if proxy else None)
             context = browser.new_context(accept_downloads=True)
             context.route('https://raw.githubusercontent.com/**', fulfill)
+            context.route(IA_ORIGIN, ia_route)
             page = context.new_page()
             errors, api_calls, csp = [], [], []
             page.on('console', lambda m: csp.append(m.text) if 'Content Security Policy' in m.text else None)
@@ -80,7 +141,7 @@ def main():
             expect(page.get_by_role('button', name='読み込む', exact=True)).to_be_visible()
             expect(page.get_by_role('button', name='アプリを終了')).to_be_hidden()
             expect(page.get_by_role('link', name='OpenITIにないテキストをPDFから作成する')).to_be_visible()
-            unsupported = page.evaluate("api('GET', '/api/ia/search?q=x').then(() => 'no error', e => e.status + ' ' + e.message)")
+            unsupported = page.evaluate("api('POST', '/api/projects/x/source/ia/pdf').then(() => 'no error', e => e.status + ' ' + e.message)")
             assert unsupported == '501 この機能はローカル版で利用できます', unsupported
             print('PASS browser mode home hides server-only features', flush=True)
 
@@ -285,8 +346,9 @@ def main():
             expect(editor).to_be_enabled(timeout=15000)
             page.get_by_role('link', name='資料・ページ対応').click()
             expect(page.get_by_role('heading', name='ページ画像を選ぶ')).to_be_visible()
-            for hidden in ('Internet Archive を検索', '識別子・URLを直接指定'):
-                expect(page.get_by_role('heading', name=hidden)).to_be_hidden()
+            for shown in ('Internet Archive を検索', '識別子・URLを直接指定'):
+                expect(page.get_by_role('heading', name=shown)).to_be_visible()
+            assert not ia['searches'], ia['searches']  # nothing is sent to Internet Archive until the user searches
             page.evaluate(QUOTA)  # a full disk: nothing may change
             page.locator('#pdf').set_input_files(str(pdf4))
             expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
@@ -378,10 +440,11 @@ def main():
             assert pdf_data['project']['source']['file'] == stored[0]['file'] and 'pdf' not in json.dumps(pdf_data['work']).lower()
             assert bundle.parse(pdf_data)[0]['source']['count'] == 4  # Python reads what the browser wrote
             ia_data = json.loads(PYTHON_BUNDLE.read_text(encoding='utf-8'))
-            ia_data['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA book', 'pages': [{'label': '1', 'service': 'https://example.invalid/x', 'w': 1, 'h': 1}]}
+            ia_data['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA book', 'pages': [{'label': '1', 'service': 'https://iiif.archive.org/image/iiif/3/book%2Fn0', 'w': 1, 'h': 1}]}
             ia_bundle = Path(tmp) / 'ia-project.proofreader.json'
             ia_bundle.write_text(json.dumps(ia_data), encoding='utf-8')
             fresh = browser.new_context(accept_downloads=True)
+            fresh.route(IA_ORIGIN, ia_route)
             other = fresh.new_page()
             other_errors, other_csp, messages = [], [], []
             other.on('pageerror', lambda error: other_errors.append(str(error)))
@@ -429,23 +492,27 @@ def main():
             third.close()
             print('PASS setup screen of a restored PDF project re-attaches without touching the mapping; a different page count updates count and revision', flush=True)
 
+            IMG_OK = "sel => { const i = document.querySelector(sel); return !!i && i.complete && i.naturalWidth > 0; }"
             other.goto(base + '/')
             other.locator('#bundle').set_input_files(str(ia_bundle))
             expect(other_editor).to_be_enabled(timeout=15000)
-            expect(other.locator('#imgview')).to_contain_text('Internet Archive の画像です')
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)  # a restored IA project shows its images again
+            assert other.evaluate(IMG_OK, '#imgview img')
+            expect(other.locator('#shr')).to_be_enabled()
             other_editor.fill('still editable')
             expect(other.locator('#saved')).to_have_text('保存済み')
             other.get_by_role('link', name='資料・ページ対応').click()
-            expect(other.locator('#mimg')).to_contain_text('ブラウザ版では表示できません')
-            expect(other.locator('#pdfrow')).to_have_count(0)
+            expect(other.locator('#mimg img')).to_be_visible(timeout=15000)
+            for control in ('m10', 'm1', 'p1', 'p10', 'imgn', 'ok'):
+                expect(other.locator('#' + control)).to_be_enabled()
+            expect(other.locator('#pdfrow')).to_contain_text('smoke-book.pdf', timeout=15000)
             other.get_by_role('button', name='資料を選び直す').click()
-            expect(other.get_by_role('heading', name='ページ画像を選ぶ')).to_be_visible()
-            expect(other.get_by_role('heading', name='Internet Archive を検索')).to_be_hidden()
-            print('PASS restored IA project opens without images and stays editable', flush=True)
+            expect(other.get_by_role('heading', name='Internet Archive を検索')).to_be_visible()
+            print('PASS restored IA project shows its images, the mapping controls work and the editor stays usable', flush=True)
 
-            # an IA project's mapping is shown but cannot be moved without an image (offset 5 must survive the shift buttons and the setup controls)
+            # shifting the mapping on an IA project: offset 5, page 1 -> image 7; shifting anchors page 1 at image 8, the setup screen then sets offset 7 (image 9 on page 1)
             ia_long = json.loads(PYTHON_BUNDLE.read_text(encoding='utf-8'))
-            ia_long['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA long', 'pages': [{'label': str(i), 'service': 'https://example.invalid/x', 'w': 1, 'h': 1} for i in range(20)]}
+            ia_long['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA long', 'pages': [{'label': str(i), 'service': f'https://iiif.archive.org/image/iiif/3/book%2Fn{i}', 'w': 1, 'h': 1} for i in range(20)]}
             ia_long['project']['offset'], ia_long['project']['anchors'] = 5, []
             ia_long_bundle = Path(tmp) / 'ia-long.proofreader.json'
             ia_long_bundle.write_text(json.dumps(ia_long), encoding='utf-8')
@@ -454,19 +521,115 @@ def main():
             expect(other_editor).to_be_enabled(timeout=15000)
             ia_slug = re.search(r'#/p/([^/]+)/0', other.url).group(1)
             other.goto(base + f'/#/p/{ia_slug}/1')
-            expect(other.locator('#imgview')).to_contain_text('Internet Archive の画像です', timeout=15000)
-            expect(other.locator('#imginfo')).to_have_text('画像 7/20')  # offset 5 + page index 1
-            expect(other.locator('#shl')).to_be_disabled()
-            expect(other.locator('#shr')).to_be_disabled()
-            other.evaluate("document.querySelector('#shr').click()")
+            expect(other.locator('#imginfo')).to_have_text('画像 7/20', timeout=15000)  # offset 5 + page index 1
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)
+            other.locator('#shr').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 8/20')
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(ia_slug)}).then(p => [p.offset, p.anchors])") == [5, [[1, 7]]]
             other.get_by_role('link', name='資料・ページ対応').click()
-            expect(other.locator('#mimg')).to_contain_text('ブラウザ版では表示できません')
-            for control in ('m10', 'm1', 'p1', 'p10', 'imgn', 'ok'):
-                expect(other.locator('#' + control)).to_be_disabled()
-            other.evaluate("document.querySelector('#ok').click()")
-            other.wait_for_timeout(300)
-            assert other.evaluate(f"LocalStore.getProject({json.dumps(ia_slug)}).then(p => [p.offset, p.anchors])") == [5, []]
-            print('PASS IA project: shift and setup controls are disabled and the mapping is untouched', flush=True)
+            expect(other.locator('#imgn')).to_have_value('8', timeout=15000)
+            other.locator('#p1').click()
+            expect(other.locator('#imgn')).to_have_value('9')
+            expect(other.locator('#mimg img')).to_be_visible()
+            other.locator('#ok').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 9/20', timeout=15000)
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(ia_slug)}).then(p => [p.offset, p.anchors])") == [7, []]  # img 8 - page 1
+            print('PASS IA project: shift and setup controls move the mapping', flush=True)
+
+            # ---- Internet Archive (stage 2): search, choose, map, retry, local PDF, all against the synthetic archive ----
+            flow_txt = Path(tmp) / 'ia-flow.txt'
+            flow_txt.write_bytes(UPLOAD.encode('utf-8'))
+            other.goto(base + '/')
+            other.locator('#file').set_input_files(str(flow_txt))
+            expect(other_editor).to_be_enabled(timeout=15000)
+            flow = re.search(r'#/p/([^/]+)/0', other.url).group(1)
+            other.evaluate('Sources.retry.delay = 30')  # the real delay is 3 s
+            other.get_by_role('link', name='資料・ページ対応').click()
+            other.locator('#q').fill('smoke')
+            other.get_by_role('button', name='検索', exact=True).click()
+            expect(other.locator('.res')).to_have_count(2, timeout=15000)
+            assert len(ia['searches']) == 1 and 'smoke' in unquote(ia['searches'][0]).replace('+', ' ') and 'mediatype:texts' in unquote(ia['searches'][0]), ia['searches']
+            assert other.locator('.res .t b').first.inner_text() == '<b>Smoke</b> book' and other.locator('.res .t b b').count() == 0  # external titles are escaped
+            expect(other.locator('.res').first).to_contain_text('A; B 1900 ・4枚')
+            assert other.evaluate("document.querySelector('.res img').complete && document.querySelector('.res img').naturalWidth > 0")
+            assert other.locator('.res a').first.get_attribute('href') == 'https://archive.org/details/smoke-book'
+            ia['manifest_failures'] = 2
+            other.locator('.res button.use').first.click()
+            expect(other.locator('#mimg img')).to_be_visible(timeout=15000)
+            assert other.evaluate(IMG_OK, '#mimg img') and ia['manifests'] == 3 and ia['manifest_failures'] == 0, ia['manifests']  # two 504s, then the manifest
+            expect(other.locator('.card')).to_contain_text('Smoke Book')
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(flow)}).then(p => p.source)") is None  # not confirmed yet
+            assert other.locator('#mimg img').get_attribute('src') == 'https://iiif.archive.org/image/iiif/3/smoke-book%2Fp0/full/1600,/0/default.jpg'
+            other.locator('#p1').click()
+            expect(other.locator('#imgn')).to_have_value('2')
+            expect(other.locator('#mimg img')).to_have_attribute('src', re.compile('smoke-book%2Fp1/'))
+            other.locator('#ok').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 2/4', timeout=15000)
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)
+            assert other.evaluate(IMG_OK, '#imgview img')
+            stored_ia = other.evaluate(f"LocalStore.getProject({json.dumps(flow)}).then(p => [p.source, p.offset, p.anchors])")
+            assert [stored_ia[0]['type'], stored_ia[0]['id'], stored_ia[0]['title'], len(stored_ia[0]['pages']), 'pdf_file' in stored_ia[0], stored_ia[1], stored_ia[2]] == ['ia', 'smoke-book', 'Smoke Book', 4, False, 1, []], stored_ia
+            assert stored_ia[0]['pages'][1] == {'label': '1', 'w': 400, 'h': 600, 'service': 'https://iiif.archive.org/image/iiif/3/smoke-book%2Fp1'}, stored_ia[0]['pages'][1]
+            print('PASS IA: search escapes external text, manifest retried after 504s, source and mapping saved, image shown', flush=True)
+
+            # an image that fails with a 504 is requested again (the second page is image 3 = p2); one that never loads ends in the D-27 message
+            ia['image_failures']['p2'] = 2
+            other.get_by_role('button', name='次 →').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 3/4')
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)
+            assert ia['images']['p2'] == 3 and other.evaluate(IMG_OK, '#imgview img'), ia['images']
+            ia['dead'].add('p3')
+            other.locator('#shr').click()
+            expect(other.locator('#imgview')).to_contain_text('IA の画像サーバーが応答しません。時間をおいて試すか、ローカル版を使ってください', timeout=15000)
+            assert ia['images']['p3'] == 4, ia['images']  # one request and three retries
+            ia['dead'].clear()
+            other.locator('#imgretry').click()
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)
+            other.locator('#shl').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 3/4')
+            print('PASS IA: a 504 image is retried; a dead one shows the message and can be retried by hand', flush=True)
+
+            # the PDF: only a link (the browser cannot fetch it), then the user's own file is stored and used; detaching goes back to the IIIF image
+            ia_pdf3, ia_pdf4 = Path(tmp) / 'ia-three.pdf', Path(tmp) / 'ia-four.pdf'
+            ia_pdf3.write_bytes(synthetic_pdf(3))
+            ia_pdf4.write_bytes(synthetic_pdf(4))
+            other.get_by_role('link', name='資料・ページ対応').click()
+            expect(other.locator('#pdfrow')).to_contain_text('smoke-book.pdf（1.0 MB）', timeout=15000)  # the best public PDF; the private one is ignored
+            link = other.locator('#pdfrow a')
+            assert [link.get_attribute('href'), link.get_attribute('target'), link.get_attribute('rel')] == ['https://archive.org/download/smoke-book/smoke-book.pdf', '_blank', 'noopener']
+            expect(other.get_by_role('button', name=re.compile('作業フォルダーに保存'))).to_have_count(0)  # the server-side download job is not offered
+            files_before = other.evaluate("LocalStore.fileSizes()")
+            other.locator('#pdfpick').set_input_files(str(ia_pdf3))
+            expect(other.locator('#toast')).to_contain_text('PDFのページ数（3）が資料の画像数（4）と一致しないため使えません')
+            expect(other.locator('#pdfpick')).to_be_enabled()
+            assert other.evaluate("LocalStore.fileSizes()") == files_before
+            other.locator('#pdfpick').set_input_files(str(ia_pdf4))
+            expect(other.locator('#pdfrow')).to_contain_text('保存済み', timeout=60000)
+            expect(other.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate(CANVAS, '#mimg canvas')['dark'] > 200
+            assert other.evaluate("LocalStore.fileSizes()") == {**files_before, flow: ia_pdf4.stat().st_size}
+            attached = other.evaluate(f"LocalStore.getProject({json.dumps(flow)}).then(p => p.source.pdf_file)")
+            assert re.fullmatch(r'ia-[0-9a-f]{32}\.pdf', attached), attached
+            other.locator('#ok').click()
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            other.reload()
+            expect(other.locator('#imginfo')).to_have_text('画像 3/4', timeout=30000)
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate(CANVAS, '#imgview canvas')['dark'] > 200 and other.evaluate(DOCS) == 1
+            other.get_by_role('link', name='資料・ページ対応').click()
+            expect(other.locator('#pdfrow')).to_contain_text(f'保存済み（{attached}）', timeout=15000)
+            other.get_by_role('button', name='オンラインの画像に戻す').click()
+            expect(other.locator('#mimg img')).to_be_visible(timeout=15000)
+            assert other.evaluate("LocalStore.fileSizes()") == files_before
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(flow)}).then(p => 'pdf_file' in p.source)") is False
+            expect(other.locator('#pdfrow a')).to_be_visible(timeout=15000)
+            other.reload()
+            expect(other.locator('#mimg img')).to_be_visible(timeout=15000)
+            other.locator('#ok').click()
+            expect(other.locator('#imgview img')).to_be_visible(timeout=15000)
+            assert other.evaluate(DOCS) == 0
+            print('PASS IA PDF: link only, the page count is checked, the chosen file is stored and used, detach returns to the IIIF image', flush=True)
+            assert not ia['unexpected'], ia['unexpected']  # nothing but the allowed endpoints was requested (the PDF link was never followed)
 
             # ---- a new draft from a PDF selection ----
             other.goto(base + '/')

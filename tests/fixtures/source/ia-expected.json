@@ -18,7 +18,11 @@
    "key": "c6f820f3896894351b4c0769892f2780b1d5615c77a50ca9fba4b71421efd9b1",
    "count": 6,
    "label": "1",
-   "link": "https://archive.org/details/book/page/n0/mode/1up"
+   "service": "https://x.invalid/s0",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n0/mode/1up",
+   "url": "<url>"
   },
   null,
   {
@@ -26,7 +30,11 @@
    "key": "c6f820f3896894351b4c0769892f2780b1d5615c77a50ca9fba4b71421efd9b1",
    "count": 6,
    "label": "1",
-   "link": "https://archive.org/details/book/page/n0/mode/1up"
+   "service": "https://x.invalid/s0",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n0/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 99,
@@ -56,7 +64,11 @@
    "key": "c16d30c7447eff216c52d21b727393b44becf158599f01f748ea2413aec92062",
    "count": 6,
    "label": "6",
-   "link": "https://archive.org/details/book/page/n5/mode/1up"
+   "service": "https://x.invalid/s5",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n5/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 6,
@@ -86,21 +98,33 @@
    "key": "c16d30c7447eff216c52d21b727393b44becf158599f01f748ea2413aec92062",
    "count": 6,
    "label": "6",
-   "link": "https://archive.org/details/book/page/n5/mode/1up"
+   "service": "https://x.invalid/s5",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n5/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 2,
    "key": "2ab5bc662c210afaa6e2fdc870f145e4f1632908e974f55b8abf3ca56f7049e9",
    "count": 6,
    "label": "3",
-   "link": "https://archive.org/details/book/page/n2/mode/1up"
+   "service": "https://x.invalid/s2",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n2/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 4,
    "key": "8969b9d98aad18b1fc4760001d3c2a81589d17098de810e3034b98e30166fd3e",
    "count": 6,
    "label": "5",
-   "link": "https://archive.org/details/book/page/n4/mode/1up"
+   "service": "https://x.invalid/s4",
+   "w": 10,
+   "h": 20,
+   "link": "https://archive.org/details/book/page/n4/mode/1up",
+   "url": "<url>"
   },
   {
    "slug": "fixture",
@@ -139,7 +163,11 @@
    "key": "fb922279c0ade40704feefa18383a977accacd846e7ce28a51922f7e742ca910",
    "count": 3,
    "label": "n0",
-   "link": "https://archive.org/details/book/é/page/n0/mode/1up"
+   "service": "https://x.invalid/s",
+   "w": 1,
+   "h": 1,
+   "link": "https://archive.org/details/book/é/page/n0/mode/1up",
+   "url": "<url>"
   },
   null,
   {
@@ -147,7 +175,11 @@
    "key": "fb922279c0ade40704feefa18383a977accacd846e7ce28a51922f7e742ca910",
    "count": 3,
    "label": "n0",
-   "link": "https://archive.org/details/book/é/page/n0/mode/1up"
+   "service": "https://x.invalid/s",
+   "w": 1,
+   "h": 1,
+   "link": "https://archive.org/details/book/é/page/n0/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 99,
@@ -208,7 +240,11 @@
    "key": "c87d8236ef0d1a32f4835dd1e9766ff3ac7adfa469b6cd0c324214cc6712b27b",
    "count": 3,
    "label": "n2",
-   "link": "https://archive.org/details/book/é/page/n2/mode/1up"
+   "service": "https://x.invalid/s",
+   "w": 1,
+   "h": 1,
+   "link": "https://archive.org/details/book/é/page/n2/mode/1up",
+   "url": "<url>"
   },
   {
    "index": 4,
