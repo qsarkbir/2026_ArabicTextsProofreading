@@ -16,6 +16,7 @@ PROMPT = """This is a scanned page of a printed Arabic book. Transcribe it exact
 - Keep the printed spelling, even where it looks wrong. Do not correct, normalise, modernise or complete words, and do not add hamzas, vowel signs or punctuation that are not on the page.
 - Keep the printed line breaks: one printed line per output line.
 - If there is a running header or page number, put it on the first line, starting with "@HEADER ".
+- Leave out marks the editor added to the main text: footnote reference numbers such as (1), (٢) or superscript digits, and manuscript folio markers such as [2/أ], [٢ب] or /3أ/ together with any sign attached to them (e.g. "+"). Do not leave an extra space where they were.
 - If there are footnotes, write a line "@FOOTNOTES" before them and transcribe them in order.
 - Write [?] for any word you cannot read; never guess a word from context, especially personal names.
 - Output only the transcription, with no comments."""

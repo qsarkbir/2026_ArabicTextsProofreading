@@ -4,7 +4,7 @@ import os
 from .. import ocr
 from . import openai
 
-PROMPT_VERSION = "printed-arabic-1"
+PROMPT_VERSION = "printed-arabic-2"
 
 
 def catalog():
