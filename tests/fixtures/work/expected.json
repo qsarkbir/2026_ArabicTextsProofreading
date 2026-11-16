@@ -1,0 +1,984 @@
+{
+ "grouping": [
+  {
+   "work": {
+    "edits": {
+     "0": "one"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "two"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "three"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "four"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "three",
+       "revision": 3,
+       "time": "2027-01-15T08:05:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 4
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "five"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "three",
+       "revision": 3,
+       "time": "2027-01-15T08:05:00Z"
+      },
+      {
+       "text": "four",
+       "revision": 4,
+       "time": "2027-01-15T08:11:40Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 5
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "checkpoint": [
+  {
+   "work": {
+    "edits": {
+     "0": "one"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "two"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "restored"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "two",
+       "revision": 2,
+       "time": "2027-01-15T08:00:06Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "after"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "two",
+       "revision": 2,
+       "time": "2027-01-15T08:00:06Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 4
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "conflict_and_428": [
+  {
+   "work": {
+    "edits": {
+     "0": "first"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "error": 409
+  },
+  {
+   "error": 428
+  },
+  {
+   "error": 409
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "second"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "done_reset": [
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "edit"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "edit"
+    },
+    "status": {
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "edit2"
+    },
+    "status": {
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 4
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "edit2"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 5
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "note_only": [
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "note": "check this"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "note": "check that"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": true,
+      "note": "check that"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 4
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 5
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "revert_to_original": [
+  {
+   "work": {
+    "edits": {
+     "0": "changed"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {},
+    "status": {
+     "1": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ],
+     "1": [
+      {
+       "text": "b ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:02Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2,
+     "1": 1
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "no_change": [
+  {
+   "work": {
+    "edits": {
+     "0": "x"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "x"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "x"
+    },
+    "status": {
+     "0": {
+      "note": "n"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "x"
+    },
+    "status": {
+     "0": {
+      "note": "n"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "cap": [
+  {
+   "work": {
+    "edits": {
+     "0": "v0"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "v1"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "v0",
+       "revision": 1,
+       "time": "2027-01-15T08:00:01Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "v2"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      },
+      {
+       "text": "v0",
+       "revision": 1,
+       "time": "2027-01-15T08:00:01Z"
+      },
+      {
+       "text": "v1",
+       "revision": 2,
+       "time": "2027-01-15T08:00:02Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 3
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "v3"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "v0",
+       "revision": 1,
+       "time": "2027-01-15T08:00:01Z"
+      },
+      {
+       "text": "v1",
+       "revision": 2,
+       "time": "2027-01-15T08:00:02Z"
+      },
+      {
+       "text": "v2",
+       "revision": 3,
+       "time": "2027-01-15T08:00:03Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 4
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "v4"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "v1",
+       "revision": 2,
+       "time": "2027-01-15T08:00:02Z"
+      },
+      {
+       "text": "v2",
+       "revision": 3,
+       "time": "2027-01-15T08:00:03Z"
+      },
+      {
+       "text": "v3",
+       "revision": 4,
+       "time": "2027-01-15T08:00:04Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 5
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "v5"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "v2",
+       "revision": 3,
+       "time": "2027-01-15T08:00:03Z"
+      },
+      {
+       "text": "v3",
+       "revision": 4,
+       "time": "2027-01-15T08:00:04Z"
+      },
+      {
+       "text": "v4",
+       "revision": 5,
+       "time": "2027-01-15T08:00:05Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 6
+    },
+    "schema_version": 2
+   }
+  }
+ ],
+ "two_pages": [
+  {
+   "work": {
+    "edits": {
+     "0": "p0"
+    },
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "p0",
+     "1": "p1"
+    },
+    "status": {
+     "1": {
+      "note": "n"
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ],
+     "1": [
+      {
+       "text": "b ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:01Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 1,
+     "1": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "p0",
+     "1": "p1"
+    },
+    "status": {
+     "1": {
+      "note": "n"
+     },
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ],
+     "1": [
+      {
+       "text": "b ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:01Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2,
+     "1": 1
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "work": {
+    "edits": {
+     "0": "p0",
+     "1": "p1b"
+    },
+    "status": {
+     "1": {
+      "note": "n"
+     },
+     "0": {
+      "done": true
+     }
+    },
+    "history": {
+     "0": [
+      {
+       "text": "a ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:00Z"
+      }
+     ],
+     "1": [
+      {
+       "text": "b ",
+       "revision": 0,
+       "time": "2027-01-15T08:00:01Z"
+      },
+      {
+       "text": "p1",
+       "note": "n",
+       "revision": 1,
+       "time": "2027-01-15T08:06:40Z"
+      }
+     ]
+    },
+    "revisions": {
+     "0": 2,
+     "1": 2
+    },
+    "schema_version": 2
+   }
+  },
+  {
+   "error": 409
+  }
+ ]
+}

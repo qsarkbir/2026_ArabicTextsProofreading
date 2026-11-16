@@ -4,12 +4,18 @@ Regenerate expected.json after an intended change with UPDATE_FIXTURES=1 python 
 import json
 import os
 import random
+import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from proofreader import openiti
+from proofreader import openiti, server, store
+from tests.test_regressions import Request
 
 FIXTURES = Path(__file__).parent / "fixtures" / "openiti"
+WORK = Path(__file__).parent / "fixtures" / "work"
+STATIC = Path(__file__).parent.parent / "proofreader" / "static" / "local"
 inputs = json.loads((FIXTURES / "inputs.json").read_text(encoding="utf-8"))
 
 
@@ -55,6 +61,56 @@ class ParityTests(unittest.TestCase):
         for _ in range(500):
             s = "".join(rnd.choice(atoms) for _ in range(rnd.randint(0, 40)))
             self.assertEqual(openiti.join(openiti.split(s)), s, repr(s))
+
+
+def status_of(o):
+    return {k: v for k, v in (("done", True if o.get("done") else None), ("note", o.get("note") or None)) if v}
+
+
+def normalized(work):
+    """Status compared semantically: only a true done and a non-empty note count."""
+    status = {k: status_of(v) for k, v in work.get("status", {}).items()}
+    history = {k: [{"text": e["text"], **status_of(e), "revision": e["revision"], "time": e["time"]} for e in v]
+               for k, v in work.get("history", {}).items()}
+    return {"edits": work["edits"], "status": {k: v for k, v in status.items() if v}, "history": history,
+            "revisions": work.get("revisions", {}), "schema_version": work["schema_version"]}
+
+
+def replay_ops():
+    ops = json.loads((WORK / "ops.json").read_text(encoding="utf-8"))
+    out = {}
+    for seq in ops["sequences"]:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(store, "ROOT", Path(tmp)), \
+                patch.object(store, "HISTORY_WINDOW", seq.get("window", store.HISTORY_WINDOW)), \
+                patch.object(store, "HISTORY_LIMIT", seq.get("limit", store.HISTORY_LIMIT)):
+            store._cache.clear()
+            slug = store.create({"uri": seq["name"], "text": ops["original"], "meta": {}})["slug"]
+            results = []
+            for op in seq["ops"]:
+                body = {k: op[k] for k in ("revision", "text", "done", "note", "checkpoint") if k in op}
+                with patch.object(store.time, "time", lambda: op["now"]):
+                    try:
+                        server.put_page(Request(body), slug, str(op["i"]))
+                        results.append({"work": normalized(store.work(slug))})
+                    except server.ApiError as e:
+                        results.append({"error": int(e.status)})
+            store._cache.clear()
+        out[seq["name"]] = results
+    return out
+
+
+class WorkParityTests(unittest.TestCase):
+    def test_constants_match_work_js(self):
+        js = (STATIC / "work.js").read_text(encoding="utf-8")
+        for name in ("HISTORY_WINDOW", "HISTORY_LIMIT"):
+            self.assertEqual(int(re.search(rf"const {name} = (\d+)", js)[1]), getattr(store, name), name)
+
+    def test_save_operations_match_shared_expected_json(self):
+        got = replay_ops()
+        path = WORK / "expected.json"
+        if os.environ.get("UPDATE_FIXTURES"):
+            path.write_text(json.dumps(got, ensure_ascii=True, indent=1) + "\n", encoding="utf-8")
+        self.assertEqual(got, json.loads(path.read_text(encoding="utf-8")))
 
 
 if __name__ == "__main__":

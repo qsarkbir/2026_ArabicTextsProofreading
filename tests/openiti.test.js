@@ -57,17 +57,21 @@ test('random strings with injected markers round-trip', () => {
   }
 });
 
+const reply = (ok, bytes) => ({ok, status: ok ? 200 : 404, arrayBuffer: async () => Uint8Array.from(bytes).buffer});
+const REF = '0123SyntheticAuthor.SampleBook.Kraken1234-ara1';
+
 test('fetchText reads text and tolerates missing yml', async () => {
-  const ref = '0123SyntheticAuthor.SampleBook.Kraken1234-ara1';
   const seen = [];
-  const fetchImpl = async url => {
-    seen.push(url);
-    const ok = url.endsWith('-ara1');
-    return {ok, status: ok ? 200 : 404, text: async () => 'body'};
-  };
-  const r = await o.fetchText(ref, fetchImpl);
+  const fetchImpl = async url => { seen.push(url); return reply(url.endsWith('-ara1'), Buffer.from('body')); };
+  const r = await o.fetchText(REF, fetchImpl);
   assert.equal(r.text, 'body');
-  assert.equal(r.uri, ref);
+  assert.equal(r.uri, REF);
   assert.deepEqual(r.meta, {version: {}, book: {}, author: {}});
   assert.equal(seen.length, 4);
+});
+
+test('fetchText keeps a leading BOM and rejects invalid UTF-8', async () => {
+  const bom = await o.fetchText(REF, async url => reply(url.endsWith('-ara1'), Buffer.from('\ufeffbody')));
+  assert.equal(bom.text, '\ufeffbody');
+  await assert.rejects(o.fetchText(REF, async () => reply(true, [0x61, 0xff, 0x62])));
 });

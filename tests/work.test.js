@@ -1,6 +1,9 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const w = require('../proofreader/static/local/work.js');
+const {split} = require('../proofreader/static/local/openiti.js');
 
 const ORIGINAL = '# alpha beta\n';
 const T0 = Date.UTC(2026, 10, 16, 0, 0, 0);
@@ -109,4 +112,36 @@ test('legacy work without revisions or history converts', () => {
   const records = w.workToRecords({edits: {1: 'x'}, status: {}});
   assert.deepEqual(records[1], {done: false, note: '', revision: 0, history: [], text: 'x'});
   assert.equal(w.recordsToWork(records).schema_version, 2);
+});
+
+const statusOf = o => ({...(o.done ? {done: true} : {}), ...(o.note ? {note: o.note} : {})});
+const normalized = work => ({
+  edits: work.edits,
+  status: Object.fromEntries(Object.entries(work.status).map(([k, v]) => [k, statusOf(v)]).filter(([, v]) => Object.keys(v).length)),
+  history: Object.fromEntries(Object.entries(work.history).map(([k, v]) =>
+    [k, v.map(e => ({text: e.text, ...statusOf(e), revision: e.revision, time: e.time}))])),
+  revisions: work.revisions,
+  schema_version: work.schema_version,
+});
+
+test('shared save-operation fixture matches the Python replay', () => {
+  const dir = path.join(__dirname, 'fixtures', 'work');
+  const {original, sequences} = JSON.parse(fs.readFileSync(path.join(dir, 'ops.json'), 'utf8'));
+  const expected = JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8'));
+  const originals = split(original).pages.map(p => p.text);
+  for (const seq of sequences) {
+    let records = {};
+    seq.ops.forEach((op, n) => {
+      let got;
+      try {
+        const next = w.applyUpdate(records[op.i], originals[op.i], op, op.now * 1000, {window: seq.window, limit: seq.limit});
+        records = {...records, [op.i]: next};
+        got = {work: normalized(w.recordsToWork(records))};
+      } catch (e) {
+        if (!e.status) throw e;
+        got = {error: e.status};
+      }
+      assert.deepEqual(got, expected[seq.name][n], `${seq.name} #${n}`);
+    });
+  }
 });

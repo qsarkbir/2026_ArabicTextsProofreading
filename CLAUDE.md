@@ -31,6 +31,7 @@ proofreader/
   providers/   AI 提供元の切り替え（Anthropic は ocr.py、OpenAI は Responses API）
   importers/   draft.py：PDF の選択範囲から仮 ID の空の本文を作る
   exporters/   tei.py：基本 TEI P5 出力
+  static/local/  ブラウザ版のロジック（openiti.js・work.js …）。Python と同じ結果になることをテストで確かめる。名前空間を1つ公開する
   static/      フロントエンド（index.html, app.js, app.css, core.js, compare.js, workflows.js, vendor/pdfjs/）。フレームワーク・ビルド無しの素の JS
 ```
 
