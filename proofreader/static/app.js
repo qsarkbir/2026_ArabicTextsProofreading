@@ -79,7 +79,12 @@ async function renderPdfPage(url, index, width) {
 
 // ---------- routing ----------
 window.addEventListener('hashchange', routeNow);
-let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash;
+let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash, pdfOwner = null;
+// ブラウザ版：PDF は IndexedDB の Blob を object URL で pdf.js に渡す。ほかのプロジェクトや一覧へ移るとき、読み込み済みの PDF と URL を解放する
+async function dropBrowserPdfs() {
+  await Promise.all(Object.keys(pdfDocs).map(url => releasePdf(url).catch(() => {})));
+  LocalRouter.revokeUrls();
+}
 let activeView = null;
 function lifecycle() {
   const life = {alive: true, cleanup: []};
@@ -105,10 +110,14 @@ async function routeNow() {
   currentHash = location.hash;
   const h = location.hash.replace(/^#\/?/, '').split('/');
   topbar.innerHTML = '';
+  if (browserMode) {
+    const owner = h[0] === 'p' && h[1] ? h[1] : null;
+    if (owner !== pdfOwner) { pdfOwner = owner; await dropBrowserPdfs(); }
+  }
   try {
-    if (h[0] === 'p' && h[1] && h[2] === 'setup' && !browserMode) await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
+    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
     else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
-    else if (h[0] === 'new' && !browserMode) await newDraftView(life);
+    else if (h[0] === 'new') await newDraftView(life);
     else await homeView(life);
   } catch (e) {
     view.innerHTML = `<div class="wrap"><div class="card">読み込めませんでした：${esc(e.message)}　<a href="#/">ホームへ</a></div></div>`;
@@ -134,7 +143,7 @@ async function homeView(life) {
     const list = await api('GET', '/api/projects');
     return list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th>${browserMode ? '<th>最後のバックアップ</th>' : ''}<th></th></tr></thead><tbody>
         ${list.map(p => `<tr>
-          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div></td>
+          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div>${browserMode && p.pdf_size ? `<div class="muted small">PDF ${megabytes(p.pdf_size)}</div>` : ''}</td>
           <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
           <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
           <td class="prog">${p.edited}</td>
@@ -145,7 +154,7 @@ async function homeView(life) {
   };
   view.innerHTML = `<div class="wrap">
     <div class="card">
-      <h2>新しいテキストを読み込む</h2><p class="needs-server"><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
+      <h2>新しいテキストを読み込む</h2><p><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
       <div class="row">
         <input type="text" id="ref" aria-label="OpenITIのバージョンURIまたはGitHubのURL" placeholder="OpenITIのバージョンURI、またはGitHubのURL（例：1014IbnMaryamTilimsani.Bustan.Kraken22021817402301-ara1）">
         <button class="primary" id="go">読み込む</button>
@@ -222,6 +231,7 @@ async function setupView(slug, from, life) {
       <div class="card">
         <div class="row"><h2>ページ画像を選ぶ</h2><span style="flex:1"></span><button id="cancel">キャンセル</button></div>
         ${p.source ? '<p class="help">資料を選んでも、次の画面で対応を確定するまで現在の資料・対応は変わりません。</p>' : ''}
+        <div class="needs-server">
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
@@ -229,7 +239,9 @@ async function setupView(slug, from, life) {
         <div id="results" class="results"></div>
         <h3>識別子・URLを直接指定</h3>
         <div class="row"><input type="text" id="iaid" aria-label="Internet Archiveの識別子またはURL" placeholder="例：ElBoustane または https://archive.org/details/ElBoustane"><button id="useid">使う</button></div>
+        </div>
         <h3>手元のPDFをアップロード</h3>
+        ${browserMode ? '<p class="muted small">PDFはこのブラウザの中に保存されます（容量に注意してください）。バックアップには含まれないので、別の環境では選び直します。</p>' : ''}
         <div class="row"><input type="file" id="pdf" aria-label="ページ画像のPDF" accept="application/pdf"><span id="pdfmsg" class="muted small" role="status"></span></div>
       </div></div>`;
     const card = r => `<div class="res"><img loading="lazy" src="${esc(r.thumb)}" alt="">
@@ -278,7 +290,7 @@ async function setupView(slug, from, life) {
       } catch (err) { if (life.alive && $('#pdfmsg')) { $('#pdfmsg').textContent = ''; toast(err.message, true); } }
       finally { if (url) { await releasePdf(url); URL.revokeObjectURL(url); } sourceBusy = false; lock(false); }
     };
-    if (!p.candidates.length && terms) search();
+    if (!p.candidates.length && terms && !browserMode) search();
   };
 
   // draft: a newly chosen source that the server keeps aside until this mapping is confirmed
@@ -314,7 +326,7 @@ async function setupView(slug, from, life) {
           <button id="cancel">キャンセル</button>
           <button class="primary" id="ok">${draft ? 'この資料と対応で確定する' : 'この対応で校正を続ける'}</button>
         </div>
-        ${!draft && src.type === 'ia' ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
+        ${!draft && src.type === 'ia' && !browserMode ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
     let previewVersion = 0;
@@ -330,10 +342,12 @@ async function setupView(slug, from, life) {
         $('#mretry').onclick = show;
       };
       box.innerHTML = '<div class="imgmsg">読み込み中…</div>';
+      if (browserMode && src.type === 'ia') { box.innerHTML = '<div class="imgmsg">Internet Archive の画像は、ブラウザ版では表示できません。手元のPDFを選ぶか、ローカル版を使ってください</div>'; return; }
       try {
         const image = await api('GET', `/api/projects/${slug}/image?index=${img}${draftQ}`);
         if (!current()) return;
         if (!image || image.missing) { box.innerHTML = '<div class="imgmsg">画像がありません</div>'; return; }
+        if (image.no_file) { box.innerHTML = '<div class="imgmsg">このPDFはこのブラウザにありません。「資料を選び直す」からPDFを選んでください</div>'; return; }
         if (image.url) {
           const el = new Image();
           el.alt = '原本のページ画像';
@@ -452,7 +466,7 @@ async function proofView(slug, idx, life) {
     </div>
     <span class="prog" id="prog"></span>
     <div class="grp" style="margin-left:auto">
-      <a class="needs-server" href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
+      <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
       <button id="findb">ページを探す</button><button id="bibliob">書誌</button>
       <div class="menu needs-server"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
@@ -478,7 +492,7 @@ async function proofView(slug, idx, life) {
     <label>対象 <select id="findfilter"><option value="all">すべて</option><option value="todo">未確認</option><option value="edited">修正あり</option><option value="noted">注記あり</option></select></label>
     <button type="submit">検索</button><button type="button" id="findclose">閉じる</button></form>
     <div id="findresults" aria-live="polite"></div></dialog><div class="proof">
-    <section class="imgpane needs-server">
+    <section class="imgpane${browserMode && !p.source ? ' needs-server' : ''}">
       <div class="toolbar">
         <button id="zo" aria-label="画像を縮小">−</button><button id="zv" class="small" title="100%に戻す"></button><button id="zi" aria-label="画像を拡大">+</button>
         <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
@@ -671,6 +685,28 @@ async function proofView(slug, idx, life) {
   observer.observe(imgview);
   life.cleanup.push(() => observer.disconnect());
   let imageVersion = 0;
+  // バックアップから戻した資料には PDF が無いので、選び直してもらう（ページ数が記録と違えば確認する）
+  const reattachPrompt = im => {
+    imgview.innerHTML = `<div class="imgmsg"><p>この資料のPDF（${esc(p.source.title || p.source.file)}・${p.source.count}ページ）はこのブラウザにありません。バックアップにはPDFが含まれないため、元のPDFを選び直してください。</p>
+      <input type="file" id="reattach" aria-label="PDFを選び直す" accept="application/pdf"> <span id="reattachmsg" class="small" role="status"></span></div>`;
+    $('#reattach').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const msg = $('#reattachmsg'), input = e.target;
+      msg.textContent = 'PDFを確認しています…'; input.disabled = true;
+      const url = URL.createObjectURL(f);
+      try {
+        const pages = (await loadPdf(url)).numPages;
+        if (!life.alive) return;
+        if (pages !== p.source.count && !confirm(`選んだPDFは${pages}ページで、資料の記録（${p.source.count}ページ）と違います。別の版のPDFかもしれません。このまま使いますか？`)) { msg.textContent = ''; input.value = ''; input.disabled = false; return; }
+        msg.textContent = '保存しています…';
+        p = await api('POST', `/api/projects/${slug}/source/pdf/attach`, f, {'X-Page-Count': String(pages)});
+        pg = {...pg, image: await api('GET', `/api/projects/${slug}/image?index=${im.index}`)};
+        toast('PDFを保存しました');
+        showImage();
+      } catch (err) { if (life.alive) { toast(err.message, true); msg.textContent = ''; input.value = ''; input.disabled = false; } }
+      finally { await releasePdf(url); URL.revokeObjectURL(url); }
+    };
+  };
   const showImage = async () => {
     const version = ++imageVersion;
     const im = pg.image;
@@ -681,6 +717,8 @@ async function proofView(slug, idx, life) {
     };
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
+    if (browserMode && !im && p.source && p.source.type === 'ia') { imgview.innerHTML = '<div class="imgmsg">この資料は Internet Archive の画像です。ブラウザ版では表示できません。ローカル版（python -m proofreader）で開くか、「資料・ページ対応」から手元のPDFを選んでください。</div>'; return; }
+    if (im && im.no_file) { reattachPrompt(im); return; }
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。未割当の末尾の場合は、本文を確認してページ区切りを原本に照らして整理してください。</div>'; return; }
     if (im.url) {
       imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
@@ -721,7 +759,7 @@ async function proofView(slug, idx, life) {
       const mapped = await api('GET', `/api/projects/${slug}/pages/${idx}`);
       pg = {...pg, image: mapped.image, ocr: mapped.ocr};
       ocr = latestReading = pg.ocr;
-      await refreshReadings();
+      if (!browserMode) await refreshReadings();
       toast('このページ以降の画像の対応をずらしました');
       showImage(); renderDiff();
     } catch (e) { if (life.alive) toast(e.message, true); }

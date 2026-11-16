@@ -18,6 +18,7 @@ from playwright.sync_api import sync_playwright, expect
 
 from proofreader import bundle, openiti, store
 from proofreader.exporters import tei
+from tests.preview_server import synthetic_pdf
 
 STATIC = Path(__file__).resolve().parent.parent / 'proofreader' / 'static'
 PYTHON_BUNDLE = Path(__file__).resolve().parent / 'fixtures' / 'bundle' / 'python-export.proofreader.json'
@@ -27,6 +28,11 @@ OPENITI = ('﻿######OpenITI#\r\n\r\n#META# 000.SortField :: Synthetic\r\n#META#
            '# alpha beta gamma PageV01P001\r\n# delta epsilon\r\n~~ zeta eta PageV01P002\r\n# theta iota PageV02P001\r\n')
 UPLOAD = '﻿#META#Header#End#\r\nuploaded one PageV01P001\r\nuploaded two\r\nPageV01P002\r\n'
 BOOK_YML = '10#BOOK#TITLEA#AR####: كتاب تجريبي\n'
+# a canvas that holds a rendered page has plenty of dark pixels; the hash tells two different pages apart
+CANVAS = '''sel => { const c = document.querySelector(sel); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let dark = 0, hash = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] < 100) dark++; hash = (hash * 31 + d[i] + i) | 0; } return {dark, hash, width: c.width}; }'''
+QUOTA = '''() => { const put = IDBObjectStore.prototype.put; window.__restorePut = () => { IDBObjectStore.prototype.put = put; };
+    IDBObjectStore.prototype.put = function (...args) { if (this.name === 'files') throw new DOMException('quota', 'QuotaExceededError'); return put.apply(this, args); }; }'''
 
 
 class Quiet(http.server.SimpleHTTPRequestHandler):
@@ -70,7 +76,7 @@ def main():
             assert page.evaluate('PROOF_MODE') == 'browser'
             expect(page.get_by_role('button', name='読み込む', exact=True)).to_be_visible()
             expect(page.get_by_role('button', name='アプリを終了')).to_be_hidden()
-            expect(page.get_by_role('link', name='OpenITIにないテキストをPDFから作成する')).to_be_hidden()
+            expect(page.get_by_role('link', name='OpenITIにないテキストをPDFから作成する')).to_be_visible()
             unsupported = page.evaluate("api('GET', '/api/ia/search?q=x').then(() => 'no error', e => e.status + ' ' + e.message)")
             assert unsupported == '501 この機能はローカル版で利用できます', unsupported
             print('PASS browser mode home hides server-only features', flush=True)
@@ -87,9 +93,11 @@ def main():
             expect(editor).to_have_value(re.compile(r'alpha beta gamma'))
             print('PASS project from OpenITI URI', flush=True)
 
-            for name, visible in (('資料・ページ対応', False), ('比較の設定', False), ('書誌', True)):
+            for name, visible in (('比較の設定', False), ('書誌', True)):
                 button = page.get_by_role('button', name=name, exact=True) if visible else page.get_by_text(name, exact=True)
                 expect(button).to_be_visible() if visible else expect(button).to_be_hidden()
+            expect(page.get_by_role('link', name='資料・ページ対応')).to_be_visible()
+            expect(page.locator('.imgpane')).to_be_hidden()  # no source yet
             expect(page.get_by_role('button', name='AIで読み取る')).to_be_hidden()
             page.get_by_role('button', name='書き出し', exact=True).click()
             expect(page.get_by_role('button', name='校正済みテキスト（OpenITI形式）')).to_be_visible()
@@ -265,6 +273,149 @@ def main():
             expect(page.locator('#toast')).to_contain_text('JSONとして読めません')
             expect(page.locator('tbody tr')).to_have_count(5)
             print('PASS bundle round trip keeps BOM and CRLF; newer or broken files are refused', flush=True)
+
+            # ---- local PDF as the source (stage 1b) ----
+            pdf4, pdf3 = Path(tmp) / 'four.pdf', Path(tmp) / 'three.pdf'
+            pdf4.write_bytes(synthetic_pdf(4))
+            pdf3.write_bytes(synthetic_pdf(3))
+            page.goto(base + '/#/p/upload/0')
+            expect(editor).to_be_enabled(timeout=15000)
+            page.get_by_role('link', name='資料・ページ対応').click()
+            expect(page.get_by_role('heading', name='ページ画像を選ぶ')).to_be_visible()
+            for hidden in ('Internet Archive を検索', '識別子・URLを直接指定'):
+                expect(page.get_by_role('heading', name=hidden)).to_be_hidden()
+            page.evaluate(QUOTA)  # a full disk: nothing may change
+            page.locator('#pdf').set_input_files(str(pdf4))
+            expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            expect(page.locator('.card')).to_contain_text('four.pdf')
+            assert page.evaluate(CANVAS, '#mimg canvas')['dark'] > 200
+            page.locator('#p1').click()
+            expect(page.locator('#imgn')).to_have_value('2')
+            page.locator('#ok').click()
+            expect(page.locator('#toast')).to_contain_text('ブラウザの保存容量が足りません')
+            assert page.evaluate("LocalStore.fileSizes()") == {}
+            unchanged = page.evaluate("LocalStore.getProject('upload')")
+            assert unchanged['source'] is None and unchanged['offset'] == 0, unchanged
+            page.evaluate('window.__restorePut()')
+            page.locator('#ok').click()
+            expect(page).to_have_url(re.compile(r'#/p/upload/0$'))
+            expect(page.locator('#imginfo')).to_have_text('画像 2/4', timeout=30000)
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            first = page.evaluate(CANVAS, '#imgview canvas')
+            assert first['dark'] > 200 and first['width'] == 1600, first
+            stored = page.evaluate("LocalStore.getProject('upload').then(async p => [p.source, p.offset, p.anchors, (await LocalStore.getFile('upload', p.source.file)).size])")
+            assert stored[0]['type'] == 'pdf' and stored[0]['count'] == 4 and stored[0]['title'] == 'four.pdf', stored
+            assert re.fullmatch(r'source-[0-9a-f]{32}\.pdf', stored[0]['file']) and stored[0]['revision'], stored
+            assert stored[1:3] == [1, []] and stored[3] == pdf4.stat().st_size, stored
+            print('PASS local PDF: upload in setup, all-or-nothing on a full disk, mapping and rendering', flush=True)
+
+            page.reload()
+            expect(page.locator('#imginfo')).to_have_text('画像 2/4', timeout=30000)
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            reloaded = page.evaluate(CANVAS, '#imgview canvas')
+            assert reloaded == first, (reloaded, first)
+            page.locator('#shr').click()
+            expect(page.locator('#imginfo')).to_have_text('画像 3/4')
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            shifted = page.evaluate(CANVAS, '#imgview canvas')
+            assert shifted['dark'] > 200 and shifted['hash'] != first['hash']
+            assert page.evaluate("LocalStore.getProject('upload').then(p => p.anchors)") == [[0, 2]]
+            page.get_by_role('button', name='次 →').click()
+            expect(page.locator('#imginfo')).to_have_text('画像 4/4')
+            page.get_by_role('link', name='OpenITI 校正', exact=True).click()
+            expect(page.locator('tbody tr', has_text='upload').first.locator('td').first).to_contain_text('PDF ')
+            print('PASS local PDF: persistence, anchors and storage size on the home screen', flush=True)
+
+            # ---- backup carries no PDF: restored in a fresh browser profile, the PDF is chosen again ----
+            with page.expect_download() as downloaded:
+                page.locator('tbody tr', has_text='upload').first.locator('a[data-bundle]').click()
+            pdf_bundle = Path(tmp) / 'pdf-project.proofreader.json'
+            shutil.copy(downloaded.value.path(), pdf_bundle)
+            pdf_data = json.loads(pdf_bundle.read_text(encoding='utf-8'))
+            assert pdf_data['project']['source']['file'] == stored[0]['file'] and 'pdf' not in json.dumps(pdf_data['work']).lower()
+            assert bundle.parse(pdf_data)[0]['source']['count'] == 4  # Python reads what the browser wrote
+            ia_data = json.loads(PYTHON_BUNDLE.read_text(encoding='utf-8'))
+            ia_data['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA book', 'pages': [{'label': '1', 'service': 'https://example.invalid/x', 'w': 1, 'h': 1}]}
+            ia_bundle = Path(tmp) / 'ia-project.proofreader.json'
+            ia_bundle.write_text(json.dumps(ia_data), encoding='utf-8')
+            fresh = browser.new_context(accept_downloads=True)
+            other = fresh.new_page()
+            other_errors, other_csp, messages = [], [], []
+            other.on('pageerror', lambda error: other_errors.append(str(error)))
+            other.on('console', lambda m: other_csp.append(m.text) if 'Content Security Policy' in m.text else None)
+            other.on('dialog', lambda d: (messages.append(d.message), d.dismiss()))
+            other.goto(base + '/')
+            other.locator('#bundle').set_input_files(str(pdf_bundle))
+            other_editor = other.get_by_role('textbox', name='校正テキスト', exact=True)
+            expect(other_editor).to_be_enabled(timeout=15000)
+            expect(other.locator('#imgview')).to_contain_text('このブラウザにありません')
+            assert other.evaluate("LocalStore.fileSizes()") == {}
+            other.locator('#reattach').set_input_files(str(pdf3))
+            expect(other.locator('#reattach')).to_be_enabled()
+            assert len(messages) == 1 and '3ページ' in messages[0] and '4ページ' in messages[0], messages
+            expect(other.locator('#imgview')).to_contain_text('このブラウザにありません')
+            assert other.evaluate("LocalStore.fileSizes()") == {}  # declined: nothing stored
+            other.locator('#reattach').set_input_files(str(pdf4))
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert len(messages) == 1  # a PDF with the recorded page count needs no question
+            expect(other.locator('#imginfo')).to_have_text('画像 3/4')  # the anchor travels with the backup
+            expect(other.locator('#imgview canvas')).to_be_visible()
+            assert other.evaluate(CANVAS, '#imgview canvas')['dark'] > 200
+            other.reload()
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size}
+            print('PASS restored PDF project asks for the PDF, warns on a different page count, then renders after a reload', flush=True)
+
+            other.goto(base + '/')
+            other.locator('#bundle').set_input_files(str(ia_bundle))
+            expect(other_editor).to_be_enabled(timeout=15000)
+            expect(other.locator('#imgview')).to_contain_text('Internet Archive の画像です')
+            other_editor.fill('still editable')
+            expect(other.locator('#saved')).to_have_text('保存済み')
+            other.get_by_role('link', name='資料・ページ対応').click()
+            expect(other.locator('#mimg')).to_contain_text('ブラウザ版では表示できません')
+            expect(other.locator('#pdfrow')).to_have_count(0)
+            other.get_by_role('button', name='資料を選び直す').click()
+            expect(other.get_by_role('heading', name='ページ画像を選ぶ')).to_be_visible()
+            expect(other.get_by_role('heading', name='Internet Archive を検索')).to_be_hidden()
+            print('PASS restored IA project opens without images and stays editable', flush=True)
+
+            # ---- a new draft from a PDF selection ----
+            other.goto(base + '/')
+            other.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
+            other.get_by_label('書名', exact=True).fill('Synthetic edition')
+            other.get_by_label('著者', exact=True).fill('Synthetic author')
+            other.locator('#draftpdf').set_input_files(str(pdf3))
+            expect(other.locator('#pdfcount')).to_contain_text('3ページ', timeout=60000)
+            other.get_by_label('最初の本文画像（PDFの通し番号）').fill('2')
+            other.get_by_label('最初の印刷ページ番号').fill('10')
+            before = other.evaluate("LocalStore.listProjects().then(l => l.length)")
+            other.evaluate(QUOTA)
+            other.get_by_role('button', name='校正を始める').click()
+            expect(other.locator('#draftmsg')).to_contain_text('ブラウザの保存容量が足りません')
+            assert other.evaluate("LocalStore.listProjects().then(l => l.length)") == before  # no project, no PDF
+            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size}
+            other.evaluate('window.__restorePut()')
+            other.get_by_role('button', name='校正を始める').click()
+            expect(other_editor).to_be_enabled(timeout=30000)
+            expect(other.locator('#psel')).to_have_value('V01P010')
+            expect(other.locator('#imginfo')).to_have_text('画像 2/3', timeout=60000)
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate(CANVAS, '#imgview canvas')['dark'] > 200
+            draft_slug = re.search(r'#/p/([^/]+)/0', other.url).group(1)
+            draft_project = other.evaluate(f"LocalStore.getProject({json.dumps(draft_slug)})")
+            assert draft_project['draft'] is True and draft_project['offset'] == 1 and draft_project['author'] == 'Synthetic author'
+            assert draft_project['source']['file'] == 'source.pdf' and draft_project['source']['count'] == 3 and draft_project['source']['title'] == 'three.pdf'
+            other.get_by_role('button', name='次 →').click()
+            expect(other.locator('#imginfo')).to_have_text('画像 3/3')
+            other.reload()
+            expect(other.locator('#imginfo')).to_have_text('画像 3/3')
+            other.goto(base + f'/#/p/{draft_slug}/0')
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, draft_slug: pdf3.stat().st_size}
+            print('PASS new draft from a PDF selection, all-or-nothing on a full disk', flush=True)
+            assert not other_errors and not other_csp, (other_errors, other_csp)
+            fresh.close()
 
             newer = browser.new_context()
             probe = newer.new_page()

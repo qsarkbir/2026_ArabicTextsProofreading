@@ -2,8 +2,8 @@
 
 | 項目 | 内容 |
 |---|---|
-| 文書の状態 | 段階1a は実装済み（PR 未作成）。段階1b 以降は設計のみ |
-| 対象 | 段階1（ブラウザ内での校正）。段階2以降は概要のみ |
+| 文書の状態 | 段階1a・1b は実装済み（PR 未作成）。段階2 以降は設計のみ |
+| 対象 | 段階1（ブラウザ内での校正と、手元の PDF を資料にすること）。段階2以降は概要のみ |
 | 最終更新 | 2026-11-16 |
 | 関連 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md) |
 
@@ -48,13 +48,17 @@
 | D-19 | 採用 | バックアップの `project.source` は両方の版で同じ形を要求する：`ia` は文字列の `id` と、`service`（文字列）・`label`（文字列か整数）・`w`/`h`（あれば整数か null）を持つオブジェクトの `pages`、`pdf` は文字列の `file` と整数の `count`、`revision`・`pdf_file`・`title` は、あれば文字列。`bibliography` の値と `candidates` の要素はすべて文字列。形が違えば読み込みで拒否する | 読み込めたあとの `image_for` や画面で例外になるデータを入れない |
 | D-20 | 採用 | JSON の `1.0` は JS では整数、Python では float になる。バックアップの検証は、整数を求める所で「安全な整数（絶対値 2^53-1 以下）」だけを受け入れ、Python 側は整数に等しい float を読み込み時に整数へ直す（`bundle._integral`）。`1.5` や 2^53 を超える数は両方で拒否する。`status`・`history` の `done` は真偽値か null だけを受け入れる。変換と検証は `project` と `work` にだけ掛け、入れ子が深すぎてスタックが尽きたときは例外ではなく読み込みの拒否にする。リクエストの JSON も `NaN`・`Infinity` を拒否する（JS の `JSON.parse` と同じ）。共通の事例は `cases.json` の `integral-floats`・`offset-unsafe-*` | 同じファイルの受理・拒否と、読み込み後の値を両方の版で一致させる |
 | D-21 | 採用 | プロジェクトの作成（`store.install`）は、slug のフォルダを `mkdir`（既存なら失敗）で確保してから書き込み、途中で失敗したら、そのフォルダだけを削除する（別のプロセスが同時に同じ slug を取っても、相手のプロジェクトを消さない。取られていたら次の `_2` `_3` を試す）。静的版のバックアップ日時（`backup:<slug>`）は、ルーターが返した `done()` を `saveDownload` がダウンロード開始後に呼んで記録する。`onblocked` で拒否した後に開けた IndexedDB の接続は閉じる | 失敗した作成で slug が使われたままにならない。書き出しに失敗したのに「バックアップ済み」と表示しない。使われない接続が他のタブの更新を止めない |
+| D-22 | 採用 | 静的版で手元の PDF を資料にするときは、選んだ PDF をルーターのメモリ（`DRAFTS`、server.py と同じ名前）に置いておき、`POST /mapping` で確定するときに、IndexedDB の `files`（`[slug, name]` の Blob）への書き込みとプロジェクトの `source`・`offset`・`anchors` の更新を**1つの readwrite トランザクション**で行う（`LocalStore.updateProject` の mutate が `{put, remove}` を返す）。置き換えた資料の古い PDF は同じトランザクションで消す。PDF からの新規作成（`POST /new-pdf`）も、プロジェクト・原文・PDF（`source.pdf`）を `createProject` の1つのトランザクションで書く。容量不足（`QuotaExceededError`、同期の例外もコミット時のエラーも）は 507 と日本語の案内になり、トランザクションが中断されるので、プロジェクトも PDF も変わらない（確定前の選択はメモリに残るので、空きを作ってからやり直せる）。トランザクションの `onerror` はリクエストの `error` も見る。`source` の形は server.py が書くものと同じ（`type`・`file`・`title`・`count`・`revision`）。ページ数は画面が pdf.js で数えて `X-Page-Count` で渡す（server.py も同じ値を信用する） | サーバーは確定前にもファイルを書くが、ブラウザの容量は限られるので、確定するまで保存しない。保存の途中失敗でプロジェクトが半端な状態にならない |
+| D-23 | 採用 | PDF の表示：`image` の `pdf` に、Blob の object URL を入れる（http 版は `/api/projects/<slug>/files/<name>?v=…`）。URL は `slug/name` ごとにルーターが1つだけ作って使い回し（ページ移動のたびに PDF を読み直さない）、付け直し・確定で作り直す。画面（`routeNow`）は、ほかのプロジェクトや一覧・新規作成へ移るときに、読み込み済みの pdf.js の文書を解放してから `LocalRouter.revokeUrls()` で URL を失効させる。`files/<name>` の GET と Range は持たない。CSP は変えない（`connect-src blob:`・`worker-src blob:`・`img-src blob:` は D-14 で許可済みで、pdf.js のワーカーは `'self'`） | pdf.js は Blob の URL を直接読める。URL を残すとメモリが解放されない |
+| D-24 | 採用 | バックアップから戻した PDF の資料（`source.file` はあるが Blob が無い）：校正画面は開き、`image` は `{pdf: null, no_file: true, …}` を返す。画像の欄に「このブラウザにありません。元のPDFを選び直してください」とファイル選択を出し、選ばれた PDF のページ数が `source.count` と違えば `confirm` で確認してから、ブラウザ版だけの `POST /api/projects/<slug>/source/pdf/attach` で同じ名前の Blob として保存する（project は変えない）。設定画面（資料の対応付け）では「選び直す」を案内する。IA の資料はブラウザ版では扱わず、プロジェクトは開き、画像の欄に「ブラウザ版では表示できません」と出す（`image` は 501、`pages/<i>` の `image` は `null`、検索・書き出しは使える）。設定画面の IA の検索欄は隠し、PDF のアップロードだけを出す | 読み込んだだけでは画像が出ないことを隠さず、PDF を付け直せば元の状態に戻せる。IA を使うには段階2が要る |
+| D-25 | 採用 | `local/draft.js` は `importers/draft.py` の `build` の移植（`Draft.build(metadata)` が `[fetched, details]` を返し、不正なら例外）。数値は Python の `int()` に合わせる（整数・小数は切り捨て・ASCII 以外の Unicode の数字も可、`null`・配列・空文字・`1.5` の文字列は拒否）、文字列は `str().strip()`（`null` は `None` という文字列）。ルーターは例外をすべて server.py と同じ「書名、PDFの対象範囲、巻と印刷ページ番号を確認してください」にし、PDF の先頭が `%PDF` でない・500 MB 超は「500 MB以下のPDFを選択してください」。共通の事例は `tests/fixtures/draft/`（Python の出力を正とする `expected.json`。URI はランダムなので形だけ確かめて置き換える）。資料の経路（`source/pdf`・`mapping`・`image`・ページの `image`）は `tests/fixtures/source/ops.json` の手順を Python（`test_source_parity.py`）と Node（`router.test.js`）で再生して、応答の形・キー（sha256）・エラーを突き合わせる | 同じ入力が両方の版で同じプロジェクトになる |
 
 ## 段階と状態
 
 | 段階 | 内容 | 状態 |
 |---|---|---|
 | 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（PR 未作成）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
-| 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 未着手 |
+| 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（PR 未作成）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24） |
 | 2 | Internet Archive 連携（マニフェスト、検索、ページ画像、PDF） | 未着手（CORS の確認が先） |
 | 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 未着手 |
 
@@ -70,15 +74,16 @@
 | `openiti.py`（URI 解決、yml、split/join） | `local/openiti.js` | 1a |
 | `exporters/tei.py` | `local/tei.js`（バイト単位で一致、D-12） | 1a |
 | `bundle.py`（バックアップの書き出し・読み込み） | `local/bundle.js` と `LocalStore.importBundle` | 1a |
-| `importers/draft.py` | `local/draft.js` | 1b |
-| 手元の PDF の保存（`files/`） | IndexedDB の `files` に Blob で保存 | 1b |
+| `importers/draft.py` | `local/draft.js`（D-25） | 1b |
+| 手元の PDF の保存（`files/`）、`files/<name>` の配信 | IndexedDB の `files` に Blob で保存（D-22）。表示は object URL（D-23）。バックアップに含めないので、戻したあとは付け直す（D-24） | 1b |
+| ページの対応付け（`mapping`）・`image`・資料の設定画面 | `local/router.js`。PDF の資料だけ（IA は 501、画面では隠す） | 1b |
 | `sources.py`（IA） | ブラウザから直接取得。CORS を返さない経路は使わない | 2 |
 | `scan` のディスクキャッシュ | Cache API | 2 |
 | IA の PDF 保存 | 利用者がダウンロードしたファイルを選ぶ方式を基本にする | 2 |
 | `providers/`・`ocr.py` | ブラウザから直接呼ぶ。プロンプトは共通の定義を使う | 3 |
 | `net.ALLOWED` | `<meta>` の CSP `connect-src`（D-14） | 1a で導入。段階ごとに接続先を足す |
 | `presence.py`・自動終了・終了ボタン | 使わない（画面から隠す） | 1a |
-| `send_file` の Range 対応 | 使わない（pdf.js が Blob を直接読む） | 1b |
+| `send_file` の Range 対応 | 使わない（pdf.js が Blob の URL を直接読む） | 1b |
 
 静的版で未対応の機能は、画面から隠すか「ローカル版で利用できます」と表示する。どちらにするかは機能ごとに `mode.js` の値で切り替える。
 
@@ -95,7 +100,7 @@ proofreader/static/
     store.js        IndexedDB の読み書きと版の移行
     tei.js          TEI P5 の書き出し（exporters/tei.py と同じバイト列）
     bundle.js       バックアップの作成と検証（bundle.py と同じ規則。保存は store.js の importBundle）
-    draft.js        （1b）PDF の選択範囲からの仮本文
+    draft.js        PDF の選択範囲からの仮本文（importers/draft.py と同じ入出力）
 ```
 
 - `local/*.js` は `<script>` で読み込む通常のスクリプトで、全体が1つのグローバルスコープを共有する。そのため各ファイルは名前空間の定数を1つだけ公開する（`OpenITI`、`Work` など）。Node からは `module.exports` でその同じオブジェクトを読む。名前の衝突は `tests/globals.test.js` で確かめる。
@@ -114,7 +119,7 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | `projects` | `slug` | `project.json` と同じ形 | 書誌・資料・対応付けの変更時 |
 | `originals` | `slug` | `{slug, text}` | 作成時だけ。以後は書き換えない |
 | `pages` | `[slug, i]` | `{text?, done, note, revision, history[]}`。`text` は原文と異なるときだけ持つ | 保存のたび |
-| `files` | `[slug, name]` | PDF などの Blob | 1b から |
+| `files` | `[slug, name]` | PDF の Blob（名前は `source.pdf` か `source-<uuid>.pdf`）。資料の確定・新規作成・付け直しのときだけ書く | 1b から |
 | `ocr` | `[slug, i]` | `ocr/<i>.json` と同じ形と過去の読み | 3 から |
 | `settings` | `key` | 利用者ごとの設定 | 必要になったとき |
 
@@ -149,7 +154,7 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 
 - `exported` は UTC。`app.mode` は書き出した版（`http` か `browser`）、`app.version` は `bundle.py` と `bundle.js` の `APP_VERSION`（テストで一致を確かめる）。
 - `work` は `work.json` の形。静的版は ページごとの record と相互に変換する（`Work.recordsToWork` / `workToRecords`）。
-- PDF などのファイルと OCR の結果は含めない（D-11）。資料の情報は `project` に残り、読み込み後にファイルを選び直してもらう。
+- PDF などのファイルと OCR の結果は含めない（D-11）。資料の情報は `project` に残り、読み込み後にファイルを選び直してもらう（静的版は D-24 の手順）。
 - 読み込みの規則は D-10。読み込んだプロジェクトは常に新しいプロジェクトとして作られ、既存のプロジェクトを上書きしない。
 - 静的版は1つの `readwrite` トランザクション（`projects`・`originals`・`pages`）で書くので、途中で失敗したプロジェクトは残らない。ローカル版は `work.json` の次に `project.json` を書き、`project.json` が無いフォルダは一覧に出ない。
 
@@ -180,6 +185,7 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | 保存ロジック | `work.js` を Node でテストする。`test_extensions.py` の履歴テスト（5分のまとめ、checkpoint、上限）と同じ内容を持つ |
 | 移行 | 旧版の fixture を読み込み、最新版になることと原文が変わらないことを確かめる |
 | IndexedDB を含む動作 | `tests/browser_smoke.py` をブラウザ版でも流す。2つのタブでの競合も確かめる |
+| PDF の資料と仮本文 | `tests/fixtures/draft/`（`Draft.build`）と `tests/fixtures/source/`（`source/pdf`・`mapping`・`image` の手順）を、Python（`test_draft_parity.py`・`test_source_parity.py`）と Node（`draft.test.js`・`router.test.js`）が突き合わせる。`browser_static_smoke` が、合成 PDF のアップロード・対応付け・描画（canvas の画素）・再読み込み・バックアップを別のブラウザに戻して付け直し・PDF からの新規作成・容量不足（`IDBObjectStore.put` が `QuotaExceededError` を投げる）で何も変わらないことを確かめる |
 | TEI | `tests/fixtures/tei/inputs.json`（合成入力）の `expected.json` は Python の出力。`tests/test_tei_parity.py` と `tests/tei.test.js` が、`exporters/tei.py` と `tei.js` の出力が一致することを確かめる。CI は `tests/tei_fixtures.js` で `tei.js` の出力をファイルに書き、`tests.validate_tei` で公式スキーマに通す（Python の出力も同じ） |
 | 書き出しファイル | `tests/fixtures/bundle/cases.json`（受理・拒否の事例と期待値）を `test_bundle.py` と `bundle.test.js` が確かめる。`python-export.proofreader.json`（Python の出力）を `browser_static_smoke` が静的版に読み込んで書き戻し、静的版が書き出したものを Python が読み込む（BOM・CRLF の往復も含む）。`browser_smoke` はローカル版の書き出し・読み込みを確かめる |
 
@@ -216,3 +222,4 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | 2026-11-16 | 段階1a を完了（PR 未作成）にした。TEI（`local/tei.js`、バイト一致）、バックアップの書き出し・読み込み（両方の版、`bundle.py` / `local/bundle.js`）、CSP、Pages への配信、ホームの使用量・バックアップ日時・タブ間更新を実装。ローカル版の未知パスを `/` へリダイレクト。IndexedDB の扱いを堅くした。D-10〜D-17 を追記し、Q-1 を決着、Q-2 を当面「含めない」にした |
 | 2026-11-16 | レビュー指摘への対応：Origin/Host の検証（D-18）、`source` などの型の検証と整数の扱いの統一（D-19・D-20）、作成失敗時の後始末・バックアップ日時の記録位置・IndexedDB 接続の後始末（D-21）、Pages 配信ジョブの `concurrency`。`ia_pdf_status` の `attached` はファイルがあるときだけ |
 | 2026-11-16 | 再レビューへの対応：`install` の競合で他のプロジェクトを消さない、深い入れ子・`NaN`・`done` の型の拒否、`LocalStore.open` の古いコールバック、ポート 80 の Host と `Sec-Fetch-Site`（D-18〜D-21 を更新） |
+| 2026-11-16 | 段階1b を完了（PR 未作成）にした。手元の PDF を資料にする（`files` への保存・object URL での表示・`mapping`・`image`）、バックアップから戻した資料への PDF の付け直し、`local/draft.js` と PDF からの新規作成を静的版に追加。D-22〜D-25 を追記し、機能の対応表とテストの節を更新。トランザクションの `onerror` でリクエストのエラー（容量不足）を拾うようにした |

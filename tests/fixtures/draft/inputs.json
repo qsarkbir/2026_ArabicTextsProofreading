@@ -1,0 +1,245 @@
+[
+ {
+  "name": "basic",
+  "metadata": {
+   "title": "Synthetic Book",
+   "count": 3,
+   "start": 1,
+   "end": 3,
+   "first_page": 1,
+   "volume": 1
+  }
+ },
+ {
+  "name": "subrange-with-bibliography",
+  "metadata": {
+   "title": " كتاب تجريبي ",
+   "author": "مؤلف　",
+   "edition": " ed. 1 ",
+   "source": "scan",
+   "rights": "CC",
+   "count": 10,
+   "start": 3,
+   "end": 5,
+   "first_page": 9,
+   "volume": 2
+  }
+ },
+ {
+  "name": "string-numbers-from-form",
+  "metadata": {
+   "title": "T",
+   "count": 8,
+   "start": "2",
+   "end": "4",
+   "first_page": "10",
+   "volume": "0"
+  }
+ },
+ {
+  "name": "defaults-use-count",
+  "metadata": {
+   "title": "T",
+   "count": 2
+  }
+ },
+ {
+  "name": "zero-first-page-and-padding",
+  "metadata": {
+   "title": "T",
+   "count": 2,
+   "first_page": 0,
+   "volume": 99
+  }
+ },
+ {
+  "name": "large-page-numbers",
+  "metadata": {
+   "title": "T",
+   "count": 2,
+   "first_page": 99998,
+   "volume": 7
+  }
+ },
+ {
+  "name": "arabic-indic-digits",
+  "metadata": {
+   "title": "T",
+   "count": "٤",
+   "start": "٢",
+   "end": "٣",
+   "first_page": "١٢",
+   "volume": "١"
+  }
+ },
+ {
+  "name": "float-numbers-truncate",
+  "metadata": {
+   "title": "T",
+   "count": 3.9,
+   "start": 1.5,
+   "end": 2.2
+  }
+ },
+ {
+  "name": "whitespace-numbers",
+  "metadata": {
+   "title": "T",
+   "count": " 3 ",
+   "start": " 1",
+   "end": "2 "
+  }
+ },
+ {
+  "name": "null-title-is-the-text-None",
+  "metadata": {
+   "title": null,
+   "count": 1
+  }
+ },
+ {
+  "name": "blank-title",
+  "metadata": {
+   "title": "  ",
+   "count": 1
+  },
+  "expect_error": true
+ },
+ {
+  "name": "missing-title",
+  "metadata": {
+   "count": 1
+  },
+  "expect_error": true
+ },
+ {
+  "name": "missing-count",
+  "metadata": {
+   "title": "T"
+  },
+  "expect_error": true
+ },
+ {
+  "name": "start-after-end",
+  "metadata": {
+   "title": "T",
+   "count": 3,
+   "start": 3,
+   "end": 2
+  },
+  "expect_error": true
+ },
+ {
+  "name": "end-beyond-count",
+  "metadata": {
+   "title": "T",
+   "count": 3,
+   "end": 4
+  },
+  "expect_error": true
+ },
+ {
+  "name": "start-zero",
+  "metadata": {
+   "title": "T",
+   "count": 3,
+   "start": 0
+  },
+  "expect_error": true
+ },
+ {
+  "name": "count-too-large",
+  "metadata": {
+   "title": "T",
+   "count": 20001
+  },
+  "expect_error": true
+ },
+ {
+  "name": "count-at-limit",
+  "metadata": {
+   "title": "T",
+   "count": 20000,
+   "start": 19999,
+   "end": 20000
+  }
+ },
+ {
+  "name": "first-page-too-large",
+  "metadata": {
+   "title": "T",
+   "count": 1,
+   "first_page": 100000
+  },
+  "expect_error": true
+ },
+ {
+  "name": "negative-first-page",
+  "metadata": {
+   "title": "T",
+   "count": 1,
+   "first_page": -1
+  },
+  "expect_error": true
+ },
+ {
+  "name": "volume-too-large",
+  "metadata": {
+   "title": "T",
+   "count": 1,
+   "volume": 100
+  },
+  "expect_error": true
+ },
+ {
+  "name": "non-numeric-string",
+  "metadata": {
+   "title": "T",
+   "count": "abc"
+  },
+  "expect_error": true
+ },
+ {
+  "name": "decimal-string",
+  "metadata": {
+   "title": "T",
+   "count": "1.5"
+  },
+  "expect_error": true
+ },
+ {
+  "name": "empty-string-number",
+  "metadata": {
+   "title": "T",
+   "count": 3,
+   "start": ""
+  },
+  "expect_error": true
+ },
+ {
+  "name": "null-number",
+  "metadata": {
+   "title": "T",
+   "count": 3,
+   "end": null
+  },
+  "expect_error": true
+ },
+ {
+  "name": "list-number",
+  "metadata": {
+   "title": "T",
+   "count": [
+    3
+   ]
+  },
+  "expect_error": true
+ },
+ {
+  "name": "not-an-object",
+  "metadata": [
+   "title"
+  ],
+  "expect_error": true
+ }
+]

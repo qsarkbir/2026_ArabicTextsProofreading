@@ -54,8 +54,8 @@ const LocalStore = (() => {
     catch (e) { if (e && e.name === 'TypeError') tx = db.transaction(stores, mode); else throw e; } // オプションを知らないブラウザ
     const done = new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error || new Error('保存が中断されました'));
+      tx.onerror = ev => reject(tx.error || (ev && ev.target && ev.target.error) || new Error('保存に失敗しました')); // 容量不足はリクエストの error に入る
+      tx.onabort = ev => reject(tx.error || (ev && ev.target && ev.target.error) || new Error('保存が中断されました'));
     });
     done.catch(() => {});
     let result;
@@ -78,13 +78,30 @@ const LocalStore = (() => {
   const listProjects = () => run(['projects'], 'readonly', tx => request(tx.objectStore('projects').getAll()));
   const getProject = slug => run(['projects'], 'readonly', tx => request(tx.objectStore('projects').get(slug)));
 
-  // 読み → mutate → 書きを1つのトランザクションで行う
-  const updateProject = (slug, mutate) => run(['projects'], 'readwrite', async tx => {
+  // 読み → mutate → 書きを1つのトランザクションで行う。mutate が {put: [{name, blob}], remove: [name]} を返すと、同じトランザクションで files も書く
+  const updateProject = (slug, mutate) => run(['projects', 'files'], 'readwrite', async tx => {
     const s = tx.objectStore('projects'), p = await request(s.get(slug));
     if (!p) throw notFound();
-    mutate(p);
+    const files = mutate(p) || {};
     s.put(p);
+    for (const name of files.remove || []) tx.objectStore('files').delete([slug, name]);
+    for (const {name, blob} of files.put || []) tx.objectStore('files').put({slug, name, blob});
     return p;
+  });
+
+  // PDF などの Blob（files）。容量が足りないときは何も変えずに 507 になる
+  const getFile = async (slug, name) => ((await run(['files'], 'readonly', tx => request(tx.objectStore('files').get([slug, name])))) || {}).blob;
+  const fileSizes = () => run(['files'], 'readonly', async tx => {
+    const out = {};
+    for (const r of await request(tx.objectStore('files').getAll())) out[r.slug] = (out[r.slug] || 0) + (r.blob ? r.blob.size : 0);
+    return out;
+  });
+  // バックアップから戻した資料に PDF を付け直す：source.file の名前で保存し、project は変えない
+  const attachFile = (slug, name, blob) => run(['projects', 'files'], 'readwrite', async tx => {
+    const p = await request(tx.objectStore('projects').get(slug));
+    if (!p) throw notFound();
+    if (!p.source || p.source.type !== 'pdf' || p.source.file !== name) throw apiError('このプロジェクトの資料はPDFではありません', 400);
+    tx.objectStore('files').put({slug, name, blob});
   });
 
   let channel;
@@ -104,10 +121,11 @@ const LocalStore = (() => {
     return slug;
   };
 
-  const createProject = async fetched => {
+  // extra: {patch: project に足す項目, file: {name, blob}}。プロジェクト・原文・PDF を1つのトランザクションで書く
+  const createProject = async (fetched, extra = {}) => {
     const meta = fetched.meta || {};
     let project, first;
-    await run(['projects', 'originals'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'files'], 'readwrite', async tx => {
       const s = tx.objectStore('projects');
       first = (await request(s.count())) === 0;
       const slug = await freeSlug(s, slugBase(fetched.uri));
@@ -116,9 +134,11 @@ const LocalStore = (() => {
         title: OpenITI.titleOf(meta, fetched.text, fetched.uri), author: OpenITI.authorOf(meta, fetched.text, fetched.uri),
         created: stamp(), meta, schema_version: 2,
         candidates: OpenITI.scanLinks(meta), source: null, offset: 0, anchors: [],
+        ...extra.patch,
       };
       s.put(project);
       tx.objectStore('originals').put({slug, text: fetched.text});
+      if (extra.file) tx.objectStore('files').put({slug, name: extra.file.name, blob: extra.file.blob});
     });
     cache.set(project.slug, OpenITI.split(fetched.text));
     if (first) requestPersist();
@@ -188,7 +208,7 @@ const LocalStore = (() => {
     return next;
   };
 
-  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, createProject, importBundle, bundleSource, getSetting, setSetting, backupTimes, parts, pages, page, savePage};
+  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, getFile, fileSizes, attachFile, createProject, importBundle, bundleSource, getSetting, setSetting, backupTimes, parts, pages, page, savePage};
 })();
 
 if (typeof module !== 'undefined') module.exports = LocalStore;

@@ -1,0 +1,248 @@
+{
+ "basic": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n# \nPageV01P002\n\n# \nPageV01P003\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "Synthetic Book",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "subrange-with-bibliography": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV02P009\n\n# \nPageV02P010\n\n# \nPageV02P011\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "كتاب تجريبي",
+   "author": "مؤلف",
+   "bibliography": {
+    "edition": "ed. 1",
+    "source": "scan",
+    "rights": "CC"
+   },
+   "draft": true,
+   "offset": 2
+  }
+ },
+ "string-numbers-from-form": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV00P010\n\n# \nPageV00P011\n\n# \nPageV00P012\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 1
+  }
+ },
+ "defaults-use-count": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n# \nPageV01P002\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "zero-first-page-and-padding": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV99P000\n\n# \nPageV99P001\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "large-page-numbers": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV07P99998\n\n# \nPageV07P99999\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "arabic-indic-digits": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P012\n\n# \nPageV01P013\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 1
+  }
+ },
+ "float-numbers-truncate": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n# \nPageV01P002\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "whitespace-numbers": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n# \nPageV01P002\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "null-title-is-the-text-None": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "None",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 0
+  }
+ },
+ "blank-title": {
+  "error": true
+ },
+ "missing-title": {
+  "error": true
+ },
+ "missing-count": {
+  "error": true
+ },
+ "start-after-end": {
+  "error": true
+ },
+ "end-beyond-count": {
+  "error": true
+ },
+ "start-zero": {
+  "error": true
+ },
+ "count-too-large": {
+  "error": true
+ },
+ "count-at-limit": {
+  "fetched": {
+   "uri": "local-XXXXXXXXXXXX",
+   "text": "######OpenITI#\n\n#META#Header#End#\n\n# \nPageV01P001\n\n# \nPageV01P002\n\n",
+   "meta": {}
+  },
+  "details": {
+   "title": "T",
+   "author": "",
+   "bibliography": {
+    "edition": "",
+    "source": "",
+    "rights": ""
+   },
+   "draft": true,
+   "offset": 19998
+  }
+ },
+ "first-page-too-large": {
+  "error": true
+ },
+ "negative-first-page": {
+  "error": true
+ },
+ "volume-too-large": {
+  "error": true
+ },
+ "non-numeric-string": {
+  "error": true
+ },
+ "decimal-string": {
+  "error": true
+ },
+ "empty-string-number": {
+  "error": true
+ },
+ "null-number": {
+  "error": true
+ },
+ "list-number": {
+  "error": true
+ },
+ "not-an-object": {
+  "error": true
+ }
+}
