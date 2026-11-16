@@ -64,5 +64,6 @@ proofreader/
 - importers/draft.py はPDFの選択範囲から仮IDの本文を作る。正式なOpenITI登録ではない。
 - exporters/tei.py は基本TEI P5出力。ページ末尾マーカーを先頭のpbへ移し、未対応タグは残す。tests.validate_teiで公式スキーマ検証。
 - 保存APIはページrevisionが必須。work.jsonのhistory/revisionsは旧データには無く、初回保存時に追加する。元のoriginal.txtは変えない。
+- 保存履歴は store._record_history で記録する。HISTORY_WINDOW（5分）以内の自動保存は1件にまとめ、復元時は checkpoint で必ず1件残す。1ページ HISTORY_LIMIT（100件）まで。
 - static/workflows.jsは新規作成・書誌・履歴、compare.jsは比較と構造保全。
 - python -m tests.browser_smoke はPlaywrightで合成データのブラウザ検証。preview_serverのAIは模擬結果であり有料APIを呼ばない。
