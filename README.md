@@ -64,7 +64,7 @@ OPENAI_OCR_MODEL=ご自身のアカウントで利用できる画像対応モデ
 
 Internet Archive のページ画像は、アプリのサーバー経由で取得し、`projects/<slug>/cache/scan/` に保存して再利用します。1冊で数十〜数百 MB になることがあります。キャッシュは削除しても安全で、必要になったときに取り直します。IIIF が応答しない場合は、archive.org の BookReader の画像 URL で取り直します。
 
-Internet Archive の資料は、「資料・ページ対応」の「作業フォルダーのPDF」から PDF を保存することもできます（任意・上限 500 MB）。保存先は `projects/<テキスト>/files/` です。PDF はページ数がページ画像の枚数と一致するときだけ使い、一致しない場合は削除して理由を表示します。保存すると、ページ画像と Claude の読み取りに PDF を使うため、archive.org に接続しなくても表示できます。「オンラインの画像に戻す」で元の画像に戻せます（PDF は残ります）。
+Internet Archive の資料は、「資料・ページ対応」の「作業フォルダーのPDF」から PDF を保存することもできます（任意・上限 500 MB）。保存先は `projects/<テキスト>/files/` です。PDF はページ数がページ画像の枚数と一致するときだけ使い、一致しない場合は削除して理由を表示します。保存すると、ページ画像と AI の読み取りに PDF を使うため、archive.org に接続しなくても表示できます。「オンラインの画像に戻す」で元の画像に戻せます（PDF は残ります）。
 
 ## 書き出し
 
@@ -83,7 +83,7 @@ Internet Archive の資料は、「資料・ページ対応」の「作業フォ
 ## 校正を続けるための操作
 
 - **取り消す・やり直す**：手入力とOCR提案の採用を取り消せます。本文内では Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z も使えます。履歴は同じページを開いている間のみ保持します。
-- **保存履歴**：保存前の本文を `work.json` に残し、ページを移動・再起動しても復元できます。未保存の入力の復旧機能ではありません。復元は本文だけを戻し、注記・確認状況は戻しません。
+- **保存履歴**：保存前の本文を `work.json` に残し、ページを移動・再起動しても復元できます。自動保存は頻繁に行われるため、5分以内の保存は1件にまとめ、その編集を始める前の本文を残します（続けて編集しても5分ごとに1件）。1ページあたり新しい100件まで保持します。復元すると、復元直前の本文も必ず履歴に残ります。未保存の入力の復旧機能ではありません。復元は本文だけを戻し、注記・確認状況は戻しません。
 - **複数タブ**：同じページの古い版から保存すると競合として止めます。未保存の本文をコピーしてから再読み込みし、最新本文と照合してください。更新後は古いタブも再読み込みが必要です。
 - **確認済み**：本文を変更すると確認済みを解除します。修正内容を確認してから再度チェックしてください。
 - **未割当の末尾**：最後のページ記号より後に本文がある場合、独立した未割当部分として編集・検索できます。ページ画像は自動で割り当てません。
@@ -100,11 +100,15 @@ Internet Archive の資料は、「資料・ページ対応」の「作業フォ
 python -m unittest discover -s tests -v
 node --test tests/core.test.js tests/compare.test.js
 node --check proofreader/static/app.js
+node --check proofreader/static/workflows.js
+node --check proofreader/static/compare.js
 ```
 
 ブラウザ確認用に `python -m tests.preview_server` を実行すると、合成データだけを使うサーバーが `http://127.0.0.1:8772/` で起動します（Internet Archive 形式の `ui-fixture` と PDF の `pdf-fixture`）。最初の保存だけ意図的に失敗するため、再試行を確認できます。既存の `projects/` と有料OCRは使用しません。Ctrl+C で終了すると検証データも削除します。
 
 ブラウザ自動テストは `pip install playwright` と `python -m playwright install chromium` の後に `python -m tests.browser_smoke` で実行できます。既存Chromiumは自動検出し、`CHROMIUM_PATH` でも指定できます。合成データと模擬AIだけを使い、課金しません。TEIスキーマ検証は `lxml` と公式 `tei_all.rng` を用意し、`python -m tests.validate_tei /path/to/tei_all.rng` で実行します。GitHub Actionsにも設定しています。
+
+変更は作業用ブランチから PR を作って `main` にマージします（`main` への直接 push はできません）。
 
 PDF表示にはApache-2.0のPDF.js 6.5.438を同梱し、JavaScriptのevalを無効にしています。CDNへの接続は不要です。ただし、特殊なフォント・CMap・WASM補助資源を必要とするPDFは追加対応が必要な場合があります。WebフォントとAI・IA・OpenITIからの取得はネットワークを使用します。
 

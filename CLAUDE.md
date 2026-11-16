@@ -14,7 +14,7 @@ python -m proofreader --keep-running   # タブを閉じても終了しない
 - 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
-- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js tests/compare.test.js`。構文確認は `node --check proofreader/static/app.js`。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
+- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js tests/compare.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js` も同様）。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
 ## 構成
@@ -27,11 +27,14 @@ proofreader/
   sources.py   Internet Archive の IIIF マニフェスト・検索・ページ画像（`fetch_scan`）・PDF の URL（`ia_pdf`）
   net.py       外部への HTTP。接続先は ALLOWED のホストに限定
   presence.py  ブラウザのタブの接続状況（自動終了の判定）
-  ocr.py       Claude によるページ画像の読み取り（MODEL = "claude-opus-5-5"）
-  static/      フロントエンド（index.html, app.js, app.css, core.js）。フレームワーク・ビルド無しの素の JS
+  ocr.py       Claude によるページ画像の読み取り（MODEL = "claude-opus-5-5"）と共通の OCR プロンプト
+  providers/   AI 提供元の切り替え（Anthropic は ocr.py、OpenAI は Responses API）
+  importers/   draft.py：PDF の選択範囲から仮 ID の空の本文を作る
+  exporters/   tei.py：基本 TEI P5 出力
+  static/      フロントエンド（index.html, app.js, app.css, core.js, compare.js, workflows.js, vendor/pdfjs/）。フレームワーク・ビルド無しの素の JS
 ```
 
-- フロントは `location.hash` によるルーティング（`#/`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
+- フロントは `location.hash` によるルーティング（`#/`、`#/new`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `newDraftView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
 - 表示設定は `prefs`（localStorage の `proof-prefs`）に保存する。新しい設定項目は `prefs` の既定値 `def` に足す。
 - PDF.js 6.5.438はstatic/vendor/に本体とworkerを同梱。isEvalSupportedはfalse。版を揃えて更新しApache-2.0のLICENSEを保持する。
 - 記号の挿入は `core.js` の `insertMarkup`（Node テストから読む）。`app.js` の「記号：」ボタンから呼ぶ。
@@ -43,7 +46,7 @@ proofreader/
 - **元テキストの忠実さ**：`openiti.split` / `join` は、編集していないページを1文字も変えずに再結合できなければならない。ページ区切り `PageV..P..` は、その直前のテキストがそのページに属する（区切りはページの末尾に来る）。改行・BOM・空白の扱いを変えるときは、未編集のまま書き出した結果が `original.txt` と一致することを確かめる。
 - **書き込みは安全に**：JSON は `store._write_json`（一時ファイル＋`os.replace`）で書く。slug は `store._dir` で検証してからパスに使う。
 - **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。リダイレクト先も ALLOWED で確かめ直す。IA のページ画像は `GET /api/projects/<slug>/scan/<idx>` から `sources.fetch_scan`（IIIF → BookReader の順）で取得し、`store.scan_path` のディスクキャッシュに保存する。サーバは 127.0.0.1 だけで待ち受ける。
-- **OCR**：1ページずつ、校正者がボタンを押したとき（または設定 `autoOcr` が有効でページを開いたとき）だけ実行し、結果は `ocr/<i>.json` に保存して再利用する。API の利用料がかかるため、全ページを一括で読み取るような機能は勝手に足さない。OCR のプロンプトは「刊本の綴りをそのまま写す」方針なので、正規化や補完をさせる方向には変えない。
+- **OCR**：1ページずつ、校正者がボタンを押したとき（または設定 `autoOcr` が有効でページを開いたとき）だけ実行し、結果は `ocr/<i>.json` に保存して再利用する（過去の読みは `ocr/history/<i>/`）。API の利用料がかかるため、全ページを一括で読み取るような機能は勝手に足さない。OCR のプロンプトは「刊本の綴りをそのまま写す」方針なので、正規化や補完をさせる方向には変えない。
 - **HTML への埋め込み**：利用者のデータやテキストをテンプレート文字列に入れるときは `esc()` を通す。
 
 ## コードの書き方
@@ -54,7 +57,8 @@ proofreader/
 
 ## リポジトリ
 
-- `main` ブランチで開発し、`origin`（GitHub: qsarkbir/2026_ArabicTextsProofreading）へ push する。
+- `origin` は GitHub の qsarkbir/2026_ArabicTextsProofreading。`main` はルールセットで保護されており、直接 push・force push・削除はできない。
+- 作業用ブランチで開発して push し、PR を作って `main` にマージする。マージ前に GitHub Actions のテストが成功していることを確かめる。
 - `build-scripts/` と `bustan-proofreader.html` は git 管理外の実験的なもの（Bustan 1点を hOCR と突き合わせて単一 HTML にする試作）。本体のアプリとは独立している。
 - ライセンスはコードが MIT。OpenITI のテキストは CC BY-NC-SA 4.0 なので、テキストやその一部をリポジトリに含めない。
 

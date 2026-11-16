@@ -3,9 +3,10 @@
 projects/<slug>/
   project.json   setup: OpenITI URI, scan source, page mapping
   original.txt   the text as downloaded (never modified)
-  work.json      edits and per-page status / notes
-  ocr/<i>.json   Claude readings, one per page
-  files/         uploaded PDFs
+  work.json      edits, per-page status / notes, revisions and save history
+  ocr/<i>.json   latest AI reading per page; earlier ones in ocr/history/<i>/
+  files/         uploaded or downloaded PDFs
+  cache/scan/    Internet Archive page images (safe to delete)
 """
 import calendar
 import json
