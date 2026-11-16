@@ -24,7 +24,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import net, ocr, openiti, sources, store, providers
+from . import bundle, net, ocr, openiti, sources, store, providers
 from .presence import Presence
 from .exporters import tei
 from .importers import draft
@@ -116,13 +116,13 @@ def image_for(p, i, index=None, draft=""):
         c = src["pages"][idx]
         v = urllib.parse.quote(str(src.get("revision") or src["id"]))
         out = {"index": idx, "key": key, "count": len(src["pages"]), "label": c["label"], "service": c["service"],
-               "w": c["w"], "h": c["h"], "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
+               "w": c.get("w"), "h": c.get("h"), "link": f"https://archive.org/details/{src['id']}/page/n{idx}/mode/1up"}
         if src.get("pdf_file") and not draft:
-            try:
+            try:  # a project restored from a backup has no PDF until it is attached again; use the online image meanwhile
                 v += f"-{store.file_path(p['slug'], src['pdf_file']).stat().st_size}"
-            except OSError:
+                return out | {"pdf": f"/api/projects/{p['slug']}/files/{src['pdf_file']}?v={v}"}
+            except (OSError, KeyError):
                 pass
-            return out | {"pdf": f"/api/projects/{p['slug']}/files/{src['pdf_file']}?v={v}"}
         return out | {"url": f"/api/projects/{p['slug']}/scan/{idx}?w=1600&v={v}" + (f"&draft={draft}" if draft else "")}
     return {"index": idx, "key": key, "missing": not 0 <= idx < src.get("count", 0),
             "count": src.get("count", 0), "pdf": f"/api/projects/{p['slug']}/files/{src['file']}?v={src.get('revision', 'legacy')}"}
@@ -180,6 +180,15 @@ def create_project(h):
         raise ApiError("ページ区切り（PageV..P..）がないテキストは校正できません")
     p = store.create(fetched)
     return project_view(p["slug"])
+
+
+@route("POST", r"/api/projects/import-bundle")
+def import_bundle(h):
+    try:
+        project, text, work = bundle.parse(h.json())
+    except bundle.BundleError as e:
+        raise ApiError(str(e))
+    return project_view(store.create_from_bundle(project, text, work)["slug"])
 
 
 @route("POST", r"/api/projects/upload-text")
@@ -314,7 +323,7 @@ def ia_pdf_status(h, slug):
         job = None
     pending = name if not src.get("pdf_file") and exists else None
     v = f"{rev}-{path.stat().st_size}" if exists else rev
-    return {"available": cached[1], "attached": src.get("pdf_file"), "job": job, "pending": pending, "revision": rev,
+    return {"available": cached[1], "attached": src.get("pdf_file") if exists else None, "job": job, "pending": pending, "revision": rev,
             "v": v, "mismatch": bad[1] if bad and bad[0] == rev else ""}
 
 
@@ -365,11 +374,11 @@ def ia_pdf_attach(h, slug):
     p, src, name = ia_source(slug)
     if str(b.get("revision")) != str(src.get("revision") or src["id"]):
         raise ApiError("資料が変更されています。画面を開き直してください", HTTPStatus.CONFLICT)
-    if src.get("pdf_file") == name:
-        return project_view(slug)
     path = store.file_path(slug, name)
     if not path.is_file():
         raise ApiError("保存したPDFがありません", HTTPStatus.NOT_FOUND)
+    if src.get("pdf_file") == name:
+        return project_view(slug)
     try:
         pages = int(b.get("pages") or 0)
     except (TypeError, ValueError):
@@ -611,6 +620,9 @@ def export(h, slug):
     p = store.load(slug)
     parts = store.parts(slug)
     w = store.work(slug)
+    if fmt == "bundle":
+        data = json.dumps(bundle.build(slug), ensure_ascii=False, indent=1).encode("utf-8")
+        return h.send_download(data, f"{slug}.proofreader.json", "application/json; charset=utf-8")
     if fmt == "tei":
         try:
             data, warnings = tei.export(p, parts, w)
@@ -665,9 +677,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def json(self):
         raw = self.body()
+        def reject(name):
+            raise ValueError(name)
         try:
-            return json.loads(raw) if raw else {}
-        except ValueError:
+            return json.loads(raw, parse_constant=reject) if raw else {}
+        except (ValueError, RecursionError):
             raise ApiError("JSONとして読めません")
 
     def _send(self, status, data, ctype, extra=None, cache="no-store"):
@@ -725,7 +739,20 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, data, ctype, {"Content-Disposition": f"attachment; filename*=UTF-8''{q}"})
         return None
 
+    def origin_ok(self, method):
+        """Only pages served from this server may use it: Host must be local (DNS rebinding), and so must Origin when it is sent and the request changes something (CSRF)."""
+        port = self.server.server_address[1]
+        local = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        origin = self.headers.get("Origin")
+        if port == 80:  # browsers leave the default port out of Host and Origin
+            local |= {"127.0.0.1", "localhost"}
+        if self.headers.get("Host") not in local:
+            return False
+        return method == "GET" or (origin is None or origin in {f"http://{h}" for h in local}) and self.headers.get("Sec-Fetch-Site") not in ("cross-site", "same-site")
+
     def dispatch(self, method):
+        if not self.origin_ok(method):
+            return self._send(403, json.dumps({"error": "このサーバーには、同じアドレスで開いたページからだけアクセスできます"}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
         u = urllib.parse.urlparse(self.path)
         self.query = urllib.parse.parse_qs(u.query)
         path = u.path
@@ -755,10 +782,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b'{"error":"not found"}', "application/json")
 
     def static(self, path):
+        if path == "/mode.js":  # the static files say 'browser'; the server always says 'http'
+            return self._send(200, b"const PROOF_MODE = 'http';\n", "text/javascript; charset=utf-8")
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         target = (STATIC / rel).resolve()
-        if STATIC not in target.parents and target != STATIC / "index.html" or not target.is_file():
-            target = STATIC / "index.html"  # client-side routes
+        if STATIC not in target.parents or not target.is_file():
+            if rel != "index.html":  # relative asset paths under /x/ must not receive index.html
+                return self._send(302, b"", "text/plain", {"Location": "/"})
+            target = STATIC / "index.html"
         self.send_file(target)
 
     def do_GET(self):

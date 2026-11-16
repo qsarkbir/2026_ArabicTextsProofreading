@@ -12,6 +12,20 @@ python -m proofreader
 
 Windows では `start.bat` をダブルクリックしても起動できます（`.venv` があればそれを使います）。ブラウザで http://127.0.0.1:8765/ が開きます。`--port` でポートを、`--no-browser` でブラウザを開かない設定にできます。アプリの画面（タブ）をすべて閉じて約30秒たつと、サーバーは自動的に終了します（通信が途絶えた場合は3分後）。ホーム画面の「アプリを終了」ボタンでも終了できます。自動終了を止めるには `--keep-running` を付けます。作業データは `projects/` に保存されます（環境変数 `PROOF_DATA` で変更可）。
 
+### ブラウザだけで使う（静的版）
+
+サーバーを使わず、静的ファイルとして配信しても校正できます。データはブラウザの IndexedDB に保存されます。
+
+```bash
+python -m http.server -d proofreader/static 8780   # http://127.0.0.1:8780/
+```
+
+OpenITI の URI かテキストファイルからの作成、校正（本文・確認済み・注記）、保存履歴、検索、OpenITI テキスト・注記 CSV・TEI XML の書き出しができます。手元の PDF をページ画像として使うこともできます（「資料・ページ対応」からアップロードして対応を合わせます。ホームの「OpenITIにないテキストをPDFから作成する」も使えます）。PDF はこのブラウザの中に保存されるので、容量に注意してください（足りないときは何も変更せずにお知らせします）。Internet Archive・AI 読み取り・ZIP・差分は、これまでどおり `python -m proofreader` で使います。
+
+**バックアップ**：ブラウザのデータはサイトのデータを消したり容量が足りなくなったりすると失われます。プロジェクトの「書き出し」メニュー、またはホームの「バックアップを書き出す」で `<名前>.proofreader.json` を保存してください（ホームに最後のバックアップの日時と、ブラウザの使用量が出ます）。ホームの「バックアップから読み込む」で、新しいプロジェクトとして戻せます。同じファイルをローカル版（`python -m proofreader`）でも書き出し・読み込みでき、どちらの版で始めた作業も引き継げます。PDF と AI の読み取り結果はバックアップに含まれないので、読み込んだ後に PDF を選び直してください（静的版では校正画面の画像の欄にファイル選択が出ます）。
+
+**GitHub Pages で公開する**：リポジトリの Settings → Pages → Source を「GitHub Actions」にします。以後、テストが成功した `main` への push のたびに `proofreader/static/` が配信されます（`.github/workflows/tests.yml` の `deploy` ジョブ。リポジトリが private の場合、Pages の利用には有料プランが必要で、公開されるサイトは誰でも見られます）。配信されるのはアプリだけで、OpenITI のテキストは利用者のブラウザが GitHub から取得します。
+
 ### Claude OCR を使う場合
 
 ```bash
@@ -98,10 +112,13 @@ Internet Archive の資料は、「資料・ページ対応」の「作業フォ
 
 ```bash
 python -m unittest discover -s tests -v
-node --test tests/core.test.js tests/compare.test.js
+node --test tests/*.test.js
 node --check proofreader/static/app.js
 node --check proofreader/static/workflows.js
 node --check proofreader/static/compare.js
+node --check proofreader/static/local/openiti.js
+node --check proofreader/static/local/work.js
+# local/ の他のファイル（bundle.js・tei.js・store.js・router.js）も同様
 ```
 
 ブラウザ確認用に `python -m tests.preview_server` を実行すると、合成データだけを使うサーバーが `http://127.0.0.1:8772/` で起動します（Internet Archive 形式の `ui-fixture` と PDF の `pdf-fixture`）。最初の保存だけ意図的に失敗するため、再試行を確認できます。既存の `projects/` と有料OCRは使用しません。Ctrl+C で終了すると検証データも削除します。
@@ -110,7 +127,7 @@ node --check proofreader/static/compare.js
 
 変更は作業用ブランチから PR を作って `main` にマージします（`main` への直接 push はできません）。
 
-計画中の静的ブラウザ版（GitHub Pages などでの配信）の設計は [docs/static-design.md](docs/static-design.md) にあります。
+静的ブラウザ版（GitHub Pages などでの配信）の設計と決定事項は [docs/static-design.md](docs/static-design.md) にあります。
 
 PDF表示にはApache-2.0のPDF.js 6.5.438を同梱し、JavaScriptのevalを無効にしています。CDNへの接続は不要です。ただし、特殊なフォント・CMap・WASM補助資源を必要とするPDFは追加対応が必要な場合があります。WebフォントとAI・IA・OpenITIからの取得はネットワークを使用します。
 

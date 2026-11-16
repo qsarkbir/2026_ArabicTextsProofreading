@@ -1,5 +1,6 @@
 """Optional real-browser checks: pip install playwright; python -m tests.browser_smoke."""
 import io
+import json
 import os
 import re
 import signal
@@ -44,6 +45,7 @@ def main():
             page = context.new_page()
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('console', lambda m: errors.append(m.text) if 'Content Security Policy' in m.text else None)
             page.goto(base + '/#/p/ui-fixture/0')
             editor = page.get_by_role('textbox', name='校正テキスト', exact=True)
             expect(editor).to_be_enabled()
@@ -126,7 +128,21 @@ def main():
                 page.get_by_role('button', name='本文・書誌パッケージ（ZIP）').click()
             with zipfile.ZipFile(downloaded.value.path()) as archive:
                 assert 'Updated author' in archive.read('bibliography.json').decode()
-            print('PASS bibliography, TEI and ZIP downloads', flush=True)
+            with page.expect_download() as downloaded:
+                page.get_by_role('button', name='バックアップを書き出す（.proofreader.json）').click()
+            assert downloaded.value.suggested_filename.endswith('.proofreader.json')
+            backup = json.loads(Path(downloaded.value.path()).read_text(encoding='utf-8'))
+            assert backup['app']['mode'] == 'http' and backup['project']['author'] == 'Updated author'
+            assert backup['work']['edits'] and 'نص تجريبي' in list(backup['work']['edits'].values())[0]
+            backup['project']['source'] = None  # PDFs are not part of a backup: a restored project goes to setup to attach one
+            restored = Path(tmp) / 'restored.proofreader.json'
+            restored.write_text(json.dumps(backup, ensure_ascii=False), encoding='utf-8')
+            page.goto(base + '/')
+            page.locator('#bundle').set_input_files(str(restored))
+            expect(page).to_have_url(re.compile(r'#/p/[^/]+_2/setup$'))
+            page.goto(base + '/')
+            expect(page.locator('tbody tr', has_text='Updated author')).to_have_count(2)
+            print('PASS bibliography, TEI, ZIP and backup downloads; backup import', flush=True)
             assert not errors, errors
             browser.close()
     finally:

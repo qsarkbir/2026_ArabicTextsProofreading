@@ -1,0 +1,307 @@
+{
+ "original": "PREFIX#META#Header#End#a PageV1P1b PageV1P2",
+ "sequences": [
+  {
+   "name": "grouping",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "one"
+    },
+    {
+     "i": 0,
+     "now": 1800000010,
+     "revision": 1,
+     "text": "two"
+    },
+    {
+     "i": 0,
+     "now": 1800000299,
+     "revision": 2,
+     "text": "three"
+    },
+    {
+     "i": 0,
+     "now": 1800000300,
+     "revision": 3,
+     "text": "four"
+    },
+    {
+     "i": 0,
+     "now": 1800000700,
+     "revision": 4,
+     "text": "five"
+    }
+   ]
+  },
+  {
+   "name": "checkpoint",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "one"
+    },
+    {
+     "i": 0,
+     "now": 1800000005,
+     "revision": 1,
+     "text": "two"
+    },
+    {
+     "i": 0,
+     "now": 1800000006,
+     "revision": 2,
+     "text": "restored",
+     "checkpoint": true
+    },
+    {
+     "i": 0,
+     "now": 1800000007,
+     "revision": 3,
+     "text": "after"
+    }
+   ]
+  },
+  {
+   "name": "conflict_and_428",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "first"
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 0,
+     "text": "stale"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "text": "missing"
+    },
+    {
+     "i": 0,
+     "now": 1800000003,
+     "revision": 2,
+     "text": "future"
+    },
+    {
+     "i": 0,
+     "now": 1800000004,
+     "revision": 1,
+     "text": "second"
+    }
+   ]
+  },
+  {
+   "name": "done_reset",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "done": true
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 1,
+     "text": "edit"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "revision": 2,
+     "done": true
+    },
+    {
+     "i": 0,
+     "now": 1800000003,
+     "revision": 3,
+     "text": "edit2",
+     "done": true
+    },
+    {
+     "i": 0,
+     "now": 1800000004,
+     "revision": 4,
+     "done": false
+    }
+   ]
+  },
+  {
+   "name": "note_only",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "note": "check this"
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 1,
+     "note": "check that"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "revision": 2,
+     "done": true
+    },
+    {
+     "i": 0,
+     "now": 1800000003,
+     "revision": 3,
+     "note": ""
+    },
+    {
+     "i": 0,
+     "now": 1800000004,
+     "revision": 4,
+     "done": false
+    }
+   ]
+  },
+  {
+   "name": "revert_to_original",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "changed"
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 1,
+     "text": "a "
+    },
+    {
+     "i": 1,
+     "now": 1800000002,
+     "revision": 0,
+     "text": "b ",
+     "done": true
+    }
+   ]
+  },
+  {
+   "name": "no_change",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "x"
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 1,
+     "text": "x"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "revision": 1,
+     "note": "n"
+    },
+    {
+     "i": 0,
+     "now": 1800000003,
+     "revision": 2,
+     "note": "n"
+    }
+   ]
+  },
+  {
+   "name": "cap",
+   "window": 0,
+   "limit": 3,
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "v0"
+    },
+    {
+     "i": 0,
+     "now": 1800000001,
+     "revision": 1,
+     "text": "v1"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "revision": 2,
+     "text": "v2"
+    },
+    {
+     "i": 0,
+     "now": 1800000003,
+     "revision": 3,
+     "text": "v3"
+    },
+    {
+     "i": 0,
+     "now": 1800000004,
+     "revision": 4,
+     "text": "v4"
+    },
+    {
+     "i": 0,
+     "now": 1800000005,
+     "revision": 5,
+     "text": "v5"
+    }
+   ]
+  },
+  {
+   "name": "two_pages",
+   "ops": [
+    {
+     "i": 0,
+     "now": 1800000000,
+     "revision": 0,
+     "text": "p0"
+    },
+    {
+     "i": 1,
+     "now": 1800000001,
+     "revision": 0,
+     "text": "p1",
+     "note": "n"
+    },
+    {
+     "i": 0,
+     "now": 1800000002,
+     "revision": 1,
+     "done": true
+    },
+    {
+     "i": 1,
+     "now": 1800000400,
+     "revision": 1,
+     "text": "p1b"
+    },
+    {
+     "i": 1,
+     "now": 1800000401,
+     "revision": 0,
+     "text": "stale"
+    }
+   ]
+  }
+ ]
+}

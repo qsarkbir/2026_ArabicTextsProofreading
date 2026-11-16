@@ -1,0 +1,355 @@
+[
+ {
+  "slug": "fixture",
+  "offset": 0,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "index": 0,
+  "key": "b593094d232d51ccb7d855714e52d0cb713c9430c74d426bde83d106a940ab1b",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 3,
+  "key": "248323abb0a53710642e65e34c94249ddaca7fe707ecf19c4e0f699d35629f16",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ null,
+ {
+  "index": 4,
+  "key": "62e86da896bd1d9c7f04fc1eb2bb98f57114a9bf59c00e9408e739c902363d7b",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 5,
+  "key": "e5a34104c69237f1de9ddbe335aebe06b84c4967e07d45387d29a03221707901",
+  "missing": true,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": -1,
+  "key": "f1a15f81a6673fdc570ac05bb6c8516b6f7519e048fc47d65738e38b3f91c7da",
+  "missing": true,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "slug": "fixture",
+  "offset": 2,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "index": 2,
+  "key": "8ab58476e235ded02b705b6d2865604c88810f292fd7d20affaf1a2c4b8ce11d",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 5,
+  "key": "e5a34104c69237f1de9ddbe335aebe06b84c4967e07d45387d29a03221707901",
+  "missing": true,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "slug": "fixture",
+  "offset": 2,
+  "anchors": [
+   [
+    2,
+    0
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "slug": "fixture",
+  "offset": 2,
+  "anchors": [
+   [
+    1,
+    3
+   ],
+   [
+    2,
+    0
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "slug": "fixture",
+  "offset": 2,
+  "anchors": [
+   [
+    1,
+    3
+   ],
+   [
+    2,
+    1
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "index": 2,
+  "key": "8ab58476e235ded02b705b6d2865604c88810f292fd7d20affaf1a2c4b8ce11d",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 3,
+  "key": "248323abb0a53710642e65e34c94249ddaca7fe707ecf19c4e0f699d35629f16",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 1,
+  "key": "8671f526ab760156abf2cac3e96f12ea4fe3563914f028e88c2c4200cd68178f",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "slug": "fixture",
+  "offset": 1,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "index": 3,
+  "key": "248323abb0a53710642e65e34c94249ddaca7fe707ecf19c4e0f699d35629f16",
+  "missing": false,
+  "count": 5,
+  "pdf": "<pdf>"
+ },
+ {
+  "slug": "fixture",
+  "offset": 0,
+  "anchors": [
+   [
+    0,
+    4
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "error": 409,
+  "message": "選んだ資料の情報がありません。資料を選び直してください"
+ },
+ {
+  "draft": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "New file.pdf",
+   "count": 3,
+   "revision": "<revision>"
+  },
+  "offset": 0,
+  "anchors": [
+   [
+    0,
+    4
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  }
+ },
+ {
+  "index": 2,
+  "key": "<key>",
+  "missing": false,
+  "count": 3,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 3,
+  "key": "<key>",
+  "missing": true,
+  "count": 3,
+  "pdf": "<pdf>"
+ },
+ {
+  "slug": "fixture",
+  "offset": 0,
+  "anchors": [
+   [
+    0,
+    4
+   ]
+  ],
+  "source": {
+   "type": "pdf",
+   "file": "fixture.pdf",
+   "revision": "fixed-revision",
+   "title": "Fixture.pdf",
+   "count": 5
+  },
+  "draft": false
+ },
+ {
+  "slug": "fixture",
+  "offset": 1,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "New file.pdf",
+   "count": 3,
+   "revision": "<revision>"
+  },
+  "draft": false
+ },
+ {
+  "index": 1,
+  "key": "<key>",
+  "missing": false,
+  "count": 3,
+  "pdf": "<pdf>"
+ },
+ {
+  "index": 4,
+  "key": "<key>",
+  "missing": true,
+  "count": 3,
+  "pdf": "<pdf>"
+ },
+ {
+  "error": 409,
+  "message": "選んだ資料の情報がありません。資料を選び直してください"
+ },
+ {
+  "draft": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "Replaced.pdf",
+   "count": 2,
+   "revision": "<revision>"
+  },
+  "offset": 1,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "New file.pdf",
+   "count": 3,
+   "revision": "<revision>"
+  }
+ },
+ {
+  "draft": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "Latest.pdf",
+   "count": 4,
+   "revision": "<revision>"
+  },
+  "offset": 1,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "New file.pdf",
+   "count": 3,
+   "revision": "<revision>"
+  }
+ },
+ {
+  "error": 409,
+  "message": "選んだ資料の情報がありません。資料を選び直してください"
+ },
+ {
+  "slug": "fixture",
+  "offset": 0,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "Latest.pdf",
+   "count": 4,
+   "revision": "<revision>"
+  },
+  "draft": false
+ },
+ {
+  "slug": "fixture",
+  "offset": 0,
+  "anchors": [],
+  "source": {
+   "type": "pdf",
+   "file": "<file>",
+   "title": "Latest.pdf",
+   "count": 4,
+   "revision": "<revision>"
+  },
+  "draft": false
+ }
+]

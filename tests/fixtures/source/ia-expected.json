@@ -1,0 +1,236 @@
+[
+ [
+  {
+   "slug": "fixture",
+   "offset": 0,
+   "anchors": [],
+   "source": {
+    "type": "ia",
+    "id": "book",
+    "revision": null,
+    "title": "IA book",
+    "count": 6
+   },
+   "draft": false
+  },
+  {
+   "index": 0,
+   "key": "c6f820f3896894351b4c0769892f2780b1d5615c77a50ca9fba4b71421efd9b1",
+   "count": 6,
+   "label": "1",
+   "link": "https://archive.org/details/book/page/n0/mode/1up"
+  },
+  null,
+  {
+   "index": 0,
+   "key": "c6f820f3896894351b4c0769892f2780b1d5615c77a50ca9fba4b71421efd9b1",
+   "count": 6,
+   "label": "1",
+   "link": "https://archive.org/details/book/page/n0/mode/1up"
+  },
+  {
+   "index": 99,
+   "missing": true,
+   "count": 6
+  },
+  {
+   "index": -1,
+   "missing": true,
+   "count": 6
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [],
+   "source": {
+    "type": "ia",
+    "id": "book",
+    "revision": null,
+    "title": "IA book",
+    "count": 6
+   },
+   "draft": false
+  },
+  {
+   "index": 5,
+   "key": "c16d30c7447eff216c52d21b727393b44becf158599f01f748ea2413aec92062",
+   "count": 6,
+   "label": "6",
+   "link": "https://archive.org/details/book/page/n5/mode/1up"
+  },
+  {
+   "index": 6,
+   "missing": true,
+   "count": 6
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [
+    [
+     1,
+     2
+    ]
+   ],
+   "source": {
+    "type": "ia",
+    "id": "book",
+    "revision": null,
+    "title": "IA book",
+    "count": 6
+   },
+   "draft": false
+  },
+  {
+   "index": 5,
+   "key": "c16d30c7447eff216c52d21b727393b44becf158599f01f748ea2413aec92062",
+   "count": 6,
+   "label": "6",
+   "link": "https://archive.org/details/book/page/n5/mode/1up"
+  },
+  {
+   "index": 2,
+   "key": "2ab5bc662c210afaa6e2fdc870f145e4f1632908e974f55b8abf3ca56f7049e9",
+   "count": 6,
+   "label": "3",
+   "link": "https://archive.org/details/book/page/n2/mode/1up"
+  },
+  {
+   "index": 4,
+   "key": "8969b9d98aad18b1fc4760001d3c2a81589d17098de810e3034b98e30166fd3e",
+   "count": 6,
+   "label": "5",
+   "link": "https://archive.org/details/book/page/n4/mode/1up"
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [
+    [
+     1,
+     2
+    ]
+   ],
+   "source": {
+    "type": "ia",
+    "id": "book",
+    "revision": null,
+    "title": "IA book",
+    "count": 6
+   },
+   "draft": false
+  }
+ ],
+ [
+  {
+   "slug": "fixture",
+   "offset": 0,
+   "anchors": [],
+   "source": {
+    "type": "ia",
+    "id": "book/é",
+    "title": "No revision",
+    "count": 3
+   },
+   "draft": false
+  },
+  {
+   "index": 0,
+   "key": "fb922279c0ade40704feefa18383a977accacd846e7ce28a51922f7e742ca910",
+   "count": 3,
+   "label": "n0",
+   "link": "https://archive.org/details/book/é/page/n0/mode/1up"
+  },
+  null,
+  {
+   "index": 0,
+   "key": "fb922279c0ade40704feefa18383a977accacd846e7ce28a51922f7e742ca910",
+   "count": 3,
+   "label": "n0",
+   "link": "https://archive.org/details/book/é/page/n0/mode/1up"
+  },
+  {
+   "index": 99,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "index": -1,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [],
+   "source": {
+    "type": "ia",
+    "id": "book/é",
+    "title": "No revision",
+    "count": 3
+   },
+   "draft": false
+  },
+  {
+   "index": 5,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "index": 6,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [
+    [
+     1,
+     2
+    ]
+   ],
+   "source": {
+    "type": "ia",
+    "id": "book/é",
+    "title": "No revision",
+    "count": 3
+   },
+   "draft": false
+  },
+  {
+   "index": 5,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "index": 2,
+   "key": "c87d8236ef0d1a32f4835dd1e9766ff3ac7adfa469b6cd0c324214cc6712b27b",
+   "count": 3,
+   "label": "n2",
+   "link": "https://archive.org/details/book/é/page/n2/mode/1up"
+  },
+  {
+   "index": 4,
+   "missing": true,
+   "count": 3
+  },
+  {
+   "slug": "fixture",
+   "offset": 5,
+   "anchors": [
+    [
+     1,
+     2
+    ]
+   ],
+   "source": {
+    "type": "ia",
+    "id": "book/é",
+    "title": "No revision",
+    "count": 3
+   },
+   "draft": false
+  }
+ ]
+]

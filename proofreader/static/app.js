@@ -4,16 +4,8 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const view = $('#view'), topbar = $('#topbar');
-
-async function api(method, url, body, headers) {
-  const opt = {method, headers: headers || {}};
-  if (body instanceof Blob || body instanceof ArrayBuffer) opt.body = body;
-  else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
-  const r = await fetch(url, opt);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `${r.status} ${r.statusText}`);
-  return data;
-}
+const browserMode = PROOF_MODE === 'browser';
+document.documentElement.dataset.mode = PROOF_MODE;
 
 let toastT;
 function toast(msg, err) {
@@ -35,11 +27,13 @@ async function beat() {
     if (!serverGone) { serverGone = true; $('#offline').hidden = false; }
   }
 }
-beatT = setInterval(beat, 20000); beat();
-window.addEventListener('pageshow', beat);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beat(); });
-document.addEventListener('resume', beat);
-window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
+if (!browserMode) {
+  beatT = setInterval(beat, 20000); beat();
+  window.addEventListener('pageshow', beat);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beat(); });
+  document.addEventListener('resume', beat);
+  window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
+}
 
 const prefs = (() => {
   const def = {vowels: false, ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrProvider: 'anthropic', openaiModel: '', ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width', editorH: null};
@@ -52,9 +46,9 @@ const prefs = (() => {
 let pdfLib, pdfLoading, pdfDocs = {}, pdfTasks = {};
 async function loadPdf(url) {
   if (!pdfLib) {
-    if (!pdfLoading) pdfLoading = import('/vendor/pdfjs/6.5.438/pdf.min.mjs')
+    if (!pdfLoading) pdfLoading = import('./vendor/pdfjs/6.5.438/pdf.min.mjs')
       .then(lib => {
-        lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/6.5.438/pdf.worker.min.mjs';
+        lib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdfjs/6.5.438/pdf.worker.min.mjs', document.baseURI).href;
         return lib;
       }).catch(error => { pdfLoading = null; throw new Error('PDF表示ライブラリを読み込めませんでした: ' + error.message); });
     pdfLib = await pdfLoading;
@@ -71,6 +65,28 @@ async function releasePdf(url) {
   delete pdfTasks[url]; delete pdfDocs[url];
   if (task) await task.destroy();
 }
+// ブラウザ版：ルーターが退役させた Blob URL（付け直し・確定・資料の差し替え・未確定の資料の破棄）の文書を破棄してから URL を失効させる
+if (browserMode) LocalRouter.setReleaser(async urls => { for (const u of urls) { await releasePdf(u).catch(() => {}); URL.revokeObjectURL(u); } });
+// PDF をこのブラウザに付け直すための選択欄（バックアップから戻した資料用）。対応（offset・anchors）は変えない
+function reattachControl(box, {slug, source, api, life, done}) {
+  box.innerHTML = `<p>この資料のPDF（${esc(source.title || source.file)}・${source.count}ページ）はこのブラウザにありません。バックアップにはPDFが含まれないため、元のPDFを選び直してください。ページの対応はそのまま使います。</p>
+    <input type="file" id="reattach" aria-label="PDFを選び直す" accept="application/pdf"> <span id="reattachmsg" class="small" role="status"></span>`;
+  $('#reattach').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const msg = $('#reattachmsg'), input = e.target;
+    msg.textContent = 'PDFを確認しています…'; input.disabled = true;
+    const url = URL.createObjectURL(f);
+    try {
+      const pages = (await loadPdf(url)).numPages;
+      if (!life.alive) return;
+      if (pages !== source.count && !confirm(`選んだPDFは${pages}ページで、資料の記録（${source.count}ページ）と違います。別の版のPDFかもしれません。このまま使いますか？`)) { msg.textContent = ''; input.value = ''; input.disabled = false; return; }
+      msg.textContent = '保存しています…';
+      const p = await api('POST', `/api/projects/${slug}/source/pdf/attach`, f, {'X-Page-Count': String(pages)});
+      await done(p);
+    } catch (err) { if (life.alive) { toast(err.message, true); msg.textContent = ''; input.value = ''; input.disabled = false; } }
+    finally { await releasePdf(url); URL.revokeObjectURL(url); }
+  };
+}
 async function renderPdfPage(url, index, width) {
   const doc = await loadPdf(url);
   if (index < 0 || index >= doc.numPages) return null;
@@ -85,7 +101,13 @@ async function renderPdfPage(url, index, width) {
 
 // ---------- routing ----------
 window.addEventListener('hashchange', routeNow);
-let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash;
+let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash, pdfOwner = null;
+// ブラウザ版：PDF は IndexedDB の Blob を object URL で pdf.js に渡す。ほかのプロジェクトや一覧へ移るとき、読み込み済みの PDF と URL を解放する
+// keep: いま使う URL。空なら（別のプロジェクトや一覧へ移るとき）すべて失効させる
+async function dropBrowserPdfs(keep = []) {
+  await Promise.all(Object.keys(pdfDocs).filter(url => !keep.includes(url)).map(url => releasePdf(url).catch(() => {})));
+  if (!keep.length) LocalRouter.revokeUrls();
+}
 let activeView = null;
 function lifecycle() {
   const life = {alive: true, cleanup: []};
@@ -111,6 +133,12 @@ async function routeNow() {
   currentHash = location.hash;
   const h = location.hash.replace(/^#\/?/, '').split('/');
   topbar.innerHTML = '';
+  if (browserMode) {
+    const owner = h[0] === 'p' && h[1] ? h[1] : null, inSetup = owner && h[2] === 'setup';
+    LocalRouter.clearDrafts(inSetup ? owner : null); // 未確定の資料は、設定画面を離れたら捨てる
+    if (owner !== pdfOwner) { pdfOwner = owner; await dropBrowserPdfs(); }
+    else await dropBrowserPdfs(LocalRouter.urlsOf(owner, inSetup)); // 同じプロジェクトでは、いまの資料の文書以外を解放する
+  }
   try {
     if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
     else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
@@ -123,10 +151,32 @@ async function routeNow() {
 }
 
 // ---------- home ----------
+const megabytes = n => `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`;
+async function storageNote() {
+  try {
+    const {usage, quota} = await navigator.storage.estimate();
+    const kept = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    return `使用量：${megabytes(usage)}（上限の目安 ${megabytes(quota)}）。ブラウザによる自動削除の保護：${kept ? 'あり' : 'なし'}`;
+  } catch (e) { return ''; }
+}
+const backupLabel = t => { const d = t ? new Date(t) : null; return d && !isNaN(d) ? d.toLocaleString('ja-JP') : '未バックアップ'; };
+
 async function homeView(life) {
   const api = life.api;
   document.title = 'OpenITI 校正';
-  const list = await api('GET', '/api/projects');
+  const table = async () => {
+    const list = await api('GET', '/api/projects');
+    return list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th>${browserMode ? '<th>最後のバックアップ</th>' : ''}<th></th></tr></thead><tbody>
+        ${list.map(p => `<tr>
+          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div>${browserMode && p.pdf_size ? `<div class="muted small">PDF ${megabytes(p.pdf_size)}</div>` : ''}</td>
+          <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
+          <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
+          <td class="prog">${p.edited}</td>
+          ${browserMode ? `<td class="small">${esc(backupLabel(p.backup))}</td>` : ''}
+          <td><a href="#/p/${esc(p.slug)}${p.source || browserMode ? '' : '/setup'}"><button>${p.source || browserMode ? '開く' : '設定を続ける'}</button></a>
+            <a href="/api/projects/${esc(p.slug)}/export?fmt=bundle" data-bundle><button>バックアップを書き出す</button></a></td>
+        </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>';
+  };
   view.innerHTML = `<div class="wrap">
     <div class="card">
       <h2>新しいテキストを読み込む</h2><p><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
@@ -135,19 +185,39 @@ async function homeView(life) {
         <button class="primary" id="go">読み込む</button>
       </div>
       <div class="row" style="margin-top:8px"><label class="muted small" for="file">または手元のOpenITI形式ファイル：</label><input type="file" id="file" accept=".txt,.mARkdown,.completed,.inProgress,text/plain"></div>
+      <div class="row" style="margin-top:8px"><label class="muted small" for="bundle">バックアップから読み込む（.proofreader.json）：</label><input type="file" id="bundle" accept=".json,application/json"></div>
     </div>
     <div class="card">
       <h2>校正中のテキスト</h2>
-      ${list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th><th></th></tr></thead><tbody>
-        ${list.map(p => `<tr>
-          <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div></td>
-          <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
-          <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
-          <td class="prog">${p.edited}</td>
-          <td><a href="#/p/${p.slug}${p.source ? '' : '/setup'}"><button>${p.source ? '開く' : '設定を続ける'}</button></a></td>
-        </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>'}
+      ${browserMode ? '<p class="muted small">このブラウザの中に保存されます。サイトのデータを消したり、容量が足りなくなったりすると失われることがあります。「バックアップを書き出す」で定期的にファイルへ保存してください。</p><p class="muted small" id="usage"></p>' : ''}
+      <div id="plist">${await table()}</div>
     </div>
-    <div class="row" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
+    <div class="row needs-server" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
+  const refresh = async () => { $('#plist').innerHTML = await table(); if (browserMode) $('#usage').textContent = await storageNote(); };
+  if (browserMode) {
+    storageNote().then(t => { if (life.alive) $('#usage').textContent = t; });
+    if (typeof BroadcastChannel !== 'undefined') { // 別のタブでの保存・作成・バックアップを一覧に反映する
+      const channel = new BroadcastChannel('proofreader');
+      channel.onmessage = () => refresh().catch(() => {});
+      life.cleanup.push(() => channel.close());
+    }
+  }
+  $('#plist').addEventListener('click', async e => {
+    const link = e.target.closest('a[data-bundle]');
+    if (!link || !browserMode) return;
+    e.preventDefault();
+    try { await saveDownload(link.getAttribute('href')); await refresh(); } catch (err) { if (life.alive) toast(err.message, true); }
+  });
+  $('#bundle').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      let data;
+      try { data = JSON.parse(await f.text()); } catch (err) { throw new Error('JSONとして読めません。バックアップのファイルを選んでください'); }
+      const p = await api('POST', '/api/projects/import-bundle', data);
+      toast('バックアップから読み込みました');
+      location.hash = browserMode || p.source ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`;
+    } catch (err) { if (life.alive) { toast(err.message, true); e.target.value = ''; } }
+  };
   $('#quit').onclick = async () => {
     if (!confirm('アプリを終了しますか？ 他のタブで開いている画面も使えなくなります。')) return;
     try { await api('POST', '/api/shutdown'); } catch (e) { if (life.alive) toast(e.message, true); return; }
@@ -157,14 +227,14 @@ async function homeView(life) {
   const go = async () => {
     const ref = $('#ref').value.trim(); if (!ref) return;
     $('#go').disabled = true; $('#go').textContent = '取得中…';
-    try { const p = await api('POST', '/api/projects', {ref}); location.hash = `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects', {ref}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
     catch (e) { if (life.alive) { toast(e.message, true); $('#go').disabled = false; $('#go').textContent = '読み込む'; } }
   };
   $('#go').onclick = go;
   $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
   $('#file').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
     catch (err) { if (life.alive) toast(err.message, true); }
   };
 }
@@ -177,7 +247,7 @@ async function setupView(slug, from, life) {
   topbar.innerHTML = `<span class="ar">${esc(p.title)}</span><span class="muted small">${esc(p.uri)}</span>`;
   if (!(from >= 0 && from < p.pages.length)) from = null;
   // cancelling leaves the project as it was: back to the page we came from, or home before setup is finished
-  const cancel = () => { location.hash = p.source ? `#/p/${slug}${from == null ? '' : '/' + from}` : '#/'; };
+  const cancel = () => { if (browserMode) LocalRouter.clearDrafts(null); location.hash = p.source ? `#/p/${slug}${from == null ? '' : '/' + from}` : '#/'; };
 
   const renderSource = async () => {
     const terms = (await api('GET', `/api/projects/${slug}/search-terms`)).q;
@@ -186,6 +256,7 @@ async function setupView(slug, from, life) {
       <div class="card">
         <div class="row"><h2>ページ画像を選ぶ</h2><span style="flex:1"></span><button id="cancel">キャンセル</button></div>
         ${p.source ? '<p class="help">資料を選んでも、次の画面で対応を確定するまで現在の資料・対応は変わりません。</p>' : ''}
+        <div class="needs-server">
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
@@ -193,7 +264,9 @@ async function setupView(slug, from, life) {
         <div id="results" class="results"></div>
         <h3>識別子・URLを直接指定</h3>
         <div class="row"><input type="text" id="iaid" aria-label="Internet Archiveの識別子またはURL" placeholder="例：ElBoustane または https://archive.org/details/ElBoustane"><button id="useid">使う</button></div>
+        </div>
         <h3>手元のPDFをアップロード</h3>
+        ${browserMode ? '<p class="muted small">PDFはこのブラウザの中に保存されます（容量に注意してください）。バックアップには含まれないので、別の環境では選び直します。</p>' : ''}
         <div class="row"><input type="file" id="pdf" aria-label="ページ画像のPDF" accept="application/pdf"><span id="pdfmsg" class="muted small" role="status"></span></div>
       </div></div>`;
     const card = r => `<div class="res"><img loading="lazy" src="${esc(r.thumb)}" alt="">
@@ -242,7 +315,7 @@ async function setupView(slug, from, life) {
       } catch (err) { if (life.alive && $('#pdfmsg')) { $('#pdfmsg').textContent = ''; toast(err.message, true); } }
       finally { if (url) { await releasePdf(url); URL.revokeObjectURL(url); } sourceBusy = false; lock(false); }
     };
-    if (!p.candidates.length && terms) search();
+    if (!p.candidates.length && terms && !browserMode) search();
   };
 
   // draft: a newly chosen source that the server keeps aside until this mapping is confirmed
@@ -261,6 +334,7 @@ async function setupView(slug, from, life) {
     let img = !draft && pg.image ? pg.image.index : ref;
     const initialImg = img;
     const total = src.count;
+    const noImage = browserMode && src.type === 'ia'; // 画像を出せないので、対応を動かす操作はできない（いまの対応を壊さない）
     view.innerHTML = `<div class="wrap">
       <div class="steps"><span>1. テキスト ✓</span>›<span>2. ページ画像 ✓</span>›<span class="on">3. ページの対応</span></div>
       <div class="card">
@@ -278,7 +352,8 @@ async function setupView(slug, from, life) {
           <button id="cancel">キャンセル</button>
           <button class="primary" id="ok">${draft ? 'この資料と対応で確定する' : 'この対応で校正を続ける'}</button>
         </div>
-        ${!draft && src.type === 'ia' ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
+        ${noImage ? '<p class="help">Internet Archive の画像はブラウザ版では表示できないため、ここでは対応を変えられません（現在の対応は保たれています）。手元のPDFを選ぶか、ローカル版を使ってください。</p>' : ''}
+        ${!draft && src.type === 'ia' && !browserMode ? '<div class="row small" id="pdfrow" role="status"></div>' : ''}
         <div class="match"><div class="pane"><pre class="ar">${esc(pg.original.trim())}</pre></div><div class="pane" id="mimg"></div></div>
       </div></div>`;
     let previewVersion = 0;
@@ -294,10 +369,16 @@ async function setupView(slug, from, life) {
         $('#mretry').onclick = show;
       };
       box.innerHTML = '<div class="imgmsg">読み込み中…</div>';
+      if (noImage) { box.innerHTML = '<div class="imgmsg">Internet Archive の画像は、ブラウザ版では表示できません。手元のPDFを選ぶか、ローカル版を使ってください</div>'; return; }
       try {
         const image = await api('GET', `/api/projects/${slug}/image?index=${img}${draftQ}`);
         if (!current()) return;
         if (!image || image.missing) { box.innerHTML = '<div class="imgmsg">画像がありません</div>'; return; }
+        if (image.no_file) {
+          const holder = document.createElement('div'); holder.className = 'imgmsg'; box.replaceChildren(holder);
+          reattachControl(holder, {slug, source: p.source, api, life, done: async updated => { p = updated; toast('PDFを保存しました'); await renderMatch(); }});
+          return;
+        }
         if (image.url) {
           const el = new Image();
           el.alt = '原本のページ画像';
@@ -313,9 +394,11 @@ async function setupView(slug, from, life) {
     };
     for (const [id, d] of [['m10', -10], ['m1', -1], ['p1', 1], ['p10', 10]]) $('#' + id).onclick = () => { img += d; show(); };
     $('#imgn').onchange = e => { img = (parseInt(e.target.value, 10) || 1) - 1; show(); };
-    $('#chg').onclick = () => renderSource().catch(e => { if (life.alive) toast(e.message, true); });
+    if (noImage) for (const id of ['m10', 'm1', 'p1', 'p10', 'imgn', 'ok']) $('#' + id).disabled = true;
+    $('#chg').onclick = () => { if (browserMode) LocalRouter.clearDrafts(null); renderSource().catch(e => { if (life.alive) toast(e.message, true); }); };
     $('#cancel').onclick = cancel;
     $('#ok').onclick = async () => {
+      if (noImage) return;
       $('#ok').disabled = true;
       try {
         if (draft) await api('POST', `/api/projects/${slug}/mapping`, {source: draft.revision, offset: img - ref, clear_anchors: true});
@@ -393,7 +476,7 @@ async function setupView(slug, from, life) {
 async function proofView(slug, idx, life) {
   const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
-  if (!p.source) { location.hash = `#/p/${slug}/setup`; return; }
+  if (!p.source && !browserMode) { location.hash = `#/p/${slug}/setup`; return; }
   const providerInfo = () => p.ocr_providers?.[$('#ocrprovider').value] || {available: p.ocr, reason:p.ocr_reason};
   const canOcr = () => providerInfo().available && !!$('#ocrm').value.trim();
   const N = p.pages.length;
@@ -418,7 +501,7 @@ async function proofView(slug, idx, life) {
     <div class="grp" style="margin-left:auto">
       <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
       <button id="findb">ページを探す</button><button id="bibliob">書誌</button>
-      <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
+      <div class="menu needs-server"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
         <label><input type="checkbox" data-k="punct"> 句読点・記号の違いを無視</label>
         <label><input type="checkbox" data-k="space"> 語の続け書き・分かち書きの違いを無視</label>
@@ -429,10 +512,11 @@ async function proofView(slug, idx, life) {
       </div></div>
       <div class="menu"><button id="expb">書き出し</button><div class="pop" id="exp" hidden>
         <a href="/api/projects/${slug}/export?fmt=text"><button style="width:100%">校正済みテキスト（OpenITI形式）</button></a>
-        <a href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
+        <a class="needs-server" href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
         <a href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
-        <a href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
+        <a class="needs-server" href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
         <a href="/api/projects/${slug}/export?fmt=notes"><button style="width:100%">注記・確認状況（CSV）</button></a>
+        <a href="/api/projects/${slug}/export?fmt=bundle"><button style="width:100%">バックアップを書き出す（.proofreader.json）</button></a>
       </div></div>
     </div>`;
 
@@ -441,7 +525,7 @@ async function proofView(slug, idx, life) {
     <label>対象 <select id="findfilter"><option value="all">すべて</option><option value="todo">未確認</option><option value="edited">修正あり</option><option value="noted">注記あり</option></select></label>
     <button type="submit">検索</button><button type="button" id="findclose">閉じる</button></form>
     <div id="findresults" aria-live="polite"></div></dialog><div class="proof">
-    <section class="imgpane">
+    <section class="imgpane${browserMode && !p.source ? ' needs-server' : ''}">
       <div class="toolbar">
         <button id="zo" aria-label="画像を縮小">−</button><button id="zv" class="small" title="100%に戻す"></button><button id="zi" aria-label="画像を拡大">+</button>
         <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
@@ -462,7 +546,7 @@ async function proofView(slug, idx, life) {
         <button id="historyb">保存履歴</button><button id="revert" hidden>原文に戻す</button>
         <span class="saved" id="saved" role="status" aria-live="polite">保存済み</span><button id="retry" hidden>保存を再試行</button>
       </div>
-      <div class="ocrpane">
+      <div class="ocrpane needs-server">
         <div class="ocrhead">
           <button id="ocrb" class="primary">AIで読み取る</button>
           <select id="ocrprovider" aria-label="AI提供元">${Object.entries(p.ocr_providers || {}).map(([k,v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('')}</select>
@@ -560,7 +644,10 @@ async function proofView(slug, idx, life) {
   $('#prev').disabled = idx === 0; $('#next').disabled = idx === N - 1;
   for (const link of document.querySelectorAll('#exp a')) link.onclick = async e => {
     e.preventDefault();
-    try { await flush(); if (life.alive) location.assign(link.href); } catch (e) {}
+    try { await flush(); } catch (e) { return; }
+    if (!life.alive) return;
+    if (!browserMode) { location.assign(link.href); return; }
+    try { await saveDownload(link.getAttribute('href')); } catch (e) { toast(e.message, true); }
   };
   const finder = $('#finder');
   let searchVersion = 0;
@@ -631,6 +718,16 @@ async function proofView(slug, idx, life) {
   observer.observe(imgview);
   life.cleanup.push(() => observer.disconnect());
   let imageVersion = 0;
+  // バックアップから戻した資料には PDF が無いので、選び直してもらう（ページ数が記録と違えば確認する）
+  const reattachPrompt = im => {
+    const box = document.createElement('div'); box.className = 'imgmsg'; imgview.replaceChildren(box);
+    reattachControl(box, {slug, source: p.source, api, life, done: async updated => {
+      p = updated;
+      pg = {...pg, image: await api('GET', `/api/projects/${slug}/image?index=${im.index}`)};
+      toast('PDFを保存しました');
+      showImage();
+    }});
+  };
   const showImage = async () => {
     const version = ++imageVersion;
     const im = pg.image;
@@ -641,6 +738,8 @@ async function proofView(slug, idx, life) {
     };
     $('#imginfo').textContent = im ? `画像 ${im.index + 1}/${im.count}${im.label && im.label !== String(im.index) ? `（${im.label}）` : ''}` : '';
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
+    if (browserMode && p.source && p.source.type === 'ia') { imgview.innerHTML = '<div class="imgmsg">この資料は Internet Archive の画像です。ブラウザ版では表示できません。ローカル版（python -m proofreader）で開くか、「資料・ページ対応」から手元のPDFを選んでください。</div>'; return; }
+    if (im && im.no_file) { reattachPrompt(im); return; }
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。未割当の末尾の場合は、本文を確認してページ区切りを原本に照らして整理してください。</div>'; return; }
     if (im.url) {
       imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
@@ -681,7 +780,7 @@ async function proofView(slug, idx, life) {
       const mapped = await api('GET', `/api/projects/${slug}/pages/${idx}`);
       pg = {...pg, image: mapped.image, ocr: mapped.ocr};
       ocr = latestReading = pg.ocr;
-      await refreshReadings();
+      if (!browserMode) await refreshReadings();
       toast('このページ以降の画像の対応をずらしました');
       showImage(); renderDiff();
     } catch (e) { if (life.alive) toast(e.message, true); }
@@ -689,6 +788,8 @@ async function proofView(slug, idx, life) {
   };
   $('#shl').onclick = () => shift(-1);
   $('#shr').onclick = () => shift(1);
+  const shiftOff = browserMode && !!p.source && p.source.type === 'ia'; // 画像を見られないままずらさない
+  if (shiftOff) { $('#shl').disabled = $('#shr').disabled = true; $('#shl').title = $('#shr').title = 'ブラウザ版では Internet Archive の画像を表示できないため、対応をずらせません'; }
   showImage();
 
   // OCR + diff
@@ -770,7 +871,7 @@ async function proofView(slug, idx, life) {
       await refreshReadings();
       renderDiff();
     } catch (e) { if (life.alive) { $('#ocrmsg').textContent = ''; toast(e.message, true); } }
-    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = false; } }
+    finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = shiftOff; } }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
   const ocrm = $('#ocrm'), providerSelect = $('#ocrprovider');
@@ -796,7 +897,7 @@ async function proofView(slug, idx, life) {
     $('#readings').innerHTML = '<option value="">現在の読み</option>' + readings.map((r, i) => `<option value="${i}">${esc(r.time || '')} ${esc(r.provider || 'anthropic')} ${esc(r.model || '')}</option>`).join('');
   };
   $('#readings').onchange = e => { ocr = e.target.value === '' ? latestReading : readings[+e.target.value]; renderDiff(); };
-  refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
+  if (!browserMode) refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
   $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { await flush(); ed.value = text; textChanged(); save({checkpoint: true}); renderDiff(); await flush(); });
   $('#bibliob').onclick = () => editBibliography(life, p, updated => { p = updated; });
   renderDiff();

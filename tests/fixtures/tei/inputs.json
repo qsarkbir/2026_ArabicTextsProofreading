@@ -1,0 +1,414 @@
+[
+ {
+  "name": "paragraph-and-continuation",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# one PageV01P001\n~~ two\n# left %~% right\nPageV01P002\n",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "note & <literal>"
+    }
+   }
+  }
+ },
+ {
+  "name": "heading-and-tail",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "### | Chapter\n# hello PageV01P001\nTAIL",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "note & <literal>"
+    }
+   }
+  }
+ },
+ {
+  "name": "editor-section",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "### |EDITOR|\n# editorial PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "note & <literal>"
+    }
+   }
+  }
+ },
+ {
+  "name": "unknown-tags",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "### $ unknown\n# hello PageV01P001",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "note & <literal>"
+    }
+   }
+  }
+ },
+ {
+  "name": "two-volumes",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "PageV01P001\nPageV02P001\n",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "note & <literal>"
+    }
+   }
+  }
+ },
+ {
+  "name": "nested-headings",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "### | A\n### || B\n# text PageV01P001\n### ||| C\n# more\n### | D\n# last PageV01P002\n### |   \n# x PageV01P003",
+  "work": {
+   "edits": {},
+   "status": {
+    "1": {
+     "note": "second"
+    },
+    "2": {
+     "done": true
+    }
+   }
+  }
+ },
+ {
+  "name": "ia-facs-anchors",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": {
+    "type": "ia",
+    "id": "syn-book",
+    "pages": [
+     {},
+     {},
+     {},
+     {},
+     {},
+     {}
+    ]
+   },
+   "offset": 1,
+   "anchors": [
+    [
+     2,
+     4
+    ]
+   ],
+   "raw_url": "https://example.org/a?b=1&c=\"2\""
+  },
+  "text": "# a PageV01P001\n# b PageV01P002\n# c PageV01P003\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "ia-out-of-range",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": {
+    "type": "ia",
+    "id": "syn",
+    "pages": [
+     {}
+    ]
+   },
+   "offset": 0
+  },
+  "text": "# a PageV01P001\n# b PageV01P002\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "special-characters",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "\ufeff#META#Header#End#\r\n# a & b < c > d \"q\" 's' PageV01P001\r\n# \u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645 \ud83d\ude00\u2028second PageV01P002\u000bthird\r\n",
+  "work": {
+   "edits": {
+    "1": "# edited & <x>\n~~ cont \"q\"\n"
+   },
+   "status": {
+    "0": {
+     "note": "quote \" & \t tab\nnewline"
+    }
+   }
+  }
+ },
+ {
+  "name": "verse-and-wrapping",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# a %~% b %~% c\n#\u00a0x %~% y PageV01P001\n~~ wrapped\n~~ again\n# new PageV01P002\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "unassigned-tail",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# a PageV01P001\n# b\nunassigned tail text\nmore\n",
+  "work": {
+   "edits": {},
+   "status": {
+    "1": {
+     "note": "tail note"
+    }
+   }
+  }
+ },
+ {
+  "name": "unassigned-with-notes",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# a PageV01P001\n   \n",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "only"
+    },
+    "1": {
+     "note": "on tail"
+    }
+   }
+  }
+ },
+ {
+  "name": "empty-body",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "no-title-no-author",
+  "project": {
+   "uri": "fixture",
+   "title": "",
+   "author": "",
+   "bibliography": {},
+   "source": null,
+   "raw_url": ""
+  },
+  "text": "# a PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "bibliography-fields",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Ed",
+    "source": "Src",
+    "rights": "CC"
+   },
+   "source": null,
+   "raw_url": "https://example.org/x"
+  },
+  "text": "# a PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "word-boundary-tags",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# xms12 PageV01P001\n# ms12 here\n# \u00e9mail@\u00e9.example\n# user@ plain\n# \u0663ms\u0664 PageV01P002\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "word-boundary-plain",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# \u00e9msx PageV01P001\n# a@ b\n# m s12\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "control-character-error",
+  "project": {
+   "uri": "fixture",
+   "title": "bad \u0001 title",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# a PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ },
+ {
+  "name": "lone-surrogate-error",
+  "project": {
+   "uri": "fixture",
+   "title": "Synthetic & <edition>",
+   "author": "Synthetic author",
+   "bibliography": {
+    "edition": "Synthetic source",
+    "rights": "Test data"
+   },
+   "source": null
+  },
+  "text": "# a\ud800b PageV01P001\n",
+  "work": {
+   "edits": {},
+   "status": {}
+  }
+ }
+]

@@ -18,10 +18,20 @@ jobs:
         with:
           node-version: '22'
       - run: python -m unittest discover -s tests -v
-      - run: node --test tests/core.test.js tests/compare.test.js
+      - run: node --test tests/*.test.js
       - run: node --check proofreader/static/app.js
       - run: node --check proofreader/static/workflows.js
       - run: node --check proofreader/static/compare.js
+      - run: node --check proofreader/static/local/openiti.js
+      - run: node --check proofreader/static/local/work.js
+      - run: node --check proofreader/static/local/store.js
+      - run: node --check proofreader/static/local/bundle.js
+      - run: node --check proofreader/static/local/tei.js
+      - run: node --check proofreader/static/local/draft.js
+      - run: node --check proofreader/static/local/router.js
+      - run: node --check proofreader/static/backend.js
+      - run: node --check proofreader/static/mode.js
+      - run: node --check tests/tei_fixtures.js
   browser-and-tei:
     runs-on: ubuntu-latest
     steps:
@@ -29,8 +39,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: pip install playwright lxml
       - run: python -m playwright install --with-deps chromium
       - run: python -m tests.browser_smoke
+      - run: python -m tests.browser_static_smoke
       - run: curl --fail --location --retry 2 -o /tmp/tei_all.rng https://www.tei-c.org/Vault/P5/4.12.0/xml/tei/custom/schema/relaxng/tei_all.rng
-      - run: python -m tests.validate_tei /tmp/tei_all.rng
+      - run: node tests/tei_fixtures.js /tmp/tei-js
+      - run: python -m tests.validate_tei /tmp/tei_all.rng /tmp/tei-js
+  deploy:
+    needs: [core, browser-and-tei]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      contents: read  # checkout (needed when the repository is private)
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: proofreader/static
+      - id: deployment
+        uses: actions/deploy-pages@v4
