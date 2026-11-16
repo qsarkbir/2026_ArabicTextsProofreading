@@ -4,16 +4,8 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const view = $('#view'), topbar = $('#topbar');
-
-async function api(method, url, body, headers) {
-  const opt = {method, headers: headers || {}};
-  if (body instanceof Blob || body instanceof ArrayBuffer) opt.body = body;
-  else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
-  const r = await fetch(url, opt);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `${r.status} ${r.statusText}`);
-  return data;
-}
+const browserMode = PROOF_MODE === 'browser';
+document.documentElement.dataset.mode = PROOF_MODE;
 
 let toastT;
 function toast(msg, err) {
@@ -35,11 +27,13 @@ async function beat() {
     if (!serverGone) { serverGone = true; $('#offline').hidden = false; }
   }
 }
-beatT = setInterval(beat, 20000); beat();
-window.addEventListener('pageshow', beat);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beat(); });
-document.addEventListener('resume', beat);
-window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
+if (!browserMode) {
+  beatT = setInterval(beat, 20000); beat();
+  window.addEventListener('pageshow', beat);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') beat(); });
+  document.addEventListener('resume', beat);
+  window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/bye', JSON.stringify({client: clientId})); } catch (e) {} });
+}
 
 const prefs = (() => {
   const def = {vowels: false, ortho: true, punct: true, space: true, header: false, foot: false, autoOcr: false, ocrProvider: 'anthropic', openaiModel: '', ocrModel: 'claude-opus-5-5', zoom: 100, fit: 'width', editorH: null};
@@ -52,9 +46,9 @@ const prefs = (() => {
 let pdfLib, pdfLoading, pdfDocs = {}, pdfTasks = {};
 async function loadPdf(url) {
   if (!pdfLib) {
-    if (!pdfLoading) pdfLoading = import('/vendor/pdfjs/6.5.438/pdf.min.mjs')
+    if (!pdfLoading) pdfLoading = import('./vendor/pdfjs/6.5.438/pdf.min.mjs')
       .then(lib => {
-        lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/6.5.438/pdf.worker.min.mjs';
+        lib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdfjs/6.5.438/pdf.worker.min.mjs', document.baseURI).href;
         return lib;
       }).catch(error => { pdfLoading = null; throw new Error('PDF表示ライブラリを読み込めませんでした: ' + error.message); });
     pdfLib = await pdfLoading;
@@ -112,9 +106,9 @@ async function routeNow() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   topbar.innerHTML = '';
   try {
-    if (h[0] === 'p' && h[1] && h[2] === 'setup') await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
+    if (h[0] === 'p' && h[1] && h[2] === 'setup' && !browserMode) await setupView(h[1], h[3] ? parseInt(h[3], 10) : null, life);
     else if (h[0] === 'p' && h[1]) await proofView(h[1], h[2] ? parseInt(h[2], 10) : null, life);
-    else if (h[0] === 'new') await newDraftView(life);
+    else if (h[0] === 'new' && !browserMode) await newDraftView(life);
     else await homeView(life);
   } catch (e) {
     view.innerHTML = `<div class="wrap"><div class="card">読み込めませんでした：${esc(e.message)}　<a href="#/">ホームへ</a></div></div>`;
@@ -129,7 +123,7 @@ async function homeView(life) {
   const list = await api('GET', '/api/projects');
   view.innerHTML = `<div class="wrap">
     <div class="card">
-      <h2>新しいテキストを読み込む</h2><p><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
+      <h2>新しいテキストを読み込む</h2><p class="needs-server"><a href="#/new">OpenITIにないテキストをPDFから作成する</a></p>
       <div class="row">
         <input type="text" id="ref" aria-label="OpenITIのバージョンURIまたはGitHubのURL" placeholder="OpenITIのバージョンURI、またはGitHubのURL（例：1014IbnMaryamTilimsani.Bustan.Kraken22021817402301-ara1）">
         <button class="primary" id="go">読み込む</button>
@@ -138,16 +132,17 @@ async function homeView(life) {
     </div>
     <div class="card">
       <h2>校正中のテキスト</h2>
+      ${browserMode ? '<p class="muted small">このブラウザの中に保存されます。サイトのデータを消したり、容量が足りなくなったりすると失われることがあります。</p>' : ''}
       ${list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th><th></th></tr></thead><tbody>
         ${list.map(p => `<tr>
           <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div></td>
           <td class="small">${esc(p.uri)}</td><td>${p.pages}</td>
           <td><span class="bar"><i style="width:${(100 * p.done / p.pages).toFixed(1)}%"></i></span> <span class="prog">${p.done}</span></td>
           <td class="prog">${p.edited}</td>
-          <td><a href="#/p/${p.slug}${p.source ? '' : '/setup'}"><button>${p.source ? '開く' : '設定を続ける'}</button></a></td>
+          <td><a href="#/p/${p.slug}${p.source || browserMode ? '' : '/setup'}"><button>${p.source || browserMode ? '開く' : '設定を続ける'}</button></a></td>
         </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>'}
     </div>
-    <div class="row" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
+    <div class="row needs-server" style="margin-top:12px"><button id="quit">アプリを終了</button></div></div>`;
   $('#quit').onclick = async () => {
     if (!confirm('アプリを終了しますか？ 他のタブで開いている画面も使えなくなります。')) return;
     try { await api('POST', '/api/shutdown'); } catch (e) { if (life.alive) toast(e.message, true); return; }
@@ -157,14 +152,14 @@ async function homeView(life) {
   const go = async () => {
     const ref = $('#ref').value.trim(); if (!ref) return;
     $('#go').disabled = true; $('#go').textContent = '取得中…';
-    try { const p = await api('POST', '/api/projects', {ref}); location.hash = `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects', {ref}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
     catch (e) { if (life.alive) { toast(e.message, true); $('#go').disabled = false; $('#go').textContent = '読み込む'; } }
   };
   $('#go').onclick = go;
   $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
   $('#file').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
     catch (err) { if (life.alive) toast(err.message, true); }
   };
 }
@@ -393,7 +388,7 @@ async function setupView(slug, from, life) {
 async function proofView(slug, idx, life) {
   const api = life.api;
   let p = await api('GET', `/api/projects/${slug}`);
-  if (!p.source) { location.hash = `#/p/${slug}/setup`; return; }
+  if (!p.source && !browserMode) { location.hash = `#/p/${slug}/setup`; return; }
   const providerInfo = () => p.ocr_providers?.[$('#ocrprovider').value] || {available: p.ocr, reason:p.ocr_reason};
   const canOcr = () => providerInfo().available && !!$('#ocrm').value.trim();
   const N = p.pages.length;
@@ -416,9 +411,9 @@ async function proofView(slug, idx, life) {
     </div>
     <span class="prog" id="prog"></span>
     <div class="grp" style="margin-left:auto">
-      <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
+      <a class="needs-server" href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
       <button id="findb">ページを探す</button><button id="bibliob">書誌</button>
-      <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
+      <div class="menu needs-server"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
         <label><input type="checkbox" data-k="punct"> 句読点・記号の違いを無視</label>
         <label><input type="checkbox" data-k="space"> 語の続け書き・分かち書きの違いを無視</label>
@@ -429,9 +424,9 @@ async function proofView(slug, idx, life) {
       </div></div>
       <div class="menu"><button id="expb">書き出し</button><div class="pop" id="exp" hidden>
         <a href="/api/projects/${slug}/export?fmt=text"><button style="width:100%">校正済みテキスト（OpenITI形式）</button></a>
-        <a href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
-        <a href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
-        <a href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
+        <a class="needs-server" href="/api/projects/${slug}/export?fmt=diff"><button style="width:100%">元テキストとの差分（.diff）</button></a>
+        <a class="needs-server" href="/api/projects/${slug}/export?fmt=tei"><button style="width:100%">TEI XML（基本構造）</button></a>
+        <a class="needs-server" href="/api/projects/${slug}/export?fmt=package"><button style="width:100%">本文・書誌パッケージ（ZIP）</button></a>
         <a href="/api/projects/${slug}/export?fmt=notes"><button style="width:100%">注記・確認状況（CSV）</button></a>
       </div></div>
     </div>`;
@@ -441,7 +436,7 @@ async function proofView(slug, idx, life) {
     <label>対象 <select id="findfilter"><option value="all">すべて</option><option value="todo">未確認</option><option value="edited">修正あり</option><option value="noted">注記あり</option></select></label>
     <button type="submit">検索</button><button type="button" id="findclose">閉じる</button></form>
     <div id="findresults" aria-live="polite"></div></dialog><div class="proof">
-    <section class="imgpane">
+    <section class="imgpane needs-server">
       <div class="toolbar">
         <button id="zo" aria-label="画像を縮小">−</button><button id="zv" class="small" title="100%に戻す"></button><button id="zi" aria-label="画像を拡大">+</button>
         <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
@@ -462,7 +457,7 @@ async function proofView(slug, idx, life) {
         <button id="historyb">保存履歴</button><button id="revert" hidden>原文に戻す</button>
         <span class="saved" id="saved" role="status" aria-live="polite">保存済み</span><button id="retry" hidden>保存を再試行</button>
       </div>
-      <div class="ocrpane">
+      <div class="ocrpane needs-server">
         <div class="ocrhead">
           <button id="ocrb" class="primary">AIで読み取る</button>
           <select id="ocrprovider" aria-label="AI提供元">${Object.entries(p.ocr_providers || {}).map(([k,v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('')}</select>
@@ -560,7 +555,10 @@ async function proofView(slug, idx, life) {
   $('#prev').disabled = idx === 0; $('#next').disabled = idx === N - 1;
   for (const link of document.querySelectorAll('#exp a')) link.onclick = async e => {
     e.preventDefault();
-    try { await flush(); if (life.alive) location.assign(link.href); } catch (e) {}
+    try { await flush(); } catch (e) { return; }
+    if (!life.alive) return;
+    if (!browserMode) { location.assign(link.href); return; }
+    try { await saveDownload(link.getAttribute('href')); } catch (e) { toast(e.message, true); }
   };
   const finder = $('#finder');
   let searchVersion = 0;
@@ -796,7 +794,7 @@ async function proofView(slug, idx, life) {
     $('#readings').innerHTML = '<option value="">現在の読み</option>' + readings.map((r, i) => `<option value="${i}">${esc(r.time || '')} ${esc(r.provider || 'anthropic')} ${esc(r.model || '')}</option>`).join('');
   };
   $('#readings').onchange = e => { ocr = e.target.value === '' ? latestReading : readings[+e.target.value]; renderDiff(); };
-  refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
+  if (!browserMode) refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
   $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { await flush(); ed.value = text; textChanged(); save({checkpoint: true}); renderDiff(); await flush(); });
   $('#bibliob').onclick = () => editBibliography(life, p, updated => { p = updated; });
   renderDiff();

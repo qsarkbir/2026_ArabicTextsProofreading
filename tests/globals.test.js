@@ -6,11 +6,14 @@ const vm = require('node:vm');
 
 const root = path.join(__dirname, '..', 'proofreader', 'static');
 const js = dir => fs.readdirSync(path.join(root, dir)).filter(f => f.endsWith('.js')).sort().map(f => path.join(dir, f));
-// index.html の読み込み順：core, compare, workflows, local/*, app
-const files = [...['core.js', 'compare.js', 'workflows.js'], ...js('local'), 'app.js'];
+// index.html の <script> の順に読み込む
+const files = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
 
-test('every static script is accounted for', () => {
-  assert.deepEqual([...js('.')].sort(), ['app.js', 'compare.js', 'core.js', 'workflows.js']);
+test('index.html loads every static script exactly once, with relative paths', () => {
+  assert.deepEqual([...files].sort(), [...js('.'), ...js('local')].sort().map(f => f.replace(/\\/g, '/')));
+  assert.ok(files.every(f => !f.startsWith('/')));
+  assert.equal(files[0], 'mode.js');
+  assert.ok(files.indexOf('backend.js') < files.indexOf('app.js'));
 });
 
 test('top-level names do not collide across classic scripts', () => {
@@ -38,4 +41,7 @@ test('scripts load into one global scope without redeclaration errors', () => {
   }
   assert.equal(typeof vm.runInContext('OpenITI.split', ctx), 'function');
   assert.equal(typeof vm.runInContext('Work.applyUpdate', ctx), 'function');
+  assert.equal(typeof vm.runInContext('LocalStore.savePage', ctx), 'function');
+  assert.equal(typeof vm.runInContext('LocalRouter.handle', ctx), 'function');
+  assert.equal(vm.runInContext('PROOF_MODE', ctx), 'browser');
 });

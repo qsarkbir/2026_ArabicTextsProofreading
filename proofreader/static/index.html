@@ -6,7 +6,7 @@
 <title>OpenITI 校正</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600&display=swap">
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="top">
@@ -16,9 +16,15 @@
 <main id="view"></main>
 <div id="offline" class="offline" role="alert" hidden>サーバーに接続できません。アプリを起動し直してください（start.bat など）</div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<script src="/core.js"></script>
-<script src="/compare.js"></script>
-<script src="/workflows.js"></script>
-<script src="/app.js"></script>
+<script src="mode.js"></script>
+<script src="core.js"></script>
+<script src="compare.js"></script>
+<script src="workflows.js"></script>
+<script src="local/openiti.js"></script>
+<script src="local/work.js"></script>
+<script src="local/store.js"></script>
+<script src="local/router.js"></script>
+<script src="backend.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

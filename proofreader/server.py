@@ -755,6 +755,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b'{"error":"not found"}', "application/json")
 
     def static(self, path):
+        if path == "/mode.js":  # the static files say 'browser'; the server always says 'http'
+            return self._send(200, b"const PROOF_MODE = 'http';\n", "text/javascript; charset=utf-8")
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         target = (STATIC / rel).resolve()
         if STATIC not in target.parents and target != STATIC / "index.html" or not target.is_file():

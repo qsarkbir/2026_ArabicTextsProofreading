@@ -33,12 +33,15 @@
 | D-4 | 採用 | 保存先は IndexedDB。ページの状態は1ページ1件で保存する | revision の確認と書き込みを1つのトランザクションで行え、タブ間の競合をロック無しで判定できる |
 | D-5 | 採用 | ビルド工程は持ち込まない。スクリプトは `<script>` で読み込み、Node のテストからも読める形（`core.js` と同じ `module.exports` の分岐）にする | 今の開発方法と揃える |
 | D-6 | 採用 | ローカル版と静的版の間は、共通のバックアップ形式（[プロジェクトの書き出し形式](#プロジェクトの書き出し形式)）でプロジェクトを移せるようにする | どちらの版で始めても作業を引き継げる |
+| D-7 | 採用 | 静的版には資料（`source`）が無いので、校正画面は `source` が無くても開く。ローカル版専用の要素は `needs-server` クラスを付け、`<html data-mode="browser">` のとき CSS で隠す（DOM は残す） | 画面のコードを分岐させずに、ハンドラの参照先を保てる |
+| D-8 | 採用 | ルーターは `new URL()` を使わず、URL を `?` で分けて照合する。書き出しは `{filename, type, data}` を返し、`backend.js` の `saveDownload` がダウンロードさせる | `new URL()` は `..` を畳み込み、サーバーと違う結果になる。ブラウザ内にはダウンロード用の URL が無い |
+| D-9 | 採用 | 静的版の `pages` は `keyPath: ['slug','i']` で、record に `slug`・`i` を含める。変更が無く record も無いページは書かない。`originals` は `{slug, text}` で作成時だけ書き、split の結果はスラッグごとにメモリに持つ | 範囲取得（`IDBKeyRange`）で1プロジェクトのページをまとめて読める |
 
 ## 段階と状態
 
 | 段階 | 内容 | 状態 |
 |---|---|---|
-| 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・TEI）、バックアップの書き出し・読み込み | 作業中（`local/openiti.js`・`local/work.js` と一致テストまで） |
+| 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・TEI）、バックアップの書き出し・読み込み | 作業中（`local/openiti.js`・`local/work.js`・`local/store.js`・`local/router.js`・`backend.js` まで。ホーム・作成・校正・競合・履歴・検索・OpenITI テキストの書き出しが動く。TEI とバックアップは未実装） |
 | 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 未着手 |
 | 2 | Internet Archive 連携（マニフェスト、検索、ページ画像、PDF） | 未着手（CORS の確認が先） |
 | 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 未着手 |
@@ -60,7 +63,7 @@
 | `scan` のディスクキャッシュ | Cache API | 2 |
 | IA の PDF 保存 | 利用者がダウンロードしたファイルを選ぶ方式を基本にする | 2 |
 | `providers/`・`ocr.py` | ブラウザから直接呼ぶ。プロンプトは共通の定義を使う | 3 |
-| `net.ALLOWED` | `<meta>` の CSP `connect-src` | 1a から順に追加 |
+| `net.ALLOWED` | `<meta>` の CSP `connect-src` | 1a から順に追加（未導入。配信の段階で入れる） |
 | `presence.py`・自動終了・終了ボタン | 使わない（画面から隠す） | 1a |
 | `send_file` の Range 対応 | 使わない（pdf.js が Blob を直接読む） | 1b |
 
@@ -194,3 +197,4 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 |---|---|
 | 2026-11-16 | 初版。段階1の設計と、版の管理の規則をまとめた |
 | 2026-11-16 | 段階1a を作業中にした。`local/openiti.js`・`local/work.js` を名前空間で公開する形にし、保存操作の一致テストと意図的な違いを追記 |
+| 2026-11-16 | 段階1a: `mode.js`・`backend.js`・`local/store.js`・`local/router.js` を実装し、ブラウザ版の動作検証（`tests/browser_static_smoke.py`）を追加。D-7〜D-9 を追記 |

@@ -14,6 +14,7 @@ python -m proofreader --keep-running   # タブを閉じても終了しない
 - 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
+- 静的ブラウザ版（段階1a の途中）：`python -m http.server -d proofreader/static 8780` で配信して開く。同じ画面が IndexedDB に保存し、IA・PDF・OCR・TEI などは「この機能はローカル版で利用できます」（501）になる。設計は `docs/static-design.md`。検証は `python -m tests.browser_static_smoke`（合成データ、Python の API なし）。
 - ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/*.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js`・`local/openiti.js`・`local/work.js` も同様）。`tests/fixtures/openiti/` の合成データと expected.json は Python（`tests/test_parity.py`）と JS（`tests/openiti.test.js`）の共通の基準で、`openiti.py` を意図して変えたら `UPDATE_FIXTURES=1 python -m unittest tests.test_parity` で作り直し、`local/openiti.js` も合わせる。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
@@ -33,6 +34,9 @@ proofreader/
   exporters/   tei.py：基本 TEI P5 出力
   static/local/  ブラウザ版のロジック（openiti.js・work.js …）。Python と同じ結果になることをテストで確かめる。名前空間を1つ公開する
   static/      フロントエンド（index.html, app.js, app.css, core.js, compare.js, workflows.js, vendor/pdfjs/）。フレームワーク・ビルド無しの素の JS
+    mode.js      静的版では 'browser'。サーバーは同じ /mode.js に 'http' を返す（server.static）
+    backend.js   api() の実体（'http' は fetch、'browser' は local/router.js）と書き出しのダウンロード
+    local/       静的ブラウザ版：openiti.js / work.js（純粋なロジック）、store.js（IndexedDB）、router.js（server.py のルートの代わり）
 ```
 
 - フロントは `location.hash` によるルーティング（`#/`、`#/new`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `newDraftView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
@@ -48,6 +52,7 @@ proofreader/
 - **書き込みは安全に**：JSON は `store._write_json`（一時ファイル＋`os.replace`）で書く。slug は `store._dir` で検証してからパスに使う。
 - **外部接続**：新しい接続先が要るときは `net.ALLOWED` に足し、`net` 経由で取得する。リダイレクト先も ALLOWED で確かめ直す。IA のページ画像は `GET /api/projects/<slug>/scan/<idx>` から `sources.fetch_scan`（IIIF → BookReader の順）で取得し、`store.scan_path` のディスクキャッシュに保存する。サーバは 127.0.0.1 だけで待ち受ける。
 - **OCR**：1ページずつ、校正者がボタンを押したとき（または設定 `autoOcr` が有効でページを開いたとき）だけ実行し、結果は `ocr/<i>.json` に保存して再利用する（過去の読みは `ocr/history/<i>/`）。API の利用料がかかるため、全ページを一括で読み取るような機能は勝手に足さない。OCR のプロンプトは「刊本の綴りをそのまま写す」方針なので、正規化や補完をさせる方向には変えない。
+- **ルートの追加**：`server.py` にルートを足したら `local/router.js` も直す（静的版で対応しないものは 501 のままにし、画面では `needs-server` クラスで隠す）。
 - **HTML への埋め込み**：利用者のデータやテキストをテンプレート文字列に入れるときは `esc()` を通す。
 
 ## コードの書き方

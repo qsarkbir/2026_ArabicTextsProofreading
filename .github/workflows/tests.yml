@@ -24,6 +24,10 @@ jobs:
       - run: node --check proofreader/static/compare.js
       - run: node --check proofreader/static/local/openiti.js
       - run: node --check proofreader/static/local/work.js
+      - run: node --check proofreader/static/local/store.js
+      - run: node --check proofreader/static/local/router.js
+      - run: node --check proofreader/static/backend.js
+      - run: node --check proofreader/static/mode.js
   browser-and-tei:
     runs-on: ubuntu-latest
     steps:
@@ -34,5 +38,6 @@ jobs:
       - run: pip install playwright lxml
       - run: python -m playwright install --with-deps chromium
       - run: python -m tests.browser_smoke
+      - run: python -m tests.browser_static_smoke
       - run: curl --fail --location --retry 2 -o /tmp/tei_all.rng https://www.tei-c.org/Vault/P5/4.12.0/xml/tei/custom/schema/relaxng/tei_all.rng
       - run: python -m tests.validate_tei /tmp/tei_all.rng
