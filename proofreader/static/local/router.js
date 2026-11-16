@@ -105,6 +105,7 @@ const LocalRouter = (() => {
         const url = await fileUrl(p.slug, src.pdf_file);
         if (url) return {...out, pdf: url};
       }
+      if (!Sources.isIiifService(c.service)) return {...out, unavailable: Sources.FOREIGN_SERVICE}; // 他のホストの画像は読まない（ブラウザ版だけの制限、D-31）
       return {...out, url: Sources.imageUrl(c.service)};
     }
     const count = src.count ?? 0;

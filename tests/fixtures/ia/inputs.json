@@ -415,6 +415,96 @@
         "last"
        ]
       }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/90",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id None"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": null,
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/91",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id ''"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": "",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/92",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id 7"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": 7,
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
      }
     ]
    }

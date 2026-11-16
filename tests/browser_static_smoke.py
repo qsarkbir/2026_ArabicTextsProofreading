@@ -68,6 +68,7 @@ def png(width=40, height=60, shade=30):
 IA_ORIGIN = re.compile(r'^https://([a-z0-9-]+\.)*archive\.org/')
 IA_CORS = {'access-control-allow-origin': '*'}
 IA_PAGES = 4
+XSS_COUNT = '<img src=x onerror="window.__xss = 1">'  # imagecount arrives from the search response: only an integer may be shown
 ia = {'manifest_failures': 0, 'image_failures': {}, 'dead': set(), 'images': {}, 'manifests': 0, 'searches': [], 'metadata': [], 'unexpected': [], 'private_pdf': True}
 
 
@@ -87,7 +88,7 @@ def ia_route(route):
         ia['searches'].append(url)
         return json_reply({'response': {'docs': [
             {'identifier': 'smoke-book', 'title': '<b>Smoke</b> book', 'creator': ['A', 'B'], 'date': '1900', 'imagecount': IA_PAGES},
-            {'identifier': 'smoke-two', 'title': ['Two', 'parts']}]}})
+            {'identifier': 'smoke-two', 'title': ['Two', 'parts'], 'imagecount': XSS_COUNT}]}})
     if path.startswith('/metadata/'):
         ia['metadata'].append(url)
         files = [{'name': 'smoke-book.pdf', 'format': 'Image Container PDF', 'size': '1048576'}, {'name': 'smoke-book_text.pdf', 'format': 'Text PDF', 'size': '2000'}]
@@ -549,6 +550,8 @@ def main():
             other.get_by_role('button', name='検索', exact=True).click()
             expect(other.locator('.res')).to_have_count(2, timeout=15000)
             assert len(ia['searches']) == 1 and 'smoke' in unquote(ia['searches'][0]).replace('+', ' ') and 'mediatype:texts' in unquote(ia['searches'][0]), ia['searches']
+            assert other.locator('.res .t img').count() == 0 and other.evaluate('window.__xss') is None, 'imagecount must not become markup'
+            assert '枚' not in other.locator('.res').nth(1).inner_text() and 'onerror' not in other.locator('.res').nth(1).inner_text()
             assert other.locator('.res .t b').first.inner_text() == '<b>Smoke</b> book' and other.locator('.res .t b b').count() == 0  # external titles are escaped
             expect(other.locator('.res').first).to_contain_text('A; B 1900 ・4枚')
             assert other.evaluate("document.querySelector('.res img').complete && document.querySelector('.res img').naturalWidth > 0")
@@ -603,6 +606,14 @@ def main():
             expect(other.locator('#toast')).to_contain_text('PDFのページ数（3）が資料の画像数（4）と一致しないため使えません')
             expect(other.locator('#pdfpick')).to_be_enabled()
             assert other.evaluate("LocalStore.fileSizes()") == files_before
+            other.evaluate(QUOTA)  # a full disk: the PDF is refused in Japanese, nothing is stored or changed, and a retry works
+            project_before = other.evaluate(f"LocalStore.getProject({json.dumps(flow)})")
+            other.locator('#pdfpick').set_input_files(str(ia_pdf4))
+            expect(other.locator('#toast')).to_contain_text('ブラウザの保存容量が足りません', timeout=60000)
+            expect(other.locator('#pdfpick')).to_be_enabled()
+            assert other.evaluate("LocalStore.fileSizes()") == files_before
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(flow)})") == project_before and 'pdf_file' not in project_before['source']
+            other.evaluate('window.__restorePut()')
             other.locator('#pdfpick').set_input_files(str(ia_pdf4))
             expect(other.locator('#pdfrow')).to_contain_text('保存済み', timeout=60000)
             expect(other.locator('#mimg canvas')).to_be_visible(timeout=60000)

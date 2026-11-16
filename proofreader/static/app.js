@@ -270,7 +270,7 @@ async function setupView(slug, from, life) {
       <div class="card">
         <div class="row"><h2>ページ画像を選ぶ</h2><span style="flex:1"></span><button id="cancel">キャンセル</button></div>
         ${p.source ? '<p class="help">資料を選んでも、次の画面で対応を確定するまで現在の資料・対応は変わりません。</p>' : ''}
-        ${browserMode ? '<p class="muted small">検索とページ画像は、このブラウザから Internet Archive へ直接つなぎます（検索語と画像の取得先が Internet Archive に伝わります）。</p>' : ''}
+        ${browserMode ? '<p class="muted small">検索とページ画像は、このブラウザから Internet Archive へ直接つなぎます。この画面を開くと、候補の識別子が Internet Archive に伝わります（サムネイルとPDFの情報）。検索語は「検索」を押したときだけ送られます。</p>' : ''}
         ${p.candidates.length ? `<h3>メタデータに書かれた Internet Archive の資料</h3>
           <div id="cands" class="results"></div>` : '<p class="muted small">メタデータに Internet Archive へのリンクはありませんでした。</p>'}
         <h3>Internet Archive を検索</h3>
@@ -283,7 +283,7 @@ async function setupView(slug, from, life) {
         <div class="row"><input type="file" id="pdf" aria-label="ページ画像のPDF" accept="application/pdf"><span id="pdfmsg" class="muted small" role="status"></span></div>
       </div></div>`;
     const card = r => `<div class="res"><img loading="lazy" src="${esc(r.thumb)}" alt="">
-      <div class="t"><b>${esc(r.title)}</b><span class="muted small">${esc(r.creator)} ${esc(r.date)}${r.imagecount ? ` ・${r.imagecount}枚` : ''}</span>
+      <div class="t"><b>${esc(r.title)}</b><span class="muted small">${esc(r.creator)} ${esc(r.date)}${Number.isInteger(r.imagecount) && r.imagecount > 0 ? ` ・${esc(String(r.imagecount))}枚` : ''}</span>
       <div class="row" style="margin-top:4px"><button data-id="${esc(r.id)}" class="primary use">使う</button><a class="small" target="_blank" rel="noopener" href="https://archive.org/details/${esc(r.id)}">IAで見る</a></div></div></div>`;
     if (p.candidates.length) $('#cands').innerHTML = p.candidates.map(id => card({id, title: id, thumb: `https://archive.org/services/img/${id}`, creator: '', date: ''})).join('');
     let sourceBusy = false;
@@ -389,6 +389,7 @@ async function setupView(slug, from, life) {
           reattachControl(holder, {slug, source: p.source, api, life, done: async updated => { p = updated; toast('PDFを保存しました'); await renderMatch(); }});
           return;
         }
+        if (image.unavailable) { box.innerHTML = `<div class="imgmsg">${esc(image.unavailable)}</div>`; return; }
         if (image.url) {
           const el = new Image();
           el.alt = '原本のページ画像';
@@ -786,6 +787,7 @@ async function proofView(slug, idx, life) {
     $('#ialink').hidden = !(im && im.link); if (im && im.link) $('#ialink').href = im.link;
     if (im && im.no_file) { reattachPrompt(im); return; }
     if (!im || im.missing) { imgview.innerHTML = '<div class="imgmsg">このページに対応する画像がありません。未割当の末尾の場合は、本文を確認してページ区切りを原本に照らして整理してください。</div>'; return; }
+    if (im.unavailable) { imgview.innerHTML = `<div class="imgmsg">${esc(im.unavailable)}</div>`; return; }
     if (im.url) {
       imgview.innerHTML = '<div class="imgmsg">読み込み中…（数秒〜数十秒かかることがあります）</div>';
       const el = new Image();

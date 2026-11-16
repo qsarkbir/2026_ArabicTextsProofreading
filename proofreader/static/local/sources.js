@@ -32,12 +32,12 @@ const Sources = (() => {
   const dig = (obj, path) => path.reduce((o, k) => (o !== null && o !== undefined ? o[k] : undefined), obj);
   const labelOf = l => (l && typeof l === 'object' ? l : {});
 
-  // sources.ia_pages：マニフェストの各 canvas から label・w・h・service を取る。service の無い canvas は飛ばす
+  // sources.ia_pages：マニフェストの各 canvas から label・w・h・service を取る。service の id が文字列でない・空の canvas は飛ばす
   const parseManifest = (identifier, m) => {
     const pages = [];
     for (const c of (m && Array.isArray(m.items) ? m.items : [])) {
       const service = dig(c, ['items', 0, 'items', 0, 'body', 'service', 0, 'id']);
-      if (service === undefined || service === null) continue;
+      if (typeof service !== 'string' || !service) continue;
       pages.push({label: pick(labelOf(c.label).none), w: c.width ?? null, h: c.height ?? null, service});
     }
     const l = labelOf(m && m.label), title = pick(l.none, l.en);
@@ -46,6 +46,10 @@ const Sources = (() => {
   const iaPages = async (identifier, get = getJson) =>
     parseManifest(identifier, await get(`https://iiif.archive.org/iiif/${encodeURIComponent(identifier)}/manifest.json`, {tries: retry.tries, unavailable: UNAVAILABLE}));
 
+  // ブラウザ版は IIIF の画像を iiif.archive.org からだけ読む（CSP の img-src と合わせ、取り込んだ資料が別のホストを指しても要求しない）
+  const IIIF_PREFIX = 'https://iiif.archive.org/';
+  const FOREIGN_SERVICE = 'このページの画像の取得先が Internet Archive の画像サーバーではないため、ブラウザ版では表示できません。ローカル版を使ってください';
+  const isIiifService = service => typeof service === 'string' && service.startsWith(IIIF_PREFIX);
   const imageUrl = (service, width = 1600) => `${service}/full/${width},/0/default.jpg`;
 
   // sources.ia_pdf：公開の PDF のうち、形式の優先順（Image Container PDF → Text PDF → …）、同順位ではサイズの大きいもの
@@ -76,7 +80,7 @@ const Sources = (() => {
     imagecount: doc.imagecount ?? null, thumb: `https://archive.org/services/img/${doc.identifier}`}));
   const search = async (query, rows = 20, get = getJson) => parseSearch(await get(searchUrl(query, rows)));
 
-  return {UNAVAILABLE, OFFLINE, retry, PDF_FORMATS, FetchError, getJson, parseManifest, iaPages, imageUrl, pdfChoice, iaPdf, pdfUrl, searchUrl, parseSearch, search};
+  return {UNAVAILABLE, OFFLINE, retry, PDF_FORMATS, FetchError, getJson, parseManifest, iaPages, imageUrl, isIiifService, FOREIGN_SERVICE, pdfChoice, iaPdf, pdfUrl, searchUrl, parseSearch, search};
 })();
 
 if (typeof module !== 'undefined') module.exports = Sources;

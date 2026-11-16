@@ -268,9 +268,9 @@ test('IA sources replay tests/fixtures/source/ia-ops.json: same shapes and keys 
 
 test('an IA project keeps its mapping when the screen shifts from the image metadata (offset 5, page 1 -> anchor [1, 7])', async () => {
   const {router, slug} = await fresh();
-  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: Array.from({length: 20}, (_, i) => ({label: String(i), service: 's', w: 1, h: 1}))}; p.offset = 5; });
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: Array.from({length: 20}, (_, i) => ({label: String(i), service: `https://iiif.archive.org/image/iiif/3/b%2F${i}`, w: 1, h: 1}))}; p.offset = 5; });
   const image = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
-  assert.deepEqual([image.index, image.count, image.label, image.url, 'pdf' in image], [6, 20, '6', 's/full/1600,/0/default.jpg', false]);
+  assert.deepEqual([image.index, image.count, image.label, image.url, 'pdf' in image], [6, 20, '6', 'https://iiif.archive.org/image/iiif/3/b%2F6/full/1600,/0/default.jpg', false]);
   const shifted = await router.handle('POST', `/api/projects/${slug}/mapping`, {anchor: [1, image.index + 1]});  // app.js の shift()
   assert.deepEqual([shifted.offset, shifted.anchors], [5, [[1, 7]]]);
   assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/1`)).image.index, 7);
@@ -461,13 +461,15 @@ test('source/ia stages a source from the manifest, retrying 504s, and mapping co
   assert.deepEqual([staged.draft.type, staged.draft.id, staged.draft.title, staged.draft.count, 'pages' in staged.draft, /^[0-9a-f]{32}$/.test(staged.draft.revision)], ['ia', 'synthetic-book', 'Synthetic Book', 3, false, true]);
   assert.equal(staged.source, null);  // 確定するまで何も変わらない
   const img = await router.handle('GET', `/api/projects/${slug}/image?index=1&draft=${staged.draft.revision}`);
-  assert.deepEqual([img.index, img.count, img.label, img.w, img.h, img.url, 'pdf' in img], [1, 3, '1', 1000, 1500, 'https://iiif.example.invalid/image/iiif/3/synthetic%2F1/full/1600,/0/default.jpg', false]);
+  assert.deepEqual([img.index, img.count, img.label, img.w, img.h, img.url, 'pdf' in img], [1, 3, '1', 1000, 1500, undefined, false]);
+  assert.equal(img.service, 'https://iiif.example.invalid/image/iiif/3/synthetic%2F1');  // iiif.archive.org ではないので url は付かない（D-31）
+  assert.equal(img.unavailable, Sources.FOREIGN_SERVICE);
   await status(router.handle('GET', `/api/projects/${slug}/image?index=1&draft=nope`), 409);
   assert.deepEqual((await router.handle('GET', `/api/projects/${slug}/image?index=9&draft=${staged.draft.revision}`)), {index: 9, missing: true, count: 3});
   const done = await router.handle('POST', `/api/projects/${slug}/mapping`, {source: staged.draft.revision, offset: 1, clear_anchors: true});
   assert.deepEqual([done.source.type, done.source.count, done.source.revision === staged.draft.revision, done.offset, 'pages' in done.source], ['ia', 3, true, 1, false]);
   const pg = (await router.handle('GET', `/api/projects/${slug}/pages/0`)).image;
-  assert.deepEqual([pg.index, pg.label, typeof pg.url], [1, '1', 'string']);
+  assert.deepEqual([pg.index, pg.label, pg.url, pg.unavailable], [1, '1', undefined, Sources.FOREIGN_SERVICE]);
   assert.equal((await LocalStore.getProject(slug)).source.pages.length, 3);
 }));
 
@@ -486,8 +488,36 @@ test('source/ia fails in Japanese when the manifest never loads, has no images, 
 }));
 
 const iaProject = async (router, slug, patch = {}) => {
-  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'rev1', title: 'B', pages: Array.from({length: 3}, (_, i) => ({label: String(i), service: `https://x.invalid/s${i}`, w: 1, h: 2})), ...patch}; });
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'rev1', title: 'B', pages: Array.from({length: 3}, (_, i) => ({label: String(i), service: `https://iiif.archive.org/image/iiif/3/x%2Fs${i}`, w: 1, h: 2})), ...patch}; });
 };
+
+test('only iiif.archive.org services get an image url; any other host is unavailable (browser-only restriction, D-31)', async () => {
+  const {router, slug} = await fresh();
+  const good = 'https://iiif.archive.org/image/iiif/3/b%2F0';
+  const services = [good, 'https://evil.example/iiif/b%2F1', 'http://iiif.archive.org/x', 'https://iiif.archive.org.evil.example/x', 'data:image/png;base64,AAAA', '', null];
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: services.map((service, i) => ({label: String(i), service, w: 1, h: 1}))}; });
+  const at = async i => (await router.handle('GET', `/api/projects/${slug}/image?index=${i}`));
+  assert.equal((await at(0)).url, `${good}/full/1600,/0/default.jpg`);
+  assert.equal('unavailable' in await at(0), false);
+  for (let i = 1; i < services.length; i++) {
+    const im = await at(i);
+    assert.deepEqual([im.url, im.pdf, im.unavailable, im.service, im.index, im.count], [undefined, undefined, Sources.FOREIGN_SERVICE, services[i], i, services.length]);
+  }
+  assert.match(Sources.FOREIGN_SERVICE, /ブラウザ版では表示できません/);
+  assert.doesNotMatch(Sources.FOREIGN_SERVICE, /応答しません/);
+  router.revokeUrls();
+});
+
+test('a backup restored with a foreign image service shows the message, and an attached PDF still wins', iaWorld(async () => [200, metadataOf('pdf-formats')], async () => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug, {pages: Array.from({length: 3}, (_, i) => ({label: String(i), service: `https://evil.example/s${i}`, w: 1, h: 2})), pdf_file: 'ia-rev1.pdf'});
+  const im = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([im.url, im.pdf, im.unavailable], [undefined, undefined, Sources.FOREIGN_SERVICE]);
+  await router.handle('POST', `/api/projects/${slug}/source/ia/pdf/attach`, iaPdfBlob(), {'X-Revision': 'rev1', 'X-Page-Count': '3'});
+  const withPdf = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([typeof withPdf.pdf, 'unavailable' in withPdf, 'url' in withPdf], ['string', false, false]);
+  router.revokeUrls();
+}));
 
 test('ia pdf status, attach and detach mirror server.py; the file is chosen by the user and stored with the source in one step', iaWorld(async () => [200, metadataOf('pdf-formats')], async calls => {
   const {router, slug} = await fresh();
@@ -515,12 +545,12 @@ test('ia pdf status, attach and detach mirror server.py; the file is chosen by t
   st = await router.handle('GET', base);
   assert.deepEqual([st.attached, st.pending, st.v], ['ia-rev1.pdf', null, `rev1-${iaPdfBlob().size}`]);
   const image = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
-  assert.deepEqual([typeof image.pdf, 'url' in image, image.index, image.service], ['string', false, 1, 'https://x.invalid/s1']);
+  assert.deepEqual([typeof image.pdf, 'url' in image, image.index, image.service], ['string', false, 1, 'https://iiif.archive.org/image/iiif/3/x%2Fs1']);
   const detached = await router.handle('POST', `${base}/detach`);
   assert.equal(detached.source.pdf_file, undefined);
   assert.equal(LocalStore.files.size, 0);
   const back = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
-  assert.deepEqual([back.url, 'pdf' in back], ['https://x.invalid/s1/full/1600,/0/default.jpg', false]);
+  assert.deepEqual([back.url, 'pdf' in back], ['https://iiif.archive.org/image/iiif/3/x%2Fs1/full/1600,/0/default.jpg', false]);
   assert.equal((await router.handle('GET', base)).attached, null);
   router.revokeUrls();
 }));
@@ -529,7 +559,7 @@ test('an IA project restored from a backup (pdf_file without a Blob) shows the o
   const {router, slug} = await fresh();
   await iaProject(router, slug, {pdf_file: 'ia-rev1.pdf'});
   const im = (await router.handle('GET', `/api/projects/${slug}/pages/0`)).image;
-  assert.deepEqual([im.url, 'pdf' in im, 'no_file' in im], ['https://x.invalid/s0/full/1600,/0/default.jpg', false, false]);
+  assert.deepEqual([im.url, 'pdf' in im, 'no_file' in im], ['https://iiif.archive.org/image/iiif/3/x%2Fs0/full/1600,/0/default.jpg', false, false]);
   await router.handle('POST', `/api/projects/${slug}/source/ia/pdf/attach`, iaPdfBlob(), {'X-Revision': 'rev1', 'X-Page-Count': '3'});
   assert.equal(LocalStore.files.size, 1);
   const staged = await router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'synthetic-book'});
