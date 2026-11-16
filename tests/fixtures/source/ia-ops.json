@@ -9,37 +9,37 @@
    "pages": [
     {
      "label": "1",
-     "service": "https://x.invalid/s0",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs0",
      "w": 10,
      "h": 20
     },
     {
      "label": "2",
-     "service": "https://x.invalid/s1",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs1",
      "w": 10,
      "h": 20
     },
     {
      "label": "3",
-     "service": "https://x.invalid/s2",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs2",
      "w": 10,
      "h": 20
     },
     {
      "label": "4",
-     "service": "https://x.invalid/s3",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs3",
      "w": 10,
      "h": 20
     },
     {
      "label": "5",
-     "service": "https://x.invalid/s4",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs4",
      "w": 10,
      "h": 20
     },
     {
      "label": "6",
-     "service": "https://x.invalid/s5",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs5",
      "w": 10,
      "h": 20
     }
@@ -52,19 +52,19 @@
    "pages": [
     {
      "label": "n0",
-     "service": "https://x.invalid/s",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs",
      "w": 1,
      "h": 1
     },
     {
      "label": "n1",
-     "service": "https://x.invalid/s",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs",
      "w": 1,
      "h": 1
     },
     {
      "label": "n2",
-     "service": "https://x.invalid/s",
+     "service": "https://iiif.archive.org/image/iiif/3/x%2Fs",
      "w": 1,
      "h": 1
     }

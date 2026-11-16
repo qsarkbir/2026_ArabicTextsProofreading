@@ -1,0 +1,746 @@
+{
+ "manifests": [
+  {
+   "id": "synthetic-book",
+   "manifest": {
+    "label": {
+     "none": [
+      "Synthetic Book"
+     ]
+    },
+    "items": [
+     {
+      "id": "https://iiif.example.invalid/canvas/0",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/0/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "Cover"
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/1",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/1/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F1",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "1"
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/2",
+      "type": "Canvas",
+      "width": 900,
+      "height": null,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/2/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "2"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "synthetic.en_label-2",
+   "manifest": {
+    "label": {
+     "en": [
+      "English Title"
+     ]
+    },
+    "items": [
+     {
+      "id": "https://iiif.example.invalid/canvas/0",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/0/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        ""
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/1",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/1/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F1",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "en": [
+        "ignored"
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/2",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/2/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {}
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/3",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/3/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F3",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "",
+        "x"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "both-labels",
+   "manifest": {
+    "label": {
+     "none": [],
+     "en": [
+      "Fallback Title"
+     ]
+    },
+    "items": [
+     {
+      "id": "https://iiif.example.invalid/canvas/0",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/0/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": []
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "missing-services",
+   "manifest": {
+    "label": {
+     "none": [
+      "Holes"
+     ]
+    },
+    "items": [
+     {
+      "id": "https://iiif.example.invalid/canvas/0",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/0/full/full/0/default.jpg"
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "no service"
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/1",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/1/full/full/0/default.jpg",
+           "service": []
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/2",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/2/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F2",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "ok"
+       ]
+      }
+     },
+     {
+      "id": "canvas-without-items",
+      "type": "Canvas",
+      "label": {
+       "none": [
+        "bare"
+       ]
+      }
+     },
+     {
+      "items": []
+     },
+     {
+      "items": [
+       {
+        "items": []
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/3",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/3/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F3",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ],
+      "label": {
+       "none": [
+        "last"
+       ]
+      }
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/90",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id None"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": null,
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/91",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id ''"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": "",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "https://iiif.example.invalid/canvas/92",
+      "type": "Canvas",
+      "width": 1,
+      "height": 1,
+      "label": {
+       "none": [
+        "bad service id 7"
+       ]
+      },
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "service": [
+            {
+             "id": 7,
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "no-title",
+   "manifest": {
+    "items": [
+     {
+      "id": "https://iiif.example.invalid/canvas/0",
+      "type": "Canvas",
+      "width": 1000,
+      "height": 1500,
+      "items": [
+       {
+        "type": "AnnotationPage",
+        "items": [
+         {
+          "type": "Annotation",
+          "body": {
+           "type": "Image",
+           "id": "https://iiif.example.invalid/image/0/full/full/0/default.jpg",
+           "service": [
+            {
+             "id": "https://iiif.example.invalid/image/iiif/3/synthetic%2F0",
+             "type": "ImageService3"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "empty",
+   "manifest": {
+    "label": {
+     "none": [
+      "Nothing"
+     ]
+    }
+   }
+  }
+ ],
+ "metadata": [
+  {
+   "id": "pdf-formats",
+   "metadata": {
+    "files": [
+     {
+      "name": "a.txt",
+      "format": "DjVuTXT",
+      "size": "10"
+     },
+     {
+      "name": "b_text.pdf",
+      "format": "Text PDF",
+      "size": "500"
+     },
+     {
+      "name": "a_bw.pdf",
+      "format": "Additional Text PDF",
+      "size": "900"
+     },
+     {
+      "name": "c.pdf",
+      "format": "Image Container PDF",
+      "size": "100"
+     },
+     {
+      "name": "d.pdf",
+      "format": "Image Container PDF",
+      "size": "300"
+     },
+     {
+      "name": "e.pdf",
+      "format": "Image Container PDF",
+      "size": "300"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdf-private",
+   "metadata": {
+    "files": [
+     {
+      "name": "secret.pdf",
+      "format": "Image Container PDF",
+      "size": "999",
+      "private": "true"
+     },
+     {
+      "name": "Open.PDF",
+      "format": "Text PDF",
+      "size": "20",
+      "private": "false"
+     },
+     {
+      "name": "closed.pdf",
+      "format": "Text PDF",
+      "size": "30",
+      "private": "True"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdf-unknown-format",
+   "metadata": {
+    "files": [
+     {
+      "name": "x.pdf",
+      "format": "Weird",
+      "size": "5"
+     },
+     {
+      "name": "y.pdf",
+      "size": "7"
+     },
+     {
+      "name": "z.pdf",
+      "format": "",
+      "size": "6"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdf-sizes",
+   "metadata": {
+    "files": [
+     {
+      "name": "s1.pdf",
+      "format": "Text PDF",
+      "size": "abc"
+     },
+     {
+      "name": "s2.pdf",
+      "format": "Text PDF",
+      "size": ""
+     },
+     {
+      "name": "s3.pdf",
+      "format": "Text PDF"
+     },
+     {
+      "name": "s4.pdf",
+      "format": "Text PDF",
+      "size": 12
+     },
+     {
+      "name": "s5.pdf",
+      "format": "Text PDF",
+      "size": " 40 "
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdf-none",
+   "metadata": {
+    "files": [
+     {
+      "name": "a.djvu",
+      "format": "DjVu",
+      "size": "1"
+     },
+     {
+      "name": "",
+      "format": "Text PDF",
+      "size": "1"
+     },
+     {
+      "format": "Text PDF"
+     }
+    ]
+   }
+  },
+  {
+   "id": "pdf-no-files",
+   "metadata": {}
+  }
+ ],
+ "searches": [
+  {
+   "query": "بستان سعدي",
+   "rows": 20,
+   "response": {
+    "response": {
+     "docs": [
+      {
+       "identifier": "synthetic-book",
+       "title": "Synthetic",
+       "creator": [
+        "A",
+        "B"
+       ],
+       "date": "1900",
+       "imagecount": 120,
+       "language": [
+        "ara"
+       ]
+      },
+      {
+       "identifier": "other.item_1",
+       "title": [
+        "T1",
+        "T2"
+       ],
+       "imagecount": null
+      },
+      {
+       "identifier": "bare"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "query": "a & b = c+d",
+   "rows": 5,
+   "response": {
+    "response": {
+     "docs": []
+    }
+   }
+  },
+  {
+   "query": "no response key",
+   "rows": 20,
+   "response": {}
+  }
+ ]
+}

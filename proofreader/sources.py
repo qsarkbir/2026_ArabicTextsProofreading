@@ -16,6 +16,8 @@ def ia_pages(identifier):
             service = body["service"][0]["id"]
         except (KeyError, IndexError):
             continue
+        if not isinstance(service, str) or not service:
+            continue
         label = (c.get("label", {}).get("none") or [""])[0]
         pages.append({"label": label, "w": c.get("width"), "h": c.get("height"), "service": service})
     title = (m.get("label", {}).get("none") or m.get("label", {}).get("en") or [""])[0]

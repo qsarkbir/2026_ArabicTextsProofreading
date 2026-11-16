@@ -9,6 +9,7 @@ globalThis.OpenITI = require('../proofreader/static/local/openiti.js');
 globalThis.Bundle = require('../proofreader/static/local/bundle.js');
 globalThis.TEI = require('../proofreader/static/local/tei.js');
 globalThis.Draft = require('../proofreader/static/local/draft.js');
+globalThis.Sources = require('../proofreader/static/local/sources.js');
 const memory = () => {
   const projects = new Map(), originals = new Map(), records = new Map(), texts = new Map(), settings = new Map(), files = new Map();
   const make = (base, p, text) => {
@@ -130,8 +131,7 @@ test('unfinished upload, bibliography and unsupported routes', async () => {
   assert.deepEqual([p.title, p.author, p.bibliography], ['ت', 'a', {edition: 'e', source: '', rights: ''}]);
   await status(router.handle('GET', '/api/projects/nope'), 404);
   await status(router.handle('GET', '/api/projects/..'), 404);
-  for (const [m, u] of [['GET', '/api/ia/search?q=x'], ['POST', `/api/projects/${slug}/source/ia`],
-    ['GET', `/api/projects/${slug}/scan/0`], ['POST', `/api/projects/${slug}/source/ia/pdf`], ['POST', `/api/projects/${slug}/pages/0/ocr`], ['GET', `/api/projects/${slug}/pages/0/readings`],
+  for (const [m, u] of [['GET', `/api/projects/${slug}/scan/0`], ['POST', `/api/projects/${slug}/source/ia/pdf`], ['POST', `/api/projects/${slug}/pages/0/ocr`], ['GET', `/api/projects/${slug}/pages/0/readings`],
     ['POST', '/api/shutdown'], ['POST', '/api/heartbeat'], ['GET', `/api/projects/${slug}/export?fmt=package`], ['GET', `/api/projects/${slug}/export?fmt=diff`]])
     await assert.rejects(router.handle(m, u, {}), e => e.status === 501 && e.message === 'この機能はローカル版で利用できます');
 });
@@ -239,10 +239,15 @@ test('a restored PDF project without its file opens, asks for the PDF and accept
   router.revokeUrls();
 });
 
-test('IA sources replay tests/fixtures/source/ia-ops.json: metadata only (no url, service, w, h), same shapes and keys as server.py', async () => {
+test('IA sources replay tests/fixtures/source/ia-ops.json: same shapes and keys as server.py (url is a placeholder: the direct IIIF image URL here)', async () => {
   const ops = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'ia-ops.json'), 'utf8')), expected = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, 'ia-expected.json'), 'utf8'));
   const pick = r => Object.fromEntries(['slug', 'offset', 'anchors', 'source', 'draft'].map(k => [k, r[k]]));
   const got = [];
+  const placeholder = image => {
+    if (!image || image.url === undefined) return image;
+    assert.equal(image.url, `${image.service}/full/1600,/0/default.jpg`);
+    return {...image, url: '<url>'};
+  };
   for (const source of ops.sources) {
     globalThis.LocalStore = memory();
     delete require.cache[require.resolve('../proofreader/static/local/router.js')];
@@ -253,8 +258,8 @@ test('IA sources replay tests/fixtures/source/ia-ops.json: metadata only (no url
     for (const step of ops.steps) {
       if (step.op === 'view') out.push(pick(await router.handle('GET', `/api/projects/${slug}`)));
       else if (step.op === 'mapping') out.push(pick(await router.handle('POST', `/api/projects/${slug}/mapping`, step.body)));
-      else if (step.op === 'image') out.push(await router.handle('GET', `/api/projects/${slug}/image?index=${step.index}`));
-      else out.push((await router.handle('GET', `/api/projects/${slug}/pages/${step.i}`)).image);
+      else if (step.op === 'image') out.push(placeholder(await router.handle('GET', `/api/projects/${slug}/image?index=${step.index}`)));
+      else out.push(placeholder((await router.handle('GET', `/api/projects/${slug}/pages/${step.i}`)).image));
     }
     got.push(out);
   }
@@ -263,9 +268,9 @@ test('IA sources replay tests/fixtures/source/ia-ops.json: metadata only (no url
 
 test('an IA project keeps its mapping when the screen shifts from the image metadata (offset 5, page 1 -> anchor [1, 7])', async () => {
   const {router, slug} = await fresh();
-  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: Array.from({length: 20}, (_, i) => ({label: String(i), service: 's', w: 1, h: 1}))}; p.offset = 5; });
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: Array.from({length: 20}, (_, i) => ({label: String(i), service: `https://iiif.archive.org/image/iiif/3/b%2F${i}`, w: 1, h: 1}))}; p.offset = 5; });
   const image = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
-  assert.deepEqual([image.index, image.count, image.label, 'url' in image, 'pdf' in image], [6, 20, '6', false, false]);
+  assert.deepEqual([image.index, image.count, image.label, image.url, 'pdf' in image], [6, 20, '6', 'https://iiif.archive.org/image/iiif/3/b%2F6/full/1600,/0/default.jpg', false]);
   const shifted = await router.handle('POST', `/api/projects/${slug}/mapping`, {anchor: [1, image.index + 1]});  // app.js の shift()
   assert.deepEqual([shifted.offset, shifted.anchors], [5, [[1, 7]]]);
   assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/1`)).image.index, 7);
@@ -415,3 +420,151 @@ test('a null revision hashes as the string None, like Python str(None); a missin
   await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', pages}; });
   assert.equal((await router.handle('GET', `/api/projects/${slug}/image?index=0`)).key, await sha('ia:book:0'));
 });
+
+// ---------- Internet Archive（段階2）：fetch を差し替えて、server.py と同じ形で動くことを確かめる ----------
+const IA_INPUTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'ia', 'inputs.json'), 'utf8'));
+const iaWorld = (handler, run) => async () => {
+  const calls = [], saved = [globalThis.fetch, Sources.retry.delay];
+  globalThis.fetch = async url => {
+    calls.push(url);
+    const [status, body] = await handler(url, calls);
+    return {ok: status < 400, status, statusText: 'x', json: async () => body};
+  };
+  Sources.retry.delay = 0;
+  try { await run(calls); } finally { [globalThis.fetch, Sources.retry.delay] = saved; }
+};
+const manifestOf = id => IA_INPUTS.manifests.find(m => m.id === id).manifest;
+const metadataOf = id => IA_INPUTS.metadata.find(m => m.id === id).metadata;
+const iaPdfBlob = () => new Blob(['%PDF-1.4 fixture']);
+
+test('ia/search validates the query and returns the sources.py shape', iaWorld(async () => [200, IA_INPUTS.searches[0].response], async calls => {
+  const {router} = await fresh();
+  await status(router.handle('GET', '/api/ia/search?q=%20'), 400);
+  const out = await router.handle('GET', '/api/ia/search?q=x');
+  assert.deepEqual(out[0], {id: 'synthetic-book', title: 'Synthetic', creator: 'A; B', date: '1900', imagecount: 120, thumb: 'https://archive.org/services/img/synthetic-book'});
+  assert.deepEqual([out[1].title, out[1].imagecount, out[2].creator], ['T1; T2', null, '']);
+  assert.match(calls[0], /^https:\/\/archive\.org\/advancedsearch\.php\?q=%28x%29\+AND\+mediatype%3Atexts&rows=20&output=json/);
+}));
+
+test('ia/search reports a network failure in Japanese', iaWorld(async () => { throw new TypeError('Failed to fetch'); }, async () => {
+  const {router} = await fresh();
+  await assert.rejects(router.handle('GET', '/api/ia/search?q=x'), e => e.status === 400 && e.message.startsWith('Internet Archive を検索できませんでした: Internet Archive に接続できませんでした'));
+}));
+
+test('source/ia stages a source from the manifest, retrying 504s, and mapping confirms it like server.py', iaWorld(async (url, calls) => (calls.length < 3 ? [504, {}] : [200, manifestOf('synthetic-book')]), async calls => {
+  const {router, slug} = await fresh();
+  await status(router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'bad id!'}), 400);
+  await status(router.handle('POST', `/api/projects/${slug}/source/ia`, {}), 400);
+  const staged = await router.handle('POST', `/api/projects/${slug}/source/ia`, {id: ' https://archive.org/details/synthetic-book/page/n3 '});
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0], 'https://iiif.archive.org/iiif/synthetic-book/manifest.json');
+  assert.deepEqual([staged.draft.type, staged.draft.id, staged.draft.title, staged.draft.count, 'pages' in staged.draft, /^[0-9a-f]{32}$/.test(staged.draft.revision)], ['ia', 'synthetic-book', 'Synthetic Book', 3, false, true]);
+  assert.equal(staged.source, null);  // 確定するまで何も変わらない
+  const img = await router.handle('GET', `/api/projects/${slug}/image?index=1&draft=${staged.draft.revision}`);
+  assert.deepEqual([img.index, img.count, img.label, img.w, img.h, img.url, 'pdf' in img], [1, 3, '1', 1000, 1500, undefined, false]);
+  assert.equal(img.service, 'https://iiif.example.invalid/image/iiif/3/synthetic%2F1');  // iiif.archive.org ではないので url は付かない（D-31）
+  assert.equal(img.unavailable, Sources.FOREIGN_SERVICE);
+  await status(router.handle('GET', `/api/projects/${slug}/image?index=1&draft=nope`), 409);
+  assert.deepEqual((await router.handle('GET', `/api/projects/${slug}/image?index=9&draft=${staged.draft.revision}`)), {index: 9, missing: true, count: 3});
+  const done = await router.handle('POST', `/api/projects/${slug}/mapping`, {source: staged.draft.revision, offset: 1, clear_anchors: true});
+  assert.deepEqual([done.source.type, done.source.count, done.source.revision === staged.draft.revision, done.offset, 'pages' in done.source], ['ia', 3, true, 1, false]);
+  const pg = (await router.handle('GET', `/api/projects/${slug}/pages/0`)).image;
+  assert.deepEqual([pg.index, pg.label, pg.url, pg.unavailable], [1, '1', undefined, Sources.FOREIGN_SERVICE]);
+  assert.equal((await LocalStore.getProject(slug)).source.pages.length, 3);
+}));
+
+test('source/ia fails in Japanese when the manifest never loads, has no images, or has no usable canvases', iaWorld(async url => {
+  if (url.includes('/down/')) throw new TypeError('Failed to fetch');
+  if (url.includes('/gone/')) return [404, {}];
+  return [200, manifestOf(url.includes('/empty/') ? 'empty' : 'missing-services')];
+}, async calls => {
+  const {router, slug} = await fresh();
+  await assert.rejects(router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'down'}), e => e.status === 400 && e.message === `この資料のページ画像を取得できませんでした: ${Sources.UNAVAILABLE}`);
+  assert.equal(calls.length, 3);
+  await assert.rejects(router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'gone'}), e => /^この資料のページ画像を取得できませんでした: 404 x: /.test(e.message));
+  await assert.rejects(router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'empty'}), e => e.message === 'この資料にはページ画像がありません');
+  assert.equal((await router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'missing-services'})).draft.count, 2);  // service の無い canvas は数えない
+  await status(router.handle('POST', '/api/projects/nope/source/ia', {id: 'missing-services'}), 404);
+}));
+
+const iaProject = async (router, slug, patch = {}) => {
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'rev1', title: 'B', pages: Array.from({length: 3}, (_, i) => ({label: String(i), service: `https://iiif.archive.org/image/iiif/3/x%2Fs${i}`, w: 1, h: 2})), ...patch}; });
+};
+
+test('only iiif.archive.org services get an image url; any other host is unavailable (browser-only restriction, D-31)', async () => {
+  const {router, slug} = await fresh();
+  const good = 'https://iiif.archive.org/image/iiif/3/b%2F0';
+  const services = [good, 'https://evil.example/iiif/b%2F1', 'http://iiif.archive.org/x', 'https://iiif.archive.org.evil.example/x', 'data:image/png;base64,AAAA', '', null];
+  await LocalStore.updateProject(slug, p => { p.source = {type: 'ia', id: 'book', revision: 'r', pages: services.map((service, i) => ({label: String(i), service, w: 1, h: 1}))}; });
+  const at = async i => (await router.handle('GET', `/api/projects/${slug}/image?index=${i}`));
+  assert.equal((await at(0)).url, `${good}/full/1600,/0/default.jpg`);
+  assert.equal('unavailable' in await at(0), false);
+  for (let i = 1; i < services.length; i++) {
+    const im = await at(i);
+    assert.deepEqual([im.url, im.pdf, im.unavailable, im.service, im.index, im.count], [undefined, undefined, Sources.FOREIGN_SERVICE, services[i], i, services.length]);
+  }
+  assert.match(Sources.FOREIGN_SERVICE, /ブラウザ版では表示できません/);
+  assert.doesNotMatch(Sources.FOREIGN_SERVICE, /応答しません/);
+  router.revokeUrls();
+});
+
+test('a backup restored with a foreign image service shows the message, and an attached PDF still wins', iaWorld(async () => [200, metadataOf('pdf-formats')], async () => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug, {pages: Array.from({length: 3}, (_, i) => ({label: String(i), service: `https://evil.example/s${i}`, w: 1, h: 2})), pdf_file: 'ia-rev1.pdf'});
+  const im = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([im.url, im.pdf, im.unavailable], [undefined, undefined, Sources.FOREIGN_SERVICE]);
+  await router.handle('POST', `/api/projects/${slug}/source/ia/pdf/attach`, iaPdfBlob(), {'X-Revision': 'rev1', 'X-Page-Count': '3'});
+  const withPdf = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([typeof withPdf.pdf, 'unavailable' in withPdf, 'url' in withPdf], ['string', false, false]);
+  router.revokeUrls();
+}));
+
+test('ia pdf status, attach and detach mirror server.py; the file is chosen by the user and stored with the source in one step', iaWorld(async () => [200, metadataOf('pdf-formats')], async calls => {
+  const {router, slug} = await fresh();
+  const base = `/api/projects/${slug}/source/ia/pdf`;
+  await status(router.handle('GET', base), 400);  // IA の資料ではない
+  await iaProject(router, slug);
+  let st = await router.handle('GET', base);
+  assert.deepEqual(st, {available: {name: 'd.pdf', size: 300, format: 'Image Container PDF'}, attached: null, job: null, pending: null, revision: 'rev1', v: 'rev1', mismatch: ''});
+  await router.handle('GET', base);
+  assert.equal(calls.length, 1);  // server.py と同じく revision ごとに1回だけ取得する
+  await status(router.handle('POST', base, {}), 501);  // サーバー側のダウンロードは無い
+  const attach = (body, headers) => router.handle('POST', `${base}/attach`, body, headers);
+  const h = (pages, revision = 'rev1') => ({'X-Revision': revision, 'X-Page-Count': String(pages)});
+  await assert.rejects(attach(iaPdfBlob(), h(3, 'old')), e => e.status === 409);
+  await assert.rejects(attach(new Blob(['no']), h(3)), e => e.status === 400 && e.message === 'PDFファイルではありません');
+  await assert.rejects(attach(iaPdfBlob(), h(2)), e => e.status === 400 && e.message === 'PDFのページ数（2）が資料の画像数（3）と一致しないため使えません');
+  await assert.rejects(attach(iaPdfBlob(), h('x')), e => e.status === 400 && e.message === 'ページ数が正しくありません');
+  const huge = iaPdfBlob(); Object.defineProperty(huge, 'size', {value: 500 * 1024 * 1024 + 1});
+  await assert.rejects(attach(huge, h(3)), e => e.status === 413);
+  assert.equal(LocalStore.files.size, 0);  // 失敗では何も保存しない
+  assert.equal((await LocalStore.getProject(slug)).source.pdf_file, undefined);
+  const done = await attach(iaPdfBlob(), h(3));
+  assert.equal(done.source.pdf_file, 'ia-rev1.pdf');
+  assert.deepEqual([...LocalStore.files.keys()], [`${slug}/ia-rev1.pdf`]);
+  st = await router.handle('GET', base);
+  assert.deepEqual([st.attached, st.pending, st.v], ['ia-rev1.pdf', null, `rev1-${iaPdfBlob().size}`]);
+  const image = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([typeof image.pdf, 'url' in image, image.index, image.service], ['string', false, 1, 'https://iiif.archive.org/image/iiif/3/x%2Fs1']);
+  const detached = await router.handle('POST', `${base}/detach`);
+  assert.equal(detached.source.pdf_file, undefined);
+  assert.equal(LocalStore.files.size, 0);
+  const back = (await router.handle('GET', `/api/projects/${slug}/pages/1`)).image;
+  assert.deepEqual([back.url, 'pdf' in back], ['https://iiif.archive.org/image/iiif/3/x%2Fs1/full/1600,/0/default.jpg', false]);
+  assert.equal((await router.handle('GET', base)).attached, null);
+  router.revokeUrls();
+}));
+
+test('an IA project restored from a backup (pdf_file without a Blob) shows the online image; switching sources removes the old PDF', iaWorld(async () => [200, manifestOf('synthetic-book')], async () => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug, {pdf_file: 'ia-rev1.pdf'});
+  const im = (await router.handle('GET', `/api/projects/${slug}/pages/0`)).image;
+  assert.deepEqual([im.url, 'pdf' in im, 'no_file' in im], ['https://iiif.archive.org/image/iiif/3/x%2Fs0/full/1600,/0/default.jpg', false, false]);
+  await router.handle('POST', `/api/projects/${slug}/source/ia/pdf/attach`, iaPdfBlob(), {'X-Revision': 'rev1', 'X-Page-Count': '3'});
+  assert.equal(LocalStore.files.size, 1);
+  const staged = await router.handle('POST', `/api/projects/${slug}/source/ia`, {id: 'synthetic-book'});
+  await router.handle('POST', `/api/projects/${slug}/mapping`, {source: staged.draft.revision});
+  assert.equal(LocalStore.files.size, 0);
+  assert.equal((await LocalStore.getProject(slug)).source.pdf_file, undefined);
+  router.revokeUrls();
+}));
