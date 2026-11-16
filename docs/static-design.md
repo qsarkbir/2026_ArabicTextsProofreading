@@ -65,7 +65,7 @@
 |---|---|---|
 | 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（#5）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
 | 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（#5）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
-| 2 | Internet Archive 連携（検索、資料情報、IIIF マニフェスト、ページ画像。PDF は利用者がダウンロードして選ぶ） | 完了（PR 未作成）。`local/sources.js`、ルーターの IA 経路（D-28）、再試行と案内（D-29）、PDF のリンクと選択（D-30）、CSP の `connect-src`（D-14）。CORS の確認は D-27 |
+| 2 | Internet Archive 連携（検索、資料情報、IIIF マニフェスト、ページ画像。PDF は利用者がダウンロードして選ぶ） | 完了（#6）。`local/sources.js`、ルーターの IA 経路（D-28）、再試行と案内（D-29）、PDF のリンクと選択（D-30）、CSP の `connect-src`（D-14）。CORS の確認は D-27 |
 | 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 未着手 |
 
 状態は「未着手 → 作業中 → 完了」で書き、完了したら対応する PR を併記する。
