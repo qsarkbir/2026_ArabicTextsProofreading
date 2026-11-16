@@ -98,10 +98,12 @@ Internet Archive の資料は、「資料・ページ対応」の「作業フォ
 
 ```bash
 python -m unittest discover -s tests -v
-node --test tests/core.test.js tests/compare.test.js
+node --test tests/*.test.js
 node --check proofreader/static/app.js
 node --check proofreader/static/workflows.js
 node --check proofreader/static/compare.js
+node --check proofreader/static/local/openiti.js
+node --check proofreader/static/local/work.js
 ```
 
 ブラウザ確認用に `python -m tests.preview_server` を実行すると、合成データだけを使うサーバーが `http://127.0.0.1:8772/` で起動します（Internet Archive 形式の `ui-fixture` と PDF の `pdf-fixture`）。最初の保存だけ意図的に失敗するため、再試行を確認できます。既存の `projects/` と有料OCRは使用しません。Ctrl+C で終了すると検証データも削除します。

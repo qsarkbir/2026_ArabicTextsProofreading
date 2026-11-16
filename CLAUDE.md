@@ -14,7 +14,7 @@ python -m proofreader --keep-running   # タブを閉じても終了しない
 - 既定では、画面（タブ）がすべて閉じて30秒後（heartbeat の途絶は3分後）にサーバーが自動終了する（`presence.py` と `server.watch`）。`.claude/launch.json` などで常駐させたいときは `--keep-running`。
 - API キーはリポジトリのルートの `.env`（git 管理外）に `ANTHROPIC_API_KEY=...` と書く。`server.load_env` が起動時に読み込み、シェルの環境変数より優先する。`main()` の中で読むので、import 時に評価される `PROOF_DATA` は `.env` では変えられない。`.env` の中身は表示・コミットしない。
 - プレビュー用の設定は `.claude/launch.json`（`proofreader-app`、ポート 8770、`.venv` の Python で起動、`--keep-running` 付き）。
-- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/core.test.js tests/compare.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js` も同様）。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
+- ビルド工程・リンターは無い。回帰テストは `python -m unittest discover -s tests -v` と `node --test tests/*.test.js`。構文確認は `node --check proofreader/static/app.js`（`workflows.js`・`compare.js`・`local/openiti.js`・`local/work.js` も同様）。`tests/fixtures/openiti/` の合成データと expected.json は Python（`tests/test_parity.py`）と JS（`tests/openiti.test.js`）の共通の基準で、`openiti.py` を意図して変えたら `UPDATE_FIXTURES=1 python -m unittest tests.test_parity` で作り直し、`local/openiti.js` も合わせる。GitHub Actions（`.github/workflows/tests.yml`）が Windows/Ubuntu × Python 3.10/3.13 で同じテストを、別ジョブでブラウザ検証と TEI スキーマ検証を実行する。ブラウザ検証は `python -m tests.preview_server` で合成データ専用のサーバーを起動できる（8772番、IA形式の `ui-fixture` と PDF の `pdf-fixture`、最初の保存を意図的に失敗させる）。
 - 作業データは `projects/`（`PROOF_DATA` で変更可、git 管理外）。動作確認には既存のプロジェクトを使ってよいが、`original.txt` は書き換えないこと。
 
 ## 構成
