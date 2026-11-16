@@ -45,6 +45,12 @@ const memory = () => {
       files.set(`${slug}/${name}`, blob);
     },
     files,
+    deleteProject: async slug => {
+      if (!projects.has(slug)) throw new Work.ApiError('見つかりません', 404);
+      projects.delete(slug); originals.delete(slug); texts.delete(slug); settings.delete(`backup:${slug}`);
+      for (const k of [...records.keys()]) if (k.startsWith(slug + '\0')) records.delete(k);
+      for (const k of [...files.keys()]) if (k.startsWith(slug + '/')) files.delete(k);
+    },
     createProject: async (f, extra = {}) => {
       const p = make(f.uri.replace(/[^A-Za-z0-9._-]+/g, '_') || 'text',
         {uri: f.uri, raw_url: '', title: 'T', author: 'A', created: 'now', candidates: [], source: null, offset: 0, anchors: [], ...extra.patch}, f.text);
@@ -568,3 +574,26 @@ test('an IA project restored from a backup (pdf_file without a Blob) shows the o
   assert.equal((await LocalStore.getProject(slug)).source.pdf_file, undefined);
   router.revokeUrls();
 }));
+
+test('DELETE removes the project, its work, files and staged source like server.py, and only that project', async () => {
+  const {router, slug} = await fresh();
+  const other = (await router.handle('POST', '/api/projects/upload-text', new Blob([TEXT]), {'X-Filename': 'other.mARkdown'})).slug;
+  await router.handle('PUT', `/api/projects/${slug}/pages/0`, {text: 'edited', revision: 0});
+  await router.handle('PUT', `/api/projects/${other}/pages/0`, {text: 'kept', revision: 0});
+  const staged = await router.handle('POST', `/api/projects/${slug}/source/pdf`, pdfBlob(), {'X-Page-Count': '3', 'X-Filename': 'a.pdf'});
+  await router.handle('POST', `/api/projects/${slug}/mapping`, {source: staged.draft.revision, offset: 0});
+  await router.handle('POST', `/api/projects/${slug}/source/pdf`, pdfBlob('%PDF-two'), {'X-Page-Count': '3', 'X-Filename': 'b.pdf'});  // 未確定の資料
+  await router.handle('GET', `/api/projects/${slug}/pages/0`);
+  assert.ok(router.urlsOf(slug, true).length >= 1);
+  assert.deepEqual(await router.handle('DELETE', `/api/projects/${slug}`), {deleted: slug});
+  await status(router.handle('GET', `/api/projects/${slug}`), 404);
+  await status(router.handle('DELETE', `/api/projects/${slug}`), 404);
+  assert.deepEqual([...LocalStore.files.keys()].filter(k => k.startsWith(slug + '/')), []);
+  assert.deepEqual(await LocalStore.pages(slug), {});
+  assert.deepEqual(router.urlsOf(slug, true), []);
+  assert.equal((await router.handle('GET', '/api/projects')).length, 1);
+  assert.equal((await router.handle('GET', `/api/projects/${other}/pages/0`)).text, 'kept');
+  await status(router.handle('DELETE', '/api/projects/..'), 404);
+  await status(router.handle('DELETE', '/api/projects/a%2Fb'), 404);
+  router.revokeUrls();
+});

@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
-from tests.preview_server import synthetic_pdf
+from tests.preview_server import synthetic_pdf, jpx_pdf
 
 
 def main():
@@ -46,6 +46,8 @@ def main():
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.on('console', lambda m: errors.append(m.text) if 'Content Security Policy' in m.text else None)
+            wasm = []
+            page.on('response', lambda r: wasm.append((r.url.rsplit('/', 1)[-1], r.status, r.headers.get('content-type'))) if '.wasm' in r.url else None)
             page.goto(base + '/#/p/ui-fixture/0')
             editor = page.get_by_role('textbox', name='校正テキスト', exact=True)
             expect(editor).to_be_enabled()
@@ -143,6 +145,55 @@ def main():
             page.goto(base + '/')
             expect(page.locator('tbody tr', has_text='Updated author')).to_have_count(2)
             print('PASS bibliography, TEI, ZIP and backup downloads; backup import', flush=True)
+            # a scanned book: one JPEG 2000 image per page needs pdf.js's WebAssembly decoder (vendor/pdfjs/6.5.438/wasm/)
+            page.goto(base + '/')
+            page.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
+            jpx = Path(tmp) / 'scan.pdf'
+            jpx.write_bytes(jpx_pdf(2))
+            page.get_by_label('書名', exact=True).fill('Scanned edition')
+            page.get_by_label('著者', exact=True).fill('Scanned author')
+            page.get_by_label('底本（版・出版者・出版年）').fill('Synthetic publisher, 2026')
+            page.get_by_label('利用・公開条件').fill('Test data only')
+            page.locator('#draftpdf').set_input_files(str(jpx))
+            expect(page.locator('#pdfcount')).to_contain_text('2ページ', timeout=60000)
+            page.get_by_role('button', name='校正を始める').click()
+            expect(editor).to_be_enabled(timeout=30000)
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            dark = page.evaluate('''() => { const c = document.querySelector('#imgview canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 100) n++; return n; }''')
+            assert dark > 1000, f'JPEG 2000 page rendered blank ({dark} dark pixels)'
+            assert ('openjpeg.wasm', 200, 'application/wasm') in wasm, wasm
+            print('PASS scanned PDF (JPEG 2000) renders through the vendored WebAssembly decoder', flush=True)
+
+            # deleting: cancel keeps everything, a typed confirmation removes the project and its folder (PROOF_DATA is the fixture server's, so check through the API)
+            slugs = lambda: [p['slug'] for p in page.evaluate("api('GET', '/api/projects')")]
+            before = slugs()
+            page.goto(base + '/')
+            row = page.locator('tbody tr', has_text='Scanned author')
+            row.get_by_role('button', name='削除').click()
+            dialog = page.locator('dialog.delete-dialog')
+            expect(dialog).to_contain_text('元に戻すことはできません')
+            expect(dialog).to_contain_text('バックアップ')
+            expect(dialog.locator('#delgo')).to_be_disabled()
+            dialog.locator('#delword').fill('削')
+            expect(dialog.locator('#delgo')).to_be_disabled()
+            dialog.get_by_role('button', name='キャンセル').click()
+            expect(page.locator('dialog.delete-dialog')).to_have_count(0)
+            assert slugs() == before
+            row.get_by_role('button', name='削除').click()
+            with page.expect_download() as saved:
+                dialog.get_by_role('button', name='バックアップを書き出す').click()
+            assert saved.value.suggested_filename.endswith('.proofreader.json')
+            dialog.locator('#delword').fill('削除')
+            dialog.locator('#delgo').click()
+            expect(page.locator('dialog.delete-dialog')).to_have_count(0)
+            expect(page.locator('tbody tr', has_text='Scanned author')).to_have_count(0)
+            after = slugs()
+            assert len(after) == len(before) - 1, (before, after)
+            gone = (set(before) - set(after)).pop()
+            assert page.evaluate("slug => api('GET', '/api/projects/' + slug).then(() => 'found', e => e.message)", gone) == '見つかりません'
+            page.reload()
+            expect(page.locator('tbody tr', has_text='Scanned author')).to_have_count(0)
+            print('PASS project deletion: cancel keeps it, confirmation removes it', flush=True)
             assert not errors, errors
             browser.close()
     finally:

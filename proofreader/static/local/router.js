@@ -176,6 +176,15 @@ const LocalRouter = (() => {
   route('GET', '/api/projects/(?<slug>[^/]+)', ({slug}) => projectView(slug));
 
   // ---------- PDF の資料（server.py の create_pdf_draft / set_pdf / set_mapping / preview_image） ----------
+  // store.delete_project：プロジェクトの全データを消し、この画面が持つ未確定の資料・PDF の URL・pdf.js の文書も手放す
+  route('DELETE', '/api/projects/(?<slug>[^/]+)', async ({slug}) => {
+    await LocalStore.deleteProject(slugOf(slug));
+    DRAFTS.delete(slug); PDF_INFO.delete(slug);
+    for (const k of [...urls.keys()]) if (k.startsWith(`${slug}/`) || k.startsWith(`draft:${slug}:`)) forget(k);
+    flushRetired();
+    return {deleted: slug};
+  });
+
   route('POST', '/api/projects/new-pdf', async ({body, headers}) => {
     tooLarge(body);
     if (!(await isPdf(body))) throw err('500 MB以下のPDFを選択してください');

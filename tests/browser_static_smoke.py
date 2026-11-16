@@ -21,7 +21,7 @@ from playwright.sync_api import sync_playwright, expect
 
 from proofreader import bundle, openiti, store
 from proofreader.exporters import tei
-from tests.preview_server import synthetic_pdf
+from tests.preview_server import synthetic_pdf, jpx_pdf
 
 STATIC = Path(__file__).resolve().parent.parent / 'proofreader' / 'static'
 PYTHON_BUNDLE = Path(__file__).resolve().parent / 'fixtures' / 'bundle' / 'python-export.proofreader.json'
@@ -34,6 +34,8 @@ BOOK_YML = '10#BOOK#TITLEA#AR####: كتاب تجريبي\n'
 # a canvas that holds a rendered page has plenty of dark pixels; the hash tells two different pages apart
 CANVAS = '''sel => { const c = document.querySelector(sel); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let dark = 0, hash = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] < 100) dark++; hash = (hash * 31 + d[i] + i) | 0; } return {dark, hash, width: c.width}; }'''
+LEFTOVER = '''slug => LocalStore.open().then(db => Promise.all([...db.objectStoreNames].map(name => new Promise((resolve, reject) => { const r = db.transaction(name).objectStore(name).getAllKeys();
+    r.onsuccess = () => resolve(r.result.filter(k => k === slug || k === 'backup:' + slug || (Array.isArray(k) && k[0] === slug)).map(k => name + ':' + k)); r.onerror = () => reject(r.error); })))).then(l => l.flat())'''
 DOCS = 'Object.keys(pdfDocs).length'  # pdf.js documents that are loaded (each keeps its whole Blob in memory)
 STORED_FILES = '''slug => LocalStore.open().then(db => new Promise((resolve, reject) => { const r = db.transaction('files').objectStore('files').getAll();
     r.onsuccess = () => resolve(r.result.filter(x => x.slug === slug).map(x => [x.name, x.blob.size])); r.onerror = () => reject(r.error); }))'''
@@ -689,6 +691,56 @@ def main():
             expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
             assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, restored: pdf3.stat().st_size, draft_slug: pdf3.stat().st_size}
             print('PASS new draft from a PDF selection, all-or-nothing on a full disk', flush=True)
+            # ---- a scanned PDF (JPEG 2000 images) renders through the vendored WebAssembly decoder ----
+            wasm = []
+            other.on('response', lambda r: wasm.append((r.url.rsplit('/', 1)[-1], r.status, r.headers.get('content-type'))) if '.wasm' in r.url else None)
+            scan = Path(tmp) / 'scan.pdf'
+            scan.write_bytes(jpx_pdf(2))
+            other.goto(base + '/')
+            other.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
+            other.get_by_label('書名', exact=True).fill('Scanned edition')
+            other.get_by_label('著者', exact=True).fill('Scanned author')
+            other.locator('#draftpdf').set_input_files(str(scan))
+            expect(other.locator('#pdfcount')).to_contain_text('2ページ', timeout=60000)
+            other.get_by_role('button', name='校正を始める').click()
+            expect(other_editor).to_be_enabled(timeout=30000)
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate(CANVAS, '#imgview canvas')['dark'] > 1000, 'the JPEG 2000 page is blank'
+            assert ('openjpeg.wasm', 200, 'application/wasm') in wasm, wasm
+            print('PASS scanned PDF (JPEG 2000) renders through the vendored WebAssembly decoder', flush=True)
+
+            # ---- project deletion: cancel keeps it; confirming removes every key of the project; another tab showing it goes home ----
+            viewer = fresh.new_page()
+            viewer.goto(base + f'/#/p/{draft_slug}/0')
+            expect(viewer.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            other.evaluate(f"LocalStore.setSetting('backup:{draft_slug}', '2026-11-16T00:00:00.000Z')")  # a recorded backup time is removed too
+            other.goto(base + '/')
+            delete = other.locator(f'button[data-delete="{draft_slug}"]')
+            delete.click()
+            dialog = other.locator('dialog.delete-dialog')
+            expect(dialog).to_contain_text('元に戻すことはできません')
+            expect(dialog).to_contain_text('バックアップ')
+            expect(dialog.locator('#delgo')).to_be_disabled()
+            dialog.get_by_role('button', name='キャンセル').click()
+            expect(other.locator('dialog.delete-dialog')).to_have_count(0)
+            assert other.evaluate(LEFTOVER, draft_slug), 'cancel must keep the project'
+            delete.click()
+            dialog.locator('#delword').fill('削除')
+            dialog.locator('#delgo').click()
+            expect(other.locator('dialog.delete-dialog')).to_have_count(0)
+            expect(other.locator(f'button[data-delete="{draft_slug}"]')).to_have_count(0)
+            assert other.evaluate(LEFTOVER, draft_slug) == [], other.evaluate(LEFTOVER, draft_slug)
+            assert draft_slug not in other.evaluate("LocalStore.fileSizes()")
+            assert other.evaluate(f"api('GET', '/api/projects/{draft_slug}').then(() => 'found', e => e.status)") == 404
+            assert other.evaluate(f"api('DELETE', '/api/projects/{draft_slug}').then(() => 'deleted', e => e.status)") == 404
+            expect(viewer).to_have_url(re.compile(r'#/$'))
+            expect(viewer.locator('#toast')).to_contain_text('別のタブで削除')
+            assert other.evaluate("Object.keys(pdfDocs).length") == 0
+            kept = other.evaluate("LocalStore.listProjects().then(l => l.map(p => p.slug))")
+            assert 'upload' in kept and restored in kept, kept  # other projects are untouched
+            assert other.evaluate("LocalStore.fileSizes()")['upload'] == pdf4.stat().st_size
+            viewer.close()
+            print('PASS project deletion: cancel keeps it, confirmation removes all its data, other tabs leave it', flush=True)
             assert not other_errors and not other_csp, (other_errors, other_csp)
             fresh.close()
 

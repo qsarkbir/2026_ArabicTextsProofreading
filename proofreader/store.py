@@ -203,6 +203,19 @@ def scan_path(slug, name):
     return _dir(slug) / "cache" / "scan" / name
 
 
+def delete_project(slug):
+    """Remove the whole project folder (setup, original, work, OCR, PDFs, scan cache). The folder is renamed away first, so a half-failed delete never leaves a listed project."""
+    with _lock:
+        d = _dir(slug)
+        root = ROOT.resolve()
+        if d.is_symlink() or d.resolve().parent != root:
+            raise KeyError(slug)
+        trash = root / f".deleting-{uuid.uuid4().hex}"
+        os.replace(d, trash)
+        _cache.pop(slug, None)
+    shutil.rmtree(trash)
+
+
 def list_projects():
     out = []
     if not ROOT.exists():

@@ -27,6 +27,26 @@ def synthetic_pdf(pages):
     return out + b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n' % (len(objs) + 1, xref)
 
 
+def jpx_pdf(pages=2):
+    """A scanned-book style PDF: each page is one JPEG 2000 image (JPXDecode), which pdf.js decodes with its WebAssembly decoder."""
+    jp2 = (Path(__file__).parent / 'fixtures' / 'pdf' / 'page.jp2').read_bytes()
+    objs = [b'<< /Type /Catalog /Pages 2 0 R >>',
+            b'<< /Type /Pages /Kids [%s] /Count %d >>' % (b' '.join(b'%d 0 R' % (4 + 3 * i) for i in range(pages)), pages),
+            b'<< /Type /XObject /Subtype /Image /Width 120 /Height 160 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /JPXDecode /Length %d >>\nstream\n%s\nendstream' % (len(jp2), jp2)]
+    for i in range(pages):
+        stream = b'q 600 0 0 800 0 0 cm /Im1 Do Q'
+        objs.append(b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /XObject << /Im1 3 0 R >> >> /Contents %d 0 R >>' % (5 + 3 * i))
+        objs.append(b'<< /Length %d >>\nstream\n%s\nendstream' % (len(stream), stream))
+        objs.append(b'<< >>')
+    out, offsets = b'%PDF-1.5\n', []
+    for n, obj in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b'%d 0 obj\n%s\nendobj\n' % (n, obj)
+    xref = len(out)
+    out += b'xref\n0 %d\n0000000000 65535 f \n' % (len(objs) + 1) + b''.join(b'%010d 00000 n \n' % o for o in offsets)
+    return out + b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n' % (len(objs) + 1, xref)
+
+
 class PreviewHandler(server.Handler):
     failed_once = False
 

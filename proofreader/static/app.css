@@ -24,6 +24,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap}
 button:hover:not(:disabled){border-color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
+button.danger{background:var(--bad);color:var(--bad-ink);border-color:var(--bad-ink)}
+p.err{color:var(--bad-ink)}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 input[type=text],input[type=search],input[type=number],select{padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .top{display:flex;align-items:center;gap:16px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}

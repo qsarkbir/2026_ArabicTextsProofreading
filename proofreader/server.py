@@ -34,6 +34,9 @@ STATIC = Path(__file__).resolve().parent / "static"
 for _ext in (".js", ".mjs"):
     mimetypes.add_type("text/javascript", _ext)
 mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/wasm", ".wasm")  # pdf.js の JPEG 2000・JBIG2 デコーダー
+for _ext in (".pfb", ".icc"):
+    mimetypes.add_type("application/octet-stream", _ext)
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 ROUTES = []
 PRESENCE = Presence()
@@ -205,6 +208,16 @@ def create_from_file(h):
 @route("GET", r"/api/projects/(?P<slug>[^/]+)")
 def get_project(h, slug):
     return project_view(slug)
+
+
+@route("DELETE", r"/api/projects/(?P<slug>[^/]+)")
+def delete_project(h, slug):
+    store.delete_project(slug)
+    DRAFTS.pop(slug, None)
+    with PDF_LOCK:
+        for d in (PDF_JOBS, PDF_INFO, PDF_MISMATCH):
+            d.pop(slug, None)
+    return {"deleted": slug}
 
 
 # ---------- scan source ----------
@@ -800,6 +813,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         self.dispatch("PUT")
+
+    def do_DELETE(self):
+        self.dispatch("DELETE")
 
 
 def load_env(path=ENV_FILE):

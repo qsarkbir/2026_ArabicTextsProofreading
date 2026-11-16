@@ -54,12 +54,14 @@ async function loadPdf(url) {
     pdfLib = await pdfLoading;
   }
   if (!pdfDocs[url]) {
-    const task = pdfLib.getDocument({url, isEvalSupported: false});
+    const task = pdfLib.getDocument({url, isEvalSupported: false, ...pdfAssets()});
     pdfTasks[url] = task;
     pdfDocs[url] = task.promise.catch(e => { releasePdf(url).catch(() => {}); throw e; });
   }
   return pdfDocs[url];
 }
+// JPEG 2000・JBIG2 の画像や ICC・標準フォントのデータ（vendor/pdfjs/6.5.438/ に同梱）。末尾の / が必須。サブパス配信でも動くよう document.baseURI で解決する
+const pdfAssets = () => { const u = d => new URL(`vendor/pdfjs/6.5.438/${d}/`, document.baseURI).href; return {wasmUrl: u('wasm'), iccUrl: u('iccs'), standardFontDataUrl: u('standard_fonts')}; };
 async function releasePdf(url) {
   const task = pdfTasks[url];
   delete pdfTasks[url]; delete pdfDocs[url];
@@ -101,6 +103,13 @@ function loadScan(el, url, {current, onload, onfail}) {
   };
   el.src = url;
 }
+function isBlank(ctx, c) {
+  const t = document.createElement('canvas'); t.width = t.height = 32;
+  const g = t.getContext('2d', {willReadFrequently: true}); g.drawImage(c, 0, 0, 32, 32);
+  const d = g.getImageData(0, 0, 32, 32).data;
+  for (let i = 4; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) > 8 || Math.abs(d[i + 1] - d[1]) > 8 || Math.abs(d[i + 2] - d[2]) > 8 || Math.abs(d[i + 3] - d[3]) > 8) return false;
+  return true;
+}
 async function renderPdfPage(url, index, width) {
   const doc = await loadPdf(url);
   if (index < 0 || index >= doc.numPages) return null;
@@ -109,12 +118,23 @@ async function renderPdfPage(url, index, width) {
   const vp = page.getViewport({scale: width / vp1.width});
   const c = document.createElement('canvas');
   c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-  await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+  const ctx = c.getContext('2d');
+  await page.render({canvasContext: ctx, viewport: vp}).promise;
+  // 画像（JPEG 2000 など）を読めないと pdf.js は警告だけで白紙のまま完了する。画像を含むのに全面が同じ色なら、白紙と区別して知らせる
+  if (isBlank(ctx, c) && (await page.getOperatorList()).fnArray.some(op => op === pdfLib.OPS.paintImageXObject || op === pdfLib.OPS.paintInlineImageXObject || op === pdfLib.OPS.paintImageMaskXObject)) throw new Error('このページの画像をPDFから読み取れませんでした（画像の形式に対応していないか、PDFが壊れている可能性があります）');
   return c;
 }
 
 // ---------- routing ----------
 window.addEventListener('hashchange', routeNow);
+// ブラウザ版：別のタブでこのプロジェクトが削除されたら、開いている画面を閉じて一覧へ戻る
+if (browserMode && typeof BroadcastChannel !== 'undefined') {
+  const deletions = new BroadcastChannel('proofreader');
+  deletions.addEventListener('message', e => {
+    const m = e.data || {}, h = location.hash.split('/');
+    if (m.deleted && h[1] === 'p' && decodeURIComponent(h[2] || '') === m.slug) { toast('このプロジェクトは別のタブで削除されました', true); location.hash = '#/'; }
+  });
+}
 let leave = null, routeBusy = false, routeAgain = false, currentHash = location.hash, pdfOwner = null;
 // ブラウザ版：PDF は IndexedDB の Blob を object URL で pdf.js に渡す。ほかのプロジェクトや一覧へ移るとき、読み込み済みの PDF と URL を解放する
 // keep: いま使う URL。空なら（別のプロジェクトや一覧へ移るとき）すべて失効させる
@@ -175,11 +195,51 @@ async function storageNote() {
 }
 const backupLabel = t => { const d = t ? new Date(t) : null; return d && !isNaN(d) ? d.toLocaleString('ja-JP') : '未バックアップ'; };
 
+function confirmDelete(p, {life, api, done}) {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'delete-dialog';
+  dlg.setAttribute('aria-labelledby', 'deltitle');
+  const href = `/api/projects/${encodeURIComponent(p.slug)}/export?fmt=bundle`;
+  dlg.innerHTML = `<h2 id="deltitle">プロジェクトを削除しますか？</h2>
+    <p><b class="ar">${esc(p.title || p.uri)}</b><br><span class="small muted">${esc(p.uri)}</span></p>
+    <p>このプロジェクトと、すべての作業データ（修正したテキスト・メモ・確認済みの印・保存履歴・AIの読み取り結果${browserMode ? '・保存したPDF・最後のバックアップの日時' : '・保存したPDFやページ画像'}）が<b>完全に削除されます。元に戻すことはできません。</b>
+    現在、修正したページは${p.edited}件、確認済みは${p.done}/${p.pages}ページです。</p>
+    <p>削除する前に、バックアップを書き出しておくことをお勧めします。${browserMode ? 'バックアップにPDFは含まれません。' : ''}</p>
+    <p><a href="${esc(href)}" data-bundle><button type="button" id="delbackup">バックアップを書き出す</button></a> <span id="delbackupmsg" class="small" role="status"></span></p>
+    <p><label>削除するには「削除」と入力してください：<input type="text" id="delword" autocomplete="off" aria-label="確認のため「削除」と入力"></label></p>
+    <div class="row"><button type="button" id="delcancel">キャンセル</button><button type="button" class="danger" id="delgo" disabled>完全に削除する</button></div>
+    <p id="delerr" class="err" role="alert"></p>`;
+  document.body.appendChild(dlg);
+  const close = () => { try { dlg.close(); } catch {} dlg.remove(); };
+  dlg.addEventListener('cancel', e => { e.preventDefault(); close(); });
+  $('#delcancel', dlg).onclick = close;
+  $('#delword', dlg).oninput = e => { $('#delgo', dlg).disabled = e.target.value.trim() !== '削除'; };
+  $('a[data-bundle]', dlg).addEventListener('click', async e => {
+    if (!browserMode) { $('#delbackupmsg', dlg).textContent = '書き出しを始めました'; return; }
+    e.preventDefault();
+    try { await saveDownload(href); $('#delbackupmsg', dlg).textContent = '書き出しました'; } catch (err) { $('#delbackupmsg', dlg).textContent = err.message; }
+  });
+  $('#delgo', dlg).onclick = async () => {
+    $('#delgo', dlg).disabled = $('#delcancel', dlg).disabled = true;
+    try {
+      await api('DELETE', `/api/projects/${encodeURIComponent(p.slug)}`);
+      close(); toast('プロジェクトを削除しました');
+      if (life.alive) await done();
+    } catch (err) {
+      if (err.status === 404) { close(); toast('このプロジェクトは既に削除されています'); if (life.alive) await done().catch(() => {}); return; }
+      $('#delcancel', dlg).disabled = false; $('#delerr', dlg).textContent = `削除できませんでした：${err.message}`;
+    }
+  };
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  $('#delword', dlg).focus();
+}
+
 async function homeView(life) {
   const api = life.api;
   document.title = 'OpenITI 校正';
+  let projects = [];
   const table = async () => {
-    const list = await api('GET', '/api/projects');
+    const list = projects = await api('GET', '/api/projects');
     return list.length ? `<table><thead><tr><th>書名</th><th>URI</th><th>ページ</th><th>確認済み</th><th>修正</th>${browserMode ? '<th>最後のバックアップ</th>' : ''}<th></th></tr></thead><tbody>
         ${list.map(p => `<tr>
           <td><span class="ar">${esc(p.title || '—')}</span><div class="muted small ar">${esc(p.author)}</div>${browserMode && p.pdf_size ? `<div class="muted small">PDF ${megabytes(p.pdf_size)}</div>` : ''}</td>
@@ -188,7 +248,8 @@ async function homeView(life) {
           <td class="prog">${p.edited}</td>
           ${browserMode ? `<td class="small">${esc(backupLabel(p.backup))}</td>` : ''}
           <td><a href="#/p/${esc(p.slug)}${p.source || browserMode ? '' : '/setup'}"><button>${p.source || browserMode ? '開く' : '設定を続ける'}</button></a>
-            <a href="/api/projects/${esc(p.slug)}/export?fmt=bundle" data-bundle><button>バックアップを書き出す</button></a></td>
+            <a href="/api/projects/${esc(p.slug)}/export?fmt=bundle" data-bundle><button>バックアップを書き出す</button></a>
+            <button class="danger" data-delete="${esc(p.slug)}" aria-label="${esc(p.title || p.uri)} を削除">削除</button></td>
         </tr>`).join('')}</tbody></table>` : '<p class="muted">まだありません。</p>';
   };
   view.innerHTML = `<div class="wrap">
@@ -221,6 +282,12 @@ async function homeView(life) {
     if (!link || !browserMode) return;
     e.preventDefault();
     try { await saveDownload(link.getAttribute('href')); await refresh(); } catch (err) { if (life.alive) toast(err.message, true); }
+  });
+  // 削除：プロジェクトと作業データは元に戻せないので、内容を示し、バックアップを勧め、「削除」と入力してもらってから消す
+  $('#plist').addEventListener('click', e => {
+    const b = e.target.closest('button[data-delete]');
+    const p = b && projects.find(x => x.slug === b.dataset.delete);
+    if (p) confirmDelete(p, {life, api, done: refresh});
   });
   $('#bundle').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;

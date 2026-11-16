@@ -177,6 +177,20 @@ const LocalStore = (() => {
     return {project, original: original.text, records};
   });
 
+  // プロジェクトに属するものをすべて1つのトランザクションで消す（途中で失敗したら何も消えない）。ocr の保存先はブラウザ版には無い
+  const deleteProject = async slug => {
+    await run(['projects', 'originals', 'pages', 'files', 'settings'], 'readwrite', async tx => {
+      if (!(await request(tx.objectStore('projects').getKey(slug)))) throw notFound();
+      tx.objectStore('projects').delete(slug);
+      tx.objectStore('originals').delete(slug);
+      tx.objectStore('pages').delete(IDBKeyRange.bound([slug, -Infinity], [slug, Infinity]));
+      tx.objectStore('files').delete(IDBKeyRange.bound([slug, ''], [slug, '\uffff']));
+      tx.objectStore('settings').delete(`backup:${slug}`);
+    });
+    cache.delete(slug);
+    notify({slug, deleted: true});
+  };
+
   // 利用者ごとの設定（最後のバックアップの日時など）
   const getSetting = async key => ((await run(['settings'], 'readonly', tx => request(tx.objectStore('settings').get(key)))) || {}).value;
   const setSetting = async (key, value) => {
@@ -210,7 +224,7 @@ const LocalStore = (() => {
     return next;
   };
 
-  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, getFile, fileSizes, attachFile, createProject, importBundle, bundleSource, getSetting, setSetting, backupTimes, parts, pages, page, savePage};
+  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, getFile, fileSizes, attachFile, createProject, importBundle, deleteProject, bundleSource, getSetting, setSetting, backupTimes, parts, pages, page, savePage};
 })();
 
 if (typeof module !== 'undefined') module.exports = LocalStore;

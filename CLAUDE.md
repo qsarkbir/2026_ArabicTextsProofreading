@@ -42,9 +42,10 @@ proofreader/
 
 - フロントは `location.hash` によるルーティング（`#/`、`#/new`、`#/p/<slug>/setup`、`#/p/<slug>/<ページ番号>`）。各画面は `homeView` / `newDraftView` / `setupView` / `proofView` が `view.innerHTML` にテンプレート文字列を流し込んで組み立てる。
 - 表示設定は `prefs`（localStorage の `proof-prefs`）に保存する。新しい設定項目は `prefs` の既定値 `def` に足す。
-- PDF.js 6.5.438はstatic/vendor/に本体とworkerを同梱。isEvalSupportedはfalse。版を揃えて更新しApache-2.0のLICENSEを保持する。
+- PDF.js 6.5.438はstatic/vendor/に本体とworkerと補助データ（wasm/・iccs/・standard_fonts/。JPEG 2000・JBIG2のスキャンPDFに必要。cmapsは同梱しない）を同梱し、`app.js` の `pdfAssets()` が `getDocument` に渡す（D-33）。isEvalSupportedはfalse。版を揃えて更新しApache-2.0のLICENSEを保持する。
 - 記号の挿入は `core.js` の `insertMarkup`（Node テストから読む）。`app.js` の「記号：」ボタンから呼ぶ。
 - IA の PDF 保存は `sources.ia_pdf` → `net.download` で `files/ia-<revision>.pdf` に取得する。進行状況は `server.PDF_JOBS`、ルートは `/api/projects/<slug>/source/ia/pdf`（`/attach`・`/detach` を含む）。保存したファイル名は資料の `pdf_file` に記録し、`image_for` は `pdf_file` があれば `pdf` を返す（キーは従来どおり）。
+- プロジェクトの削除は `DELETE /api/projects/<slug>`（`store.delete_project`、ブラウザ版は `LocalStore.deleteProject`。D-34）。ホームのダイアログで「削除」の入力を求める。
 - `send_file` は `Range` に対応する（大きな PDF を部分ずつ読む）。
 
 ## 守るべきこと
