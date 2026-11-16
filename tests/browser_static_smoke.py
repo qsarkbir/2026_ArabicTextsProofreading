@@ -4,6 +4,7 @@ OpenITI requests are answered with synthetic text through page.route; real OpenI
 """
 import functools
 import http.server
+import base64
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from playwright.sync_api import sync_playwright, expect
 
 from proofreader import bundle, openiti, store
 from proofreader.exporters import tei
-from tests.preview_server import synthetic_pdf
+from tests.preview_server import synthetic_pdf, jpx_pdf, flate_pdf
 
 STATIC = Path(__file__).resolve().parent.parent / 'proofreader' / 'static'
 PYTHON_BUNDLE = Path(__file__).resolve().parent / 'fixtures' / 'bundle' / 'python-export.proofreader.json'
@@ -34,6 +35,10 @@ BOOK_YML = '10#BOOK#TITLEA#AR####: كتاب تجريبي\n'
 # a canvas that holds a rendered page has plenty of dark pixels; the hash tells two different pages apart
 CANVAS = '''sel => { const c = document.querySelector(sel); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let dark = 0, hash = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] < 100) dark++; hash = (hash * 31 + d[i] + i) | 0; } return {dark, hash, width: c.width}; }'''
+LEFTOVER = '''slug => LocalStore.open().then(db => Promise.all([...db.objectStoreNames].map(name => new Promise((resolve, reject) => { const r = db.transaction(name).objectStore(name).getAllKeys();
+    r.onsuccess = () => resolve(r.result.filter(k => k === slug || k === 'backup:' + slug || (Array.isArray(k) && k[0] === slug)).map(k => name + ':' + k)); r.onerror = () => reject(r.error); })))).then(l => l.flat())'''
+BLANK_FLAG = '''async ([b64, off]) => { globalThis.PDF_NO_ASSETS = off; const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const url = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+    try { return (await renderPdfPage(url, 0, 600)).dataset.blank || null; } finally { globalThis.PDF_NO_ASSETS = false; await releasePdf(url); URL.revokeObjectURL(url); } }'''
 DOCS = 'Object.keys(pdfDocs).length'  # pdf.js documents that are loaded (each keeps its whole Blob in memory)
 STORED_FILES = '''slug => LocalStore.open().then(db => new Promise((resolve, reject) => { const r = db.transaction('files').objectStore('files').getAll();
     r.onsuccess = () => resolve(r.result.filter(x => x.slug === slug).map(x => [x.name, x.blob.size])); r.onerror = () => reject(r.error); }))'''
@@ -689,6 +694,94 @@ def main():
             expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
             assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, restored: pdf3.stat().st_size, draft_slug: pdf3.stat().st_size}
             print('PASS new draft from a PDF selection, all-or-nothing on a full disk', flush=True)
+            # ---- a scanned PDF (JPEG 2000 images) renders through the vendored WebAssembly decoder ----
+            wasm = []
+            other.on('response', lambda r: wasm.append((r.url.rsplit('/', 1)[-1], r.status, r.headers.get('content-type'))) if '.wasm' in r.url else None)
+            scan = Path(tmp) / 'scan.pdf'
+            scan.write_bytes(jpx_pdf(2))
+            other.goto(base + '/')
+            other.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
+            other.get_by_label('書名', exact=True).fill('Scanned edition')
+            other.get_by_label('著者', exact=True).fill('Scanned author')
+            other.locator('#draftpdf').set_input_files(str(scan))
+            expect(other.locator('#pdfcount')).to_contain_text('2ページ', timeout=60000)
+            other.get_by_role('button', name='校正を始める').click()
+            expect(other_editor).to_be_enabled(timeout=30000)
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert other.evaluate(CANVAS, '#imgview canvas')['dark'] > 1000, 'the JPEG 2000 page is blank'
+            assert ('openjpeg.wasm', 200, 'application/wasm') in wasm, wasm
+            print('PASS scanned PDF (JPEG 2000) renders through the vendored WebAssembly decoder', flush=True)
+            flag = lambda data, off=False: other.evaluate(BLANK_FLAG, [base64.b64encode(data).decode(), off])
+            assert flag(flate_pdf(True)) is None, 'a page with sparse ink (a page number) is not blank'
+            assert flag(jpx_pdf(1)) is None
+            assert flag(flate_pdf(False)) == '1' and flag(jpx_pdf(1), True) == '1'  # a blank verso and a JPEG 2000 page without decoders are flagged (a note, not an error)
+            print('PASS blank-page detection: sparse ink is not flagged; blank and undecodable pages show a note and stay usable', flush=True)
+            # a blank (white) page is shown with a note, not blocked
+            white = Path(tmp) / 'white.pdf'
+            white.write_bytes(flate_pdf(False))
+            other.goto(base + '/')
+            other.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
+            other.get_by_label('書名', exact=True).fill('White edition')
+            other.get_by_label('著者', exact=True).fill('White author')
+            other.locator('#draftpdf').set_input_files(str(white))
+            expect(other.locator('#pdfcount')).to_contain_text('1ページ', timeout=60000)
+            other.get_by_role('button', name='校正を始める').click()
+            expect(other_editor).to_be_enabled(timeout=30000)
+            expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            expect(other.locator('#imgview .imgwarn')).to_contain_text('画像が真っ白です')
+
+            # ---- project deletion: cancel keeps it; confirming removes every key of the project; another tab showing it goes home ----
+            viewer = fresh.new_page()
+            viewer.goto(base + f'/#/p/{draft_slug}/0')
+            expect(viewer.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            other.evaluate(f"LocalStore.setSetting('backup:{draft_slug}', '2026-11-16T00:00:00.000Z')")  # a recorded backup time is removed too
+            other.goto(base + '/')
+            delete = other.locator(f'button[data-delete="{draft_slug}"]')
+            delete.click()
+            dialog = other.locator('dialog.delete-dialog')
+            expect(dialog).to_contain_text('元に戻すことはできません')
+            expect(dialog).to_contain_text('バックアップ')
+            expect(dialog.locator('#delgo')).to_be_disabled()
+            other.evaluate("location.hash = '#/new'")  # leaving the screen removes an open dialog
+            expect(other.locator('dialog.delete-dialog')).to_have_count(0)
+            other.evaluate("location.hash = '#/'")
+            delete.click()
+            dialog.get_by_role('button', name='キャンセル').click()
+            expect(other.locator('dialog.delete-dialog')).to_have_count(0)
+            assert other.evaluate(LEFTOVER, draft_slug), 'cancel must keep the project'
+            delete.click()
+            dialog.locator('#delword').fill('削除')
+            dialog.locator('#delgo').click()
+            expect(other.locator('dialog.delete-dialog')).to_have_count(0)
+            expect(other.locator(f'button[data-delete="{draft_slug}"]')).to_have_count(0)
+            assert other.evaluate(LEFTOVER, draft_slug) == [], other.evaluate(LEFTOVER, draft_slug)
+            assert draft_slug not in other.evaluate("LocalStore.fileSizes()")
+            assert other.evaluate(f"api('GET', '/api/projects/{draft_slug}').then(() => 'found', e => e.status)") == 404
+            assert other.evaluate(f"api('DELETE', '/api/projects/{draft_slug}').then(() => 'deleted', e => e.status)") == 404
+            expect(viewer).to_have_url(re.compile(r'#/$'))
+            expect(viewer.locator('#toast')).to_contain_text('別のタブで削除')
+            # a save from a tab whose cache is stale (another tab deleted the project) is refused and leaves no page behind; a reused slug starts clean
+            ghost = other.evaluate("""async () => {
+                const p = await LocalStore.createProject({uri: 'RaceSlug', text: 'a PageV01P001\\nb PageV01P002\\n', meta: {}});
+                await LocalStore.parts(p.slug);  // cached, as in an open tab
+                const db = await LocalStore.open();
+                await new Promise((res, rej) => { const tx = db.transaction(['projects', 'originals'], 'readwrite'); tx.objectStore('projects').delete(p.slug); tx.objectStore('originals').delete(p.slug); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+                const saved = await LocalStore.savePage(p.slug, 0, {text: 'ghost', revision: 0}).then(() => 'saved', e => e.status);
+                const put = (store, value) => new Promise((res, rej) => { const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).put(value); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+                await put('pages', {slug: p.slug, i: 0, text: 'old edit', revision: 1});  // what an older version could have left
+                await put('files', {slug: p.slug, name: 'old.pdf', blob: new Blob(['x'])});
+                const again = await LocalStore.createProject({uri: 'RaceSlug', text: 'a PageV01P001\\n', meta: {}});
+                return {saved, same: again.slug === p.slug, left: await LocalStore.pages(p.slug), files: await LocalStore.getFile(p.slug, 'old.pdf') || null, slug: p.slug};
+            }""")
+            assert ghost['saved'] == 404 and ghost['same'] and ghost['left'] == {} and ghost['files'] is None, ghost
+            other.evaluate(f"api('DELETE', '/api/projects/{ghost['slug']}')")
+            assert other.evaluate(LEFTOVER, ghost['slug']) == []
+            assert other.evaluate("Object.keys(pdfDocs).length") == 0
+            kept = other.evaluate("LocalStore.listProjects().then(l => l.map(p => p.slug))")
+            assert 'upload' in kept and restored in kept, kept  # other projects are untouched
+            assert other.evaluate("LocalStore.fileSizes()")['upload'] == pdf4.stat().st_size
+            viewer.close()
+            print('PASS project deletion: cancel keeps it, confirmation removes all its data, other tabs leave it', flush=True)
             assert not other_errors and not other_csp, (other_errors, other_csp)
             fresh.close()
 
