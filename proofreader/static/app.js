@@ -229,7 +229,7 @@ async function homeView(life) {
       try { data = JSON.parse(await f.text()); } catch (err) { throw new Error('JSONとして読めません。バックアップのファイルを選んでください'); }
       const p = await api('POST', '/api/projects/import-bundle', data);
       toast('バックアップから読み込みました');
-      location.hash = browserMode || p.source ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`;
+      location.hash = p.source ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`;
     } catch (err) { if (life.alive) { toast(err.message, true); e.target.value = ''; } }
   };
   $('#quit').onclick = async () => {
@@ -241,14 +241,14 @@ async function homeView(life) {
   const go = async () => {
     const ref = $('#ref').value.trim(); if (!ref) return;
     $('#go').disabled = true; $('#go').textContent = '取得中…';
-    try { const p = await api('POST', '/api/projects', {ref}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects', {ref}); location.hash = `#/p/${p.slug}/setup`; }
     catch (e) { if (life.alive) { toast(e.message, true); $('#go').disabled = false; $('#go').textContent = '読み込む'; } }
   };
   $('#go').onclick = go;
   $('#ref').onkeydown = e => { if (e.key === 'Enter') go(); };
   $('#file').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = browserMode ? `#/p/${p.slug}/0` : `#/p/${p.slug}/setup`; }
+    try { const p = await api('POST', '/api/projects/upload-text', f, {'X-Filename': encodeURIComponent(f.name)}); location.hash = `#/p/${p.slug}/setup`; }
     catch (err) { if (life.alive) toast(err.message, true); }
   };
 }
@@ -572,8 +572,8 @@ async function proofView(slug, idx, life) {
     <label>対象 <select id="findfilter"><option value="all">すべて</option><option value="todo">未確認</option><option value="edited">修正あり</option><option value="noted">注記あり</option></select></label>
     <button type="submit">検索</button><button type="button" id="findclose">閉じる</button></form>
     <div id="findresults" aria-live="polite"></div></dialog><div class="proof">
-    <section class="imgpane${browserMode && !p.source ? ' needs-server' : ''}">
-      <div class="toolbar">
+    <section class="imgpane">
+      <div class="toolbar" id="imgtools"${p.source ? '' : ' hidden style="display:none"'}>
         <button id="zo" aria-label="画像を縮小">−</button><button id="zv" class="small" title="100%に戻す"></button><button id="zi" aria-label="画像を拡大">+</button>
         <select id="zf" title="画像の合わせ方（切り替えると100%に戻ります）"><option value="width">幅に合わせる</option><option value="height">高さに合わせる</option></select>
         <span style="flex:1"></span>
@@ -777,6 +777,10 @@ async function proofView(slug, idx, life) {
   };
   const showImage = async () => {
     const version = ++imageVersion;
+    if (!p.source) {
+      imgview.innerHTML = `<div class="imgmsg" id="nosource">ページ画像の資料がまだ設定されていません。<br><a href="#/p/${esc(slug)}/setup"><button id="opensetup" class="primary">ページ画像の資料を設定する</button></a></div>`;
+      return;
+    }
     const im = pg.image;
     const failed = error => {
       if (!life.alive || version !== imageVersion) return;
@@ -814,7 +818,7 @@ async function proofView(slug, idx, life) {
   $('#zv').onclick = () => { prefs.zoom = 100; applyZoom(); };
   let shifting = false, ocrBusy = false;
   const shift = async d => {
-    if (shifting || ocrBusy) return;
+    if (shifting || ocrBusy || !p.source) return;
     if (pg.unassigned) { toast('末尾の本文にはページ番号がありません', true); return; }
     const cur = pg.image ? pg.image.index : idx;
     if (cur + d < 0 || cur + d >= p.source.count) { toast('資料の画像範囲外です', true); return; }

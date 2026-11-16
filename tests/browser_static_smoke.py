@@ -151,6 +151,8 @@ def main():
             expect(page.locator('#toast')).to_contain_text('OpenITIのバージョンURI')
             page.locator('#ref').fill(URI)
             page.get_by_role('button', name='読み込む', exact=True).click()
+            expect(page).to_have_url(re.compile(f'#/p/{re.escape(URI)}/setup$'), timeout=15000)  # no source yet: setup (D-32)
+            page.goto(base + f'/#/p/{URI}/0')
             expect(editor).to_be_enabled(timeout=15000)
             slug = re.search(r'#/p/([^/]+)/0', page.url).group(1)
             assert slug == URI, slug
@@ -162,7 +164,14 @@ def main():
                 button = page.get_by_role('button', name=name, exact=True) if visible else page.get_by_text(name, exact=True)
                 expect(button).to_be_visible() if visible else expect(button).to_be_hidden()
             expect(page.get_by_role('link', name='資料・ページ対応')).to_be_visible()
-            expect(page.locator('.imgpane')).to_be_hidden()  # no source yet
+            expect(page.locator('.imgpane')).to_be_visible()  # no source yet: a message and a way to setup (D-32)
+            expect(page.locator('#nosource')).to_contain_text('ページ画像の資料がまだ設定されていません。')
+            for sel in ('#zo', '#zi', '#shl', '#shr', '#ialink', '#imginfo'):
+                expect(page.locator(sel)).to_be_hidden()
+            page.get_by_role('button', name='ページ画像の資料を設定する').click()
+            expect(page).to_have_url(re.compile(f'#/p/{re.escape(URI)}/setup$'))
+            page.go_back()
+            expect(editor).to_be_enabled()
             expect(page.get_by_role('button', name='AIで読み取る')).to_be_hidden()
             page.get_by_role('button', name='書き出し', exact=True).click()
             expect(page.get_by_role('button', name='校正済みテキスト（OpenITI形式）')).to_be_visible()
@@ -250,8 +259,9 @@ def main():
             upload.write_bytes(UPLOAD.encode('utf-8'))
             page.get_by_role('link', name='OpenITI 校正', exact=True).click()
             page.locator('#file').set_input_files(str(upload))
+            expect(page).to_have_url(re.compile(r'#/p/upload/setup$'), timeout=15000)
+            page.goto(base + '/#/p/upload/0')
             expect(editor).to_be_enabled(timeout=15000)
-            expect(page).to_have_url(re.compile(r'#/p/upload/0$'))
             page.get_by_role('button', name='書き出し', exact=True).click()
             with page.expect_download() as downloaded:
                 page.get_by_role('button', name='校正済みテキスト（OpenITI形式）').click()
@@ -261,7 +271,7 @@ def main():
             page.get_by_role('link', name='OpenITI 校正', exact=True).click()
             page.locator('#ref').fill(URI)
             page.get_by_role('button', name='読み込む', exact=True).click()
-            expect(page).to_have_url(re.compile(f'#/p/{re.escape(URI)}_2/0$'), timeout=15000)
+            expect(page).to_have_url(re.compile(f'#/p/{re.escape(URI)}_2/setup$'), timeout=15000)
             page.get_by_role('link', name='OpenITI 校正', exact=True).click()
             expect(page.locator('tbody tr')).to_have_count(3)
             expect(page.locator('tbody')).to_contain_text('Edited title')
@@ -321,7 +331,8 @@ def main():
             upload_bundle = Path(tmp) / 'upload.proofreader.json'
             shutil.copy(downloaded.value.path(), upload_bundle)
             page.locator('#bundle').set_input_files(str(upload_bundle))
-            expect(page).to_have_url(re.compile('#/p/upload_2/0$'), timeout=15000)
+            expect(page).to_have_url(re.compile('#/p/upload_2/setup$'), timeout=15000)  # the backup has no source
+            page.goto(base + '/#/p/upload_2/0')
             expect(editor).to_be_enabled()
             page.get_by_role('button', name='書き出し', exact=True).click()
             with page.expect_download() as downloaded:
@@ -542,8 +553,10 @@ def main():
             flow_txt.write_bytes(UPLOAD.encode('utf-8'))
             other.goto(base + '/')
             other.locator('#file').set_input_files(str(flow_txt))
+            expect(other).to_have_url(re.compile(r'#/p/[^/]+/setup$'), timeout=15000)
+            flow = re.search(r'#/p/([^/]+)/setup', other.url).group(1)
+            other.goto(base + f'/#/p/{flow}/0')
             expect(other_editor).to_be_enabled(timeout=15000)
-            flow = re.search(r'#/p/([^/]+)/0', other.url).group(1)
             other.evaluate('Sources.retry.delay = 30')  # the real delay is 3 s
             other.get_by_role('link', name='資料・ページ対応').click()
             other.locator('#q').fill('smoke')
