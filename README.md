@@ -110,6 +110,8 @@ node --check proofreader/static/compare.js
 
 変更は作業用ブランチから PR を作って `main` にマージします（`main` への直接 push はできません）。
 
+計画中の静的ブラウザ版（GitHub Pages などでの配信）の設計は [docs/static-design.md](docs/static-design.md) にあります。
+
 PDF表示にはApache-2.0のPDF.js 6.5.438を同梱し、JavaScriptのevalを無効にしています。CDNへの接続は不要です。ただし、特殊なフォント・CMap・WASM補助資源を必要とするPDFは追加対応が必要な場合があります。WebフォントとAI・IA・OpenITIからの取得はネットワークを使用します。
 
 ## ライセンス
