@@ -212,9 +212,12 @@ def get_project(h, slug):
 
 @route("DELETE", r"/api/projects/(?P<slug>[^/]+)")
 def delete_project(h, slug):
-    store.delete_project(slug)
+    try:
+        store.delete_project(slug)
+    except store.Busy:
+        raise ApiError("PDFのダウンロード中または表示中は削除できません。しばらくしてからもう一度試してください（データは変わっていません）", HTTPStatus.CONFLICT)
     DRAFTS.pop(slug, None)
-    with PDF_LOCK:
+    with PDF_LOCK:  # a running download notices its job is gone and stops
         for d in (PDF_JOBS, PDF_INFO, PDF_MISMATCH):
             d.pop(slug, None)
     return {"deleted": slug}
@@ -294,11 +297,17 @@ def ia_source(slug):
     return p, src, f"ia-{re.sub(r'[^A-Za-z0-9._-]', '_', str(src.get('revision') or src['id']))}.pdf"
 
 
-def pdf_download(slug, revision, info, url, path):
+class Stopped(Exception):
+    pass
+
+
+def pdf_download(slug, revision, info, url, path, job=None):
     def progress(done, total):
-        job = PDF_JOBS.get(slug)
-        if job and job["revision"] == revision:
-            job["bytes"], job["total"] = done, total or info["size"]
+        if job is not None and PDF_JOBS.get(slug) is not job:
+            raise Stopped("プロジェクトが削除されたため、ダウンロードを中止しました")
+        current = PDF_JOBS.get(slug)
+        if current and current["revision"] == revision:
+            current["bytes"], current["total"] = done, total or info["size"]
     try:
         net.download(url, path, PDF_LIMIT, progress)
         end = {"state": "done", "file": path.name}
@@ -360,7 +369,7 @@ def ia_pdf_start(h, slug):
     if info["size"] > PDF_LIMIT:
         raise ApiError(f"PDFが大きすぎます（{info['size'] // 1048576} MB、上限 {PDF_LIMIT // 1048576} MB）")
     path = store.file_path(slug, name)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    store.ensure_dir(slug, "files")  # KeyError (404) when the project was deleted while the PDF info was fetched
     url = f"https://archive.org/download/{urllib.parse.quote(src['id'])}/{urllib.parse.quote(info['name'])}"
     with PDF_LOCK:
         job = PDF_JOBS.get(slug)
@@ -372,7 +381,7 @@ def ia_pdf_start(h, slug):
         snapshot = dict(job)
     PRESENCE.request_started()
     try:
-        threading.Thread(target=pdf_download, args=(slug, rev, info, url, path), daemon=False).start()
+        threading.Thread(target=pdf_download, args=(slug, rev, info, url, path, job), daemon=False).start()
     except Exception:
         PRESENCE.request_finished()
         with PDF_LOCK:
@@ -494,7 +503,7 @@ def scan_bytes(slug, src, img, width):
             raise ApiError(f"ページ画像を取得できませんでした: {e}", HTTPStatus.BAD_GATEWAY)
         if not (mtype or "").startswith("image/"):
             raise ApiError("ページ画像として読めない応答でした", HTTPStatus.BAD_GATEWAY)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        store.ensure_dir(slug, "cache", "scan")  # KeyError (404) when the project was deleted during the fetch
         tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
         try:
             tmp.write_bytes(data)
@@ -891,6 +900,7 @@ def main():
     ap.add_argument("--keep-running", action="store_true", help="do not exit when the browser tabs are closed")
     a = ap.parse_args()
     env_keys = load_env()
+    store.sweep_trash()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     url = f"http://127.0.0.1:{a.port}/"
     print(f"Proofreader: {url}  (projects in {store.ROOT})")

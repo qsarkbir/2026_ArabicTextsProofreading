@@ -10,6 +10,7 @@ projects/<slug>/
 """
 import calendar
 import json
+import logging
 import os
 import re
 import shutil
@@ -29,6 +30,13 @@ class Conflict(Exception):
     pass
 
 
+class Busy(Exception):
+    """A project folder cannot be moved away right now (files are open, e.g. on Windows)."""
+
+
+TRASH = ".deleting-"  # a project folder being deleted: never a project, swept at startup
+
+
 HISTORY_WINDOW = 300  # seconds: autosaves within this span share one history entry
 HISTORY_LIMIT = 100   # entries kept per page; the original text is always restorable
 
@@ -40,7 +48,7 @@ def _write_json(path, data):
 
 
 def _dir(slug):
-    if slug in (".", "..") or not re.fullmatch(r"[A-Za-z0-9._-]+", slug or ""):
+    if slug in (".", "..") or (slug or "").startswith(TRASH) or not re.fullmatch(r"[A-Za-z0-9._-]+", slug or ""):
         raise KeyError(slug)
     d = ROOT / slug
     if not (d / "project.json").exists():
@@ -55,6 +63,8 @@ def slug_base(uri):
 def install(base, text, make_project, work):
     """Create a project folder under a free slug derived from base; make_project(slug) returns project.json."""
     ROOT.mkdir(parents=True, exist_ok=True)
+    if base.startswith(TRASH):
+        base = "p" + base
     with _lock:
         slug, n = base, 2
         while True:
@@ -203,17 +213,39 @@ def scan_path(slug, name):
     return _dir(slug) / "cache" / "scan" / name
 
 
+def ensure_dir(slug, *parts):
+    """Create folder parts inside an existing project (never the project folder itself), so a request that outlives a delete cannot recreate it."""
+    with _lock:
+        d = _dir(slug)
+        for part in parts:
+            d = d / part
+            d.mkdir(exist_ok=True)
+        return d
+
+
 def delete_project(slug):
-    """Remove the whole project folder (setup, original, work, OCR, PDFs, scan cache). The folder is renamed away first, so a half-failed delete never leaves a listed project."""
+    """Remove the whole project folder (setup, original, work, OCR, PDFs, scan cache). The folder is renamed away first (atomic), so a half-failed delete never leaves a listed project."""
     with _lock:
         d = _dir(slug)
         root = ROOT.resolve()
         if d.is_symlink() or d.resolve().parent != root:
             raise KeyError(slug)
-        trash = root / f".deleting-{uuid.uuid4().hex}"
-        os.replace(d, trash)
+        trash = root / f"{TRASH}{uuid.uuid4().hex}"
+        try:
+            os.replace(d, trash)
+        except PermissionError as e:  # Windows: a file in the folder is open
+            raise Busy(str(e)) from e
         _cache.pop(slug, None)
-    shutil.rmtree(trash)
+    shutil.rmtree(trash, ignore_errors=True)
+    if trash.exists():
+        logging.getLogger(__name__).warning("could not remove %s completely; it is swept at the next start", trash)
+
+
+def sweep_trash():
+    """Remove folders left by a delete that did not finish."""
+    if ROOT.is_dir():
+        for d in ROOT.glob(f"{TRASH}*"):
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def list_projects():
@@ -221,6 +253,8 @@ def list_projects():
     if not ROOT.exists():
         return out
     for d in sorted(ROOT.iterdir()):
+        if d.name.startswith(TRASH):
+            continue
         try:
             p = load(d.name)
             w = work(d.name)

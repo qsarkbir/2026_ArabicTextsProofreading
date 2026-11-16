@@ -27,6 +27,28 @@ def synthetic_pdf(pages):
     return out + b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n' % (len(objs) + 1, xref)
 
 
+def flate_pdf(ink):
+    """One page with a 1000x1400 Flate grey image: white, plus (ink=True) one 14 px dark mark like a page number. Without ink it is a blank verso."""
+    w, h = 1000, 1400
+    rows = bytearray(b'\xf4' * (w * h))
+    if ink:
+        for y in range(1300, 1314):
+            rows[y * w + 480:y * w + 494] = b'\x30' * 14
+    data = zlib.compress(bytes(rows))
+    objs = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>',
+            b'<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length %d >>\nstream\n%s\nendstream' % (w, h, len(data), data)]
+    stream = b'q 600 0 0 800 0 0 cm /Im1 Do Q'
+    objs.append(b'<< /Length %d >>\nstream\n%s\nendstream' % (len(stream), stream))
+    out, offsets = b'%PDF-1.4\n', []
+    for n, obj in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b'%d 0 obj\n%s\nendobj\n' % (n, obj)
+    xref = len(out)
+    out += b'xref\n0 %d\n0000000000 65535 f \n' % (len(objs) + 1) + b''.join(b'%010d 00000 n \n' % o for o in offsets)
+    return out + b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n' % (len(objs) + 1, xref)
+
+
 def jpx_pdf(pages=2):
     """A scanned-book style PDF: each page is one JPEG 2000 image (JPXDecode), which pdf.js decodes with its WebAssembly decoder."""
     jp2 = (Path(__file__).parent / 'fixtures' / 'pdf' / 'page.jp2').read_bytes()

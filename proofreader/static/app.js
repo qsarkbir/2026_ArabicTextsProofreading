@@ -61,7 +61,7 @@ async function loadPdf(url) {
   return pdfDocs[url];
 }
 // JPEG 2000・JBIG2 の画像や ICC・標準フォントのデータ（vendor/pdfjs/6.5.438/ に同梱）。末尾の / が必須。サブパス配信でも動くよう document.baseURI で解決する
-const pdfAssets = () => { const u = d => new URL(`vendor/pdfjs/6.5.438/${d}/`, document.baseURI).href; return {wasmUrl: u('wasm'), iccUrl: u('iccs'), standardFontDataUrl: u('standard_fonts')}; };
+const pdfAssets = () => { if (globalThis.PDF_NO_ASSETS) return {}; /* テスト用：デコーダー無しの状態を作る */ const u = d => new URL(`vendor/pdfjs/6.5.438/${d}/`, document.baseURI).href; return {wasmUrl: u('wasm'), iccUrl: u('iccs'), standardFontDataUrl: u('standard_fonts')}; };
 async function releasePdf(url) {
   const task = pdfTasks[url];
   delete pdfTasks[url]; delete pdfDocs[url];
@@ -103,13 +103,14 @@ function loadScan(el, url, {current, onload, onfail}) {
   };
   el.src = url;
 }
+// 全面が同じ色か（全画素を調べる。まばらな文字が1つでもあれば false）
 function isBlank(ctx, c) {
-  const t = document.createElement('canvas'); t.width = t.height = 32;
-  const g = t.getContext('2d', {willReadFrequently: true}); g.drawImage(c, 0, 0, 32, 32);
-  const d = g.getImageData(0, 0, 32, 32).data;
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
   for (let i = 4; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) > 8 || Math.abs(d[i + 1] - d[1]) > 8 || Math.abs(d[i + 2] - d[2]) > 8 || Math.abs(d[i + 3] - d[3]) > 8) return false;
   return true;
 }
+const BLANK_NOTE = '画像が真っ白です。PDFの画像を読み取れていない可能性があります（白紙のページなら問題ありません）';
+const blankNote = () => { const n = document.createElement('div'); n.className = 'imgwarn'; n.setAttribute('role', 'status'); n.textContent = BLANK_NOTE; return n; };
 async function renderPdfPage(url, index, width) {
   const doc = await loadPdf(url);
   if (index < 0 || index >= doc.numPages) return null;
@@ -120,8 +121,8 @@ async function renderPdfPage(url, index, width) {
   c.width = Math.round(vp.width); c.height = Math.round(vp.height);
   const ctx = c.getContext('2d');
   await page.render({canvasContext: ctx, viewport: vp}).promise;
-  // 画像（JPEG 2000 など）を読めないと pdf.js は警告だけで白紙のまま完了する。画像を含むのに全面が同じ色なら、白紙と区別して知らせる
-  if (isBlank(ctx, c) && (await page.getOperatorList()).fnArray.some(op => op === pdfLib.OPS.paintImageXObject || op === pdfLib.OPS.paintInlineImageXObject || op === pdfLib.OPS.paintImageMaskXObject)) throw new Error('このページの画像をPDFから読み取れませんでした（画像の形式に対応していないか、PDFが壊れている可能性があります）');
+  // 画像（JPEG 2000 など）を読めないと pdf.js は警告だけで白紙のまま完了する。画像を含むのに全面が同じ色なら、止めずに注意を出せるよう印を付ける（白紙のページもあるため）
+  if (isBlank(ctx, c) && (await page.getOperatorList()).fnArray.some(op => op === pdfLib.OPS.paintImageXObject || op === pdfLib.OPS.paintInlineImageXObject || op === pdfLib.OPS.paintImageMaskXObject)) c.dataset.blank = '1';
   return c;
 }
 
@@ -211,6 +212,7 @@ function confirmDelete(p, {life, api, done}) {
     <p id="delerr" class="err" role="alert"></p>`;
   document.body.appendChild(dlg);
   const close = () => { try { dlg.close(); } catch {} dlg.remove(); };
+  life.cleanup.push(close); // 画面を離れたら（別のタブでの削除や戻る操作でも）ダイアログを残さない
   dlg.addEventListener('cancel', e => { e.preventDefault(); close(); });
   $('#delcancel', dlg).onclick = close;
   $('#delword', dlg).oninput = e => { $('#delgo', dlg).disabled = e.target.value.trim() !== '削除'; };
@@ -464,7 +466,7 @@ async function setupView(slug, from, life) {
         } else {
           const c = await renderPdfPage(image.pdf, img, 900);
           if (!current()) return;
-          if (c) box.replaceChildren(c); else box.innerHTML = '<div class="imgmsg">画像がありません</div>';
+          if (c) { box.replaceChildren(c); if (c.dataset.blank) box.prepend(blankNote()); } else box.innerHTML = '<div class="imgmsg">画像がありません</div>';
         }
       } catch (e) { failed(e); }
     };
@@ -823,8 +825,8 @@ async function proofView(slug, idx, life) {
   const applyZoom = () => {
     $('#zv').textContent = prefs.zoom + '%';
     $('#zf').value = prefs.fit;
-    const el = imgview.firstElementChild;
-    if (!el || !(el.tagName === 'IMG' || el.tagName === 'CANVAS')) return;
+    const el = imgview.querySelector('img,canvas');
+    if (!el) return;
     if (prefs.fit === 'height') { el.style.width = 'auto'; el.style.height = Math.round(imgview.clientHeight * prefs.zoom / 100) + 'px'; }
     else { el.style.height = 'auto'; el.style.width = prefs.zoom + '%'; }
   };
@@ -875,7 +877,7 @@ async function proofView(slug, idx, life) {
       try { pdfCanvas = await renderPdfPage(im.pdf, im.index, 1600); }
       catch (e) { failed(e); return; }
       if (!life.alive || version !== imageVersion) return;
-      imgview.innerHTML = ''; if (pdfCanvas) imgview.appendChild(pdfCanvas); else imgview.innerHTML = '<div class="imgmsg">画像がありません</div>';
+      imgview.innerHTML = ''; if (pdfCanvas) { if (pdfCanvas.dataset.blank) imgview.appendChild(blankNote()); imgview.appendChild(pdfCanvas); } else imgview.innerHTML = '<div class="imgmsg">画像がありません</div>';
     }
     applyZoom();
   };
@@ -976,6 +978,7 @@ async function proofView(slug, idx, life) {
         const c = await renderPdfPage(pg.image.pdf, pg.image.index, 2000);
         if (!life.alive) return;
         if (!c) throw new Error('このページに対応する画像がありません');
+        if (c.dataset.blank && !confirm(BLANK_NOTE + '\nこのまま読み取りますか？')) { $('#ocrmsg').textContent = ''; return; }
         body.image = c.toDataURL('image/jpeg', 0.9);
       }
       const result = await api('POST', `/api/projects/${slug}/pages/${idx}/ocr`, body);

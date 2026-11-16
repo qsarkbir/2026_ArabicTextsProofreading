@@ -123,14 +123,19 @@ const LocalStore = (() => {
     return slug;
   };
 
+  const pageRange = slug => IDBKeyRange.bound([slug, -Infinity], [slug, Infinity]);
+  const fileRange = slug => IDBKeyRange.bound([slug, ''], [slug, []]); // 配列は文字列より大きい
+  const clearSlug = (tx, slug) => { tx.objectStore('pages').delete(pageRange(slug)); tx.objectStore('files').delete(fileRange(slug)); };
+
   // extra: {patch: project に足す項目, file: {name, blob}}。プロジェクト・原文・PDF を1つのトランザクションで書く
   const createProject = async (fetched, extra = {}) => {
     const meta = fetched.meta || {};
     let project, first;
-    await run(['projects', 'originals', 'files'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'files', 'pages'], 'readwrite', async tx => {
       const s = tx.objectStore('projects');
       first = (await request(s.count())) === 0;
       const slug = await freeSlug(s, slugBase(fetched.uri));
+      clearSlug(tx, slug); // 念のため：別のタブの保存が、削除済みの同じ slug に残したデータを引き継がない
       project = {
         slug, uri: fetched.uri, raw_url: fetched.raw_url || '',
         title: OpenITI.titleOf(meta, fetched.text, fetched.uri), author: OpenITI.authorOf(meta, fetched.text, fetched.uri),
@@ -152,10 +157,11 @@ const LocalStore = (() => {
   const importBundle = async ({project, text, work}) => {
     const records = Work.workToRecords(work);
     let out, first;
-    await run(['projects', 'originals', 'pages'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'pages', 'files'], 'readwrite', async tx => {
       const s = tx.objectStore('projects');
       first = (await request(s.count())) === 0;
       const slug = await freeSlug(s, slugBase(project.uri));
+      clearSlug(tx, slug);
       out = {...project, slug, created: project.created || stamp()};
       s.put(out);
       tx.objectStore('originals').put({slug, text});
@@ -183,8 +189,7 @@ const LocalStore = (() => {
       if (!(await request(tx.objectStore('projects').getKey(slug)))) throw notFound();
       tx.objectStore('projects').delete(slug);
       tx.objectStore('originals').delete(slug);
-      tx.objectStore('pages').delete(IDBKeyRange.bound([slug, -Infinity], [slug, Infinity]));
-      tx.objectStore('files').delete(IDBKeyRange.bound([slug, ''], [slug, '\uffff']));
+      clearSlug(tx, slug);
       tx.objectStore('settings').delete(`backup:${slug}`);
     });
     cache.delete(slug);
@@ -214,7 +219,9 @@ const LocalStore = (() => {
   // revision の照合と書き込みを同じトランザクションで行うので、別のタブとの競合を取りこぼさない
   const savePage = async (slug, i, change) => {
     const original = (await parts(slug)).pages[i].text;
-    const next = await run(['pages'], 'readwrite', async tx => {
+    const next = await run(['projects', 'pages'], 'readwrite', async tx => {
+      // 別のタブが削除したプロジェクトに、ページだけが残らないようにする（同じ slug を後から使っても古い編集が戻らない）
+      if (!(await request(tx.objectStore('projects').getKey(slug)))) throw notFound();
       const s = tx.objectStore('pages'), rec = await request(s.get([slug, i]));
       const out = Work.applyUpdate(rec, original, change);
       if (rec || out.revision) s.put({...out, slug, i});

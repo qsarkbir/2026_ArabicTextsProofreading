@@ -27,6 +27,7 @@ class DeleteTests(unittest.TestCase):
         self.httpd.server_close()
         store._cache.clear()
         server.DRAFTS.clear()
+        server.PDF_JOBS.clear()
         self.root.stop()
         self.temp.cleanup()
 
@@ -109,6 +110,74 @@ class DeleteTests(unittest.TestCase):
         self.assertEqual(self.call("DELETE", f"/api/projects/{slug}", host="evil.example")[0], 403)  # DNS rebinding
         self.assertTrue((store.ROOT / slug / "project.json").exists())
         self.assertEqual(self.call("DELETE", f"/api/projects/{slug}", {"Origin": f"http://127.0.0.1:{self.port}"})[0], 200)
+
+    def test_failed_cleanup_leaves_no_ghost_project(self):
+        a, b = self.project("a"), self.project("b")
+        with patch("proofreader.store.shutil.rmtree", lambda *args, **kw: None):  # rmtree does nothing: the renamed folder stays
+            store.delete_project(a)
+        leftovers = [d.name for d in store.ROOT.iterdir() if d.name.startswith(store.TRASH)]
+        self.assertEqual(len(leftovers), 1)
+        self.assertEqual([p["slug"] for p in store.list_projects()], [b])
+        for name in leftovers:
+            with self.assertRaises(KeyError):
+                store._dir(name)
+        def busy(path, ignore_errors=False, **kw):
+            if not ignore_errors:
+                raise OSError("busy")
+        with patch("proofreader.store.shutil.rmtree", busy):
+            store.delete_project(b)  # a failing rmtree after the rename is still a successful delete
+        self.assertEqual(store.list_projects(), [])
+        store.sweep_trash()
+        self.assertEqual(list(store.ROOT.iterdir()), [])
+
+    def test_trash_prefix_is_not_a_project_slug(self):
+        p = store.create({"uri": store.TRASH + "x", "text": "a PageV01P001\n", "meta": {}})
+        self.assertFalse(p["slug"].startswith(store.TRASH))
+        self.assertEqual(store.load(p["slug"])["slug"], p["slug"])
+
+    def test_scan_fetch_that_outlives_a_delete_does_not_recreate_the_folder(self):
+        slug = self.project()
+        def fetch(*args):
+            store.delete_project(slug)
+            return b"\xff\xd8jpeg", "image/jpeg"
+        with patch.object(server.sources, "fetch_scan", fetch), self.assertRaises(KeyError):
+            server.scan_bytes(slug, {}, {"key": "k", "index": 0}, 1600)
+        self.assertEqual(list(store.ROOT.iterdir()), [])
+
+    def test_pdf_start_that_outlives_a_delete_does_not_recreate_the_folder(self):
+        slug = self.project()
+        def info(_id):
+            store.delete_project(slug)
+            return {"name": "a.pdf", "size": 1}
+        with patch.object(server, "ia_source", lambda s: ({}, {"id": "book", "revision": "r"}, "ia-r.pdf")), \
+                patch.object(server.sources, "ia_pdf", info), self.assertRaises(KeyError):
+            server.ia_pdf_start(None, slug)
+        self.assertEqual(list(store.ROOT.iterdir()), [])
+        self.assertNotIn(slug, server.PDF_JOBS)
+
+    def test_running_download_stops_when_its_job_is_removed(self):
+        slug = self.project()
+        job = {"revision": "r", "state": "running", "bytes": 0, "total": 1, "error": "", "file": ""}
+        server.PDF_JOBS[slug] = job
+        def download(url, path, limit, progress):
+            server.PDF_JOBS.pop(slug)  # what DELETE does
+            progress(1, 2)
+            raise AssertionError("the download should have stopped")
+        server.PRESENCE.request_started()
+        with patch.object(server.net, "download", download):
+            server.pdf_download(slug, "r", {"size": 1}, "https://archive.org/x", store.ROOT / slug / "files" / "a.pdf", job)
+        self.assertNotIn(slug, server.PDF_JOBS)
+
+    def test_locked_folder_gives_409_and_keeps_the_data(self):
+        slug = self.project()
+        server.PDF_JOBS[slug] = {"state": "running"}
+        with patch("proofreader.store.os.replace", side_effect=PermissionError("in use")):
+            status, body = self.call("DELETE", f"/api/projects/{slug}")
+        self.assertEqual(status, 409)
+        self.assertIn("ダウンロード中または表示中は削除できません", body["error"])
+        self.assertTrue((store.ROOT / slug / "project.json").exists())
+        self.assertIn(slug, server.PDF_JOBS)  # nothing was cancelled
+        self.assertEqual([x.name for x in store.ROOT.iterdir()], [slug])
 
     def test_pdf_assets_have_usable_types(self):
         self.assertEqual(mimetypes.guess_type("openjpeg.wasm")[0], "application/wasm")

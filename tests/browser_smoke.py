@@ -1,4 +1,5 @@
 """Optional real-browser checks: pip install playwright; python -m tests.browser_smoke."""
+import base64
 import io
 import json
 import os
@@ -16,7 +17,10 @@ import zipfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
-from tests.preview_server import synthetic_pdf, jpx_pdf
+from tests.preview_server import synthetic_pdf, jpx_pdf, flate_pdf
+
+BLANK_FLAG = '''async ([b64, off]) => { globalThis.PDF_NO_ASSETS = off; const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const url = URL.createObjectURL(new Blob([bytes], {type: 'application/pdf'}));
+    try { return (await renderPdfPage(url, 0, 600)).dataset.blank || null; } finally { globalThis.PDF_NO_ASSETS = false; await releasePdf(url); URL.revokeObjectURL(url); } }'''
 
 
 def main():
@@ -163,6 +167,11 @@ def main():
             assert dark > 1000, f'JPEG 2000 page rendered blank ({dark} dark pixels)'
             assert ('openjpeg.wasm', 200, 'application/wasm') in wasm, wasm
             print('PASS scanned PDF (JPEG 2000) renders through the vendored WebAssembly decoder', flush=True)
+            flag = lambda data, off=False: page.evaluate(BLANK_FLAG, [base64.b64encode(data).decode(), off])
+            assert flag(flate_pdf(True)) is None, 'a page with sparse ink (a page number) is not blank'
+            assert flag(jpx_pdf(1)) is None
+            assert flag(flate_pdf(False)) == '1' and flag(jpx_pdf(1), True) == '1'  # a blank verso and a JPEG 2000 page without decoders are flagged (a note, not an error)
+            print('PASS blank-page detection: sparse ink is not flagged; blank and undecodable pages get a note', flush=True)
 
             # deleting: cancel keeps everything, a typed confirmation removes the project and its folder (PROOF_DATA is the fixture server's, so check through the API)
             slugs = lambda: [p['slug'] for p in page.evaluate("api('GET', '/api/projects')")]
