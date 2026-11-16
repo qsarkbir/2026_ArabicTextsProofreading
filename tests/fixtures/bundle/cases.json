@@ -2489,5 +2489,238 @@
     "schema_version": 2
    }
   }
+ },
+ {
+  "name": "status-done-null",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": null,
+      "note": "n"
+     }
+    },
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "status-done-array",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": []
+     }
+    },
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "status-done-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": "false"
+     }
+    },
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "status-done-number",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {
+     "0": {
+      "done": 1
+     }
+    },
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-done-null",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "t",
+       "revision": 0,
+       "time": "2026-01-01T00:00:00Z",
+       "done": null
+      }
+     ]
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-done-array",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "t",
+       "revision": 0,
+       "time": "2026-01-01T00:00:00Z",
+       "done": []
+      }
+     ]
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
+ },
+ {
+  "name": "history-done-string",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 1,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {
+     "0": [
+      {
+       "text": "t",
+       "revision": 0,
+       "time": "2026-01-01T00:00:00Z",
+       "done": "x"
+      }
+     ]
+    },
+    "revisions": {},
+    "schema_version": 2
+   }
+  }
  }
 ]

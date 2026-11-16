@@ -57,12 +57,16 @@ def install(base, text, make_project, work):
     ROOT.mkdir(parents=True, exist_ok=True)
     with _lock:
         slug, n = base, 2
-        while (ROOT / slug).exists():
-            slug, n = f"{base}_{n}", n + 1
-        d = ROOT / slug
-        project = make_project(slug)
+        while True:
+            d = ROOT / slug
+            try:
+                d.mkdir()  # fails if the slug is taken (even by another process): only a folder made here is ever removed below
+                break
+            except FileExistsError:
+                slug, n = f"{base}_{n}", n + 1
         try:
-            (d / "ocr").mkdir(parents=True)
+            project = make_project(slug)
+            (d / "ocr").mkdir()
             (d / "files").mkdir()
             (d / "original.txt").write_text(text, encoding="utf-8", newline="")
             _write_json(d / "work.json", work)

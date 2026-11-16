@@ -19,24 +19,28 @@ const LocalStore = (() => {
   let dbPromise = null;
   const BLOCKED = '保存領域の更新が、ほかのタブで開いている古い画面に止められています。ほかのタブを閉じてから再読み込みしてください';
   const open = () => {
-    if (!dbPromise) dbPromise = new Promise((resolve, reject) => {
-      const fail = e => { dbPromise = null; reject(e && e.name === 'VersionError' ? apiError(NEWER) : apiError(`ブラウザの保存領域を開けませんでした: ${e && e.message || e}`)); };
+    if (dbPromise) return dbPromise;
+    let p, dead = false;
+    const reset = () => { dead = true; if (dbPromise === p) dbPromise = null; }; // 古い要求・接続のコールバックが、あとから作られた dbPromise を消さないようにする
+    p = new Promise((resolve, reject) => {
+      const fail = e => { reset(); reject(e && e.name === 'VersionError' ? apiError(NEWER) : apiError(`ブラウザの保存領域を開けませんでした: ${e && e.message || e}`)); };
       try {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
         let rejected = false;
         req.onupgradeneeded = e => { for (let v = e.oldVersion; v < DB_VERSION; v++) MIGRATIONS[v](req.result, req.transaction); };
-        req.onblocked = () => { rejected = true; dbPromise = null; reject(apiError(BLOCKED)); };
+        req.onblocked = () => { rejected = true; reset(); reject(apiError(BLOCKED)); };
         req.onsuccess = () => {
           const db = req.result;
           if (rejected) { db.close(); return; } // 拒否した後に開けた接続は使われないので閉じる（ほかのタブの更新を止めない）
-          db.onversionchange = () => { db.close(); dbPromise = null; };
-          db.onclose = () => { dbPromise = null; }; // ブラウザが接続を閉じたら、次の操作で開き直す
+          db.onversionchange = () => { db.close(); reset(); };
+          db.onclose = reset; // ブラウザが接続を閉じたら、次の操作で開き直す
           resolve(db);
         };
         req.onerror = () => fail(req.error);
       } catch (e) { fail(e); }
     });
-    return dbPromise;
+    dbPromise = dead ? null : p;
+    return p;
   };
 
   const request = r => new Promise((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });

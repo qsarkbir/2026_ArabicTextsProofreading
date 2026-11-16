@@ -11,6 +11,7 @@ const Bundle = (() => {
   const isInt = v => Number.isSafeInteger(v); // bundle.py と同じ。1.0 も整数として読む（Python 側は整数に直す）
   const isDict = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   const isStr = v => typeof v === 'string';
+  const isFlag = v => v == null || typeof v === 'boolean';
   const has = (o, k) => Object.hasOwn(o, k);
   const status = e => ({...(e.done ? {done: true} : {}), ...(e.note ? {note: e.note} : {})});
 
@@ -71,14 +72,14 @@ const Bundle = (() => {
       if (v !== pages[Number(k)].text) out.edits[k] = v;
     }
     for (const [k, v] of Object.entries(table(work, 'status', n))) {
-      if (!isDict(v) || !(v.note == null || isStr(v.note))) throw err('作業データの注記が正しくありません');
+      if (!isDict(v) || !(v.note == null || isStr(v.note)) || !isFlag(v.done)) throw err('作業データの注記が正しくありません');
       const s = status(v);
       if (Object.keys(s).length) out.status[k] = s;
     }
     for (const [k, v] of Object.entries(table(work, 'history', n))) {
       if (!Array.isArray(v)) throw err('作業データの履歴が正しくありません');
       const entries = v.map(e => {
-        if (!(isDict(e) && isStr(e.text) && isInt(e.revision) && e.revision >= 0 && isStr(e.time) && (e.note == null || isStr(e.note))))
+        if (!(isDict(e) && isStr(e.text) && isInt(e.revision) && e.revision >= 0 && isStr(e.time) && (e.note == null || isStr(e.note)) && isFlag(e.done)))
           throw err('作業データの履歴が正しくありません');
         return {text: e.text, ...status(e), revision: e.revision, time: e.time};
       });
@@ -96,6 +97,11 @@ const Bundle = (() => {
 
   // 検証して {project, text, work} を返す。拒否するときは status 400 のエラー（メッセージは利用者向け）
   const parse = data => {
+    try { return parseData(data); }
+    catch (e) { if (e instanceof RangeError) throw err('バックアップの入れ子が深すぎて読めません'); throw e; } // スタックの上限
+  };
+
+  const parseData = data => {
     if (!isDict(data) || data.format !== FORMAT) throw err(NOT_BUNDLE);
     const v = data.format_version;
     if (!isInt(v) || v < 1) throw err('バックアップの形式の版番号が正しくありません');

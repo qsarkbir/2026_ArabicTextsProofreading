@@ -920,5 +920,78 @@
  },
  "offset-unsafe-int": {
   "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300coffset\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "status-done-null": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {
+    "0": {
+     "note": "n"
+    }
+   },
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  }
+ },
+ "status-done-array": {
+  "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u6ce8\u8a18\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "status-done-string": {
+  "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u6ce8\u8a18\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "status-done-number": {
+  "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u6ce8\u8a18\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "history-done-null": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {
+    "0": [
+     {
+      "text": "t",
+      "revision": 0,
+      "time": "2026-01-01T00:00:00Z"
+     }
+    ]
+   },
+   "revisions": {},
+   "schema_version": 2
+  }
+ },
+ "history-done-array": {
+  "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u5c65\u6b74\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "history-done-string": {
+  "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u5c65\u6b74\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
  }
 }

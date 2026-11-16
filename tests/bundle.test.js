@@ -19,6 +19,14 @@ test('parse accepts and refuses the shared cases exactly like bundle.py', () => 
   }
 });
 
+test('a stack overflow while checking a deeply nested backup is a 400, not a crash', () => {
+  const data = JSON.parse(JSON.stringify(cases.find(c => c.name === 'minimal').bundle));
+  let deep = [];
+  for (let i = 0; i < 200000; i++) deep = [deep];
+  data.project.meta = {deep};
+  assert.throws(() => Bundle.parse(data), e => e.status === 400);
+});
+
 test('newer versions are refused with the documented message', () => {
   for (const name of ['format-version-newer', 'project-schema-newer', 'work-schema-newer'])
     assert.throws(() => Bundle.parse(cases.find(c => c.name === name).bundle), e => e.status === 400 && e.message.includes('新しい版のアプリで作られたデータです'), name);

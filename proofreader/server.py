@@ -677,9 +677,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def json(self):
         raw = self.body()
+        def reject(name):
+            raise ValueError(name)
         try:
-            return json.loads(raw) if raw else {}
-        except ValueError:
+            return json.loads(raw, parse_constant=reject) if raw else {}
+        except (ValueError, RecursionError):
             raise ApiError("JSONとして読めません")
 
     def _send(self, status, data, ctype, extra=None, cache="no-store"):
@@ -742,7 +744,11 @@ class Handler(BaseHTTPRequestHandler):
         port = self.server.server_address[1]
         local = {f"127.0.0.1:{port}", f"localhost:{port}"}
         origin = self.headers.get("Origin")
-        return self.headers.get("Host") in local and (method == "GET" or origin is None or origin in {f"http://{h}" for h in local})
+        if port == 80:  # browsers leave the default port out of Host and Origin
+            local |= {"127.0.0.1", "localhost"}
+        if self.headers.get("Host") not in local:
+            return False
+        return method == "GET" or (origin is None or origin in {f"http://{h}" for h in local}) and self.headers.get("Sec-Fetch-Site") not in ("cross-site", "same-site")
 
     def dispatch(self, method):
         if not self.origin_ok(method):

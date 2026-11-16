@@ -144,6 +144,34 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(list(store.ROOT.iterdir()), [])
         self.assertEqual(store.create({"uri": "doomed", "text": ORIGINAL, "meta": {}})["slug"], "doomed")
 
+    def test_install_never_removes_a_folder_it_did_not_make(self):
+        original, made = store.Path.mkdir, []
+
+        def racing(path, *a, **k):  # another process takes the slug between our look and our mkdir
+            if path.name == "racy" and not made:
+                made.append(1)
+                original(path)
+                (path / "project.json").write_text("{}", encoding="utf-8")
+                raise FileExistsError(str(path))
+            return original(path, *a, **k)
+        with patch.object(store.Path, "mkdir", racing), patch.object(store, "_write_json", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                store.create({"uri": "racy", "text": ORIGINAL, "meta": {}})
+        self.assertEqual(sorted(p.name for p in store.ROOT.iterdir()), ["racy"])  # the other process's project survives; ours is gone
+        self.assertEqual((store.ROOT / "racy" / "project.json").read_text(encoding="utf-8"), "{}")
+        made.clear()
+        with patch.object(store.Path, "mkdir", racing):
+            self.assertEqual(store.create({"uri": "racy", "text": ORIGINAL, "meta": {}})["slug"], "racy_2")
+
+    def test_deeply_nested_backup_is_refused_not_a_crash(self):
+        data = json.loads((FIXTURES / "cases.json").read_text(encoding="utf-8"))[0]["bundle"]
+        deep = []
+        for _ in range(5000):
+            deep = [deep]
+        data["project"]["meta"] = {"deep": deep}
+        with self.assertRaises(bundle.BundleError):
+            bundle.parse(data)
+
     def test_constants_match_bundle_js(self):
         js = (STATIC / "local" / "bundle.js").read_text(encoding="utf-8")
         for name in ("FORMAT", "APP_VERSION"):

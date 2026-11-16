@@ -41,6 +41,10 @@ def _integral(v):
     return v
 
 
+def _flag(v):
+    return v is None or isinstance(v, bool)
+
+
 def _status(entry):
     return {**({"done": True} if entry.get("done") else {}), **({"note": entry["note"]} if entry.get("note") else {})}
 
@@ -132,7 +136,7 @@ def _work(work, pages):
         if v != pages[int(k)]["text"]:
             edits[k] = v
     for k, v in _table(work, "status", n).items():
-        if not isinstance(v, dict) or not (v.get("note") is None or isinstance(v["note"], str)):
+        if not isinstance(v, dict) or not (v.get("note") is None or isinstance(v["note"], str)) or not _flag(v.get("done")):
             raise BundleError("作業データの注記が正しくありません")
         if s := _status(v):
             status[k] = s
@@ -142,7 +146,7 @@ def _work(work, pages):
         entries = []
         for e in v:
             if not (isinstance(e, dict) and isinstance(e.get("text"), str) and _int(e.get("revision")) and e["revision"] >= 0
-                    and isinstance(e.get("time"), str) and (e.get("note") is None or isinstance(e["note"], str))):
+                    and isinstance(e.get("time"), str) and (e.get("note") is None or isinstance(e["note"], str)) and _flag(e.get("done"))):
                 raise BundleError("作業データの履歴が正しくありません")
             entries.append({"text": e["text"], **_status(e), "revision": e["revision"], "time": e["time"]})
         if entries:
@@ -157,10 +161,16 @@ def _work(work, pages):
 
 def parse(data):
     """Validate a backup and return (project, original text, work); BundleError carries a message for the user."""
+    try:
+        return _parse(data)
+    except RecursionError:
+        raise BundleError("バックアップの入れ子が深すぎて読めません")
+
+
+def _parse(data):
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise BundleError(NOT_BUNDLE)
-    data = _integral(data)
-    version = data.get("format_version")
+    version = _integral(data.get("format_version"))
     if not _int(version) or version < 1:
         raise BundleError("バックアップの形式の版番号が正しくありません")
     if version > FORMAT_VERSION:
@@ -168,6 +178,7 @@ def parse(data):
     project, work, text = data.get("project"), data.get("work"), data.get("original")
     if not isinstance(project, dict) or not isinstance(work, dict):
         raise BundleError("バックアップにプロジェクトまたは作業データがありません")
+    project, work = _integral(project), _integral(work)
     _version(project, "プロジェクト")
     _version(work, "作業データ")
     if not isinstance(text, str):

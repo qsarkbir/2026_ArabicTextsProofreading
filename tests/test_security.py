@@ -46,6 +46,36 @@ class OriginHostTests(unittest.TestCase):
                 status, _ = self.call("POST", "/api/projects/import-bundle", {"Origin": origin} if origin else {})
                 self.assertEqual(status, 400)  # reached the handler, which refuses the empty bundle
 
+    def test_fetch_metadata_marks_cross_site_writes(self):
+        for site in ("cross-site", "same-site"):
+            with self.subTest(site=site):
+                self.assertEqual(self.call("POST", "/api/projects/import-bundle", {"Sec-Fetch-Site": site})[0], 403)
+        for site in ("same-origin", "none"):
+            with self.subTest(site=site):
+                self.assertEqual(self.call("POST", "/api/projects/import-bundle", {"Sec-Fetch-Site": site})[0], 400)
+        self.assertEqual(self.call("GET", "/", {"Sec-Fetch-Site": "cross-site"})[0], 200)
+
+    def test_port_less_host_is_accepted_only_on_port_80(self):
+        def check(port, host, origin=None):
+            stub = type("S", (), {"server": type("V", (), {"server_address": ("127.0.0.1", port)})(),
+                                  "headers": {k: v for k, v in (("Host", host), ("Origin", origin)) if v}})()
+            return server.Handler.origin_ok(stub, "POST")
+        self.assertTrue(check(80, "127.0.0.1", "http://localhost"))
+        self.assertTrue(check(80, "localhost:80", "http://localhost:80"))
+        self.assertFalse(check(80, "evil.example"))
+        self.assertFalse(check(8765, "127.0.0.1"))
+        self.assertFalse(check(8765, "localhost", "http://localhost"))
+
+    def test_json_body_refuses_nan_and_deep_nesting(self):
+        def parse(raw):
+            return server.Handler.json(type("S", (), {"body": lambda self: raw})())
+        for raw in (b'{"a": NaN}', b'[Infinity]', b'-Infinity', b"[" * 100000):
+            with self.subTest(raw=raw[:12]):
+                with self.assertRaises(server.ApiError) as cm:
+                    parse(raw)
+                self.assertEqual((cm.exception.status, str(cm.exception)), (400, "JSONとして読めません"))
+        self.assertEqual(parse(b'{"a": 1.5}'), {"a": 1.5})
+
     def test_bad_host_is_refused_for_every_method(self):
         for host in ("evil.example", "evil.example:80", f"127.0.0.1.evil.example:{self.port}", "127.0.0.1:1", "localhost"):
             for method, path in (("GET", "/"), ("GET", "/api/projects"), ("POST", "/api/projects/import-bundle")):

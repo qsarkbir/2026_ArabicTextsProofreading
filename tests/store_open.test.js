@@ -18,3 +18,22 @@ test('a connection that opens after onblocked has rejected is closed, and the ne
   LocalStore.getProject('x').catch(() => {});
   assert.equal(requests.length, 2);  // not served by the orphaned connection
 });
+
+test('callbacks of an older connection do not reset a newer open', async () => {
+  delete require.cache[require.resolve('../proofreader/static/local/store.js')];
+  const requests = [];
+  globalThis.indexedDB = {open: () => { const req = {}; requests.push(req); return req; }};
+  const LocalStore = require('../proofreader/static/local/store.js');
+  const db1 = {close() {}};
+  const first = LocalStore.getProject('x').catch(() => {});
+  requests[0].result = db1;
+  requests[0].onsuccess();
+  await new Promise(r => setImmediate(r));
+  db1.onclose();                                   // the browser closed it: the next call reopens
+  LocalStore.getProject('x').catch(() => {});
+  assert.equal(requests.length, 2);
+  db1.onversionchange();                           // a late callback of the old connection
+  requests[0].onblocked();                         // and of the old request
+  LocalStore.getProject('x').catch(() => {});
+  assert.equal(requests.length, 2);                // still the second open, not a third
+});
