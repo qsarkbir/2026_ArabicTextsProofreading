@@ -1,6 +1,6 @@
 """Local web server for proofreading OpenITI texts against page images.
 
-usage: python -m proofreader [--port 8765] [--no-browser]
+usage: python -m proofreader [--port 8765] [--no-browser] [--keep-running]
 """
 import argparse
 import base64

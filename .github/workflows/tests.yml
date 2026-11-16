@@ -21,6 +21,7 @@ jobs:
       - run: node --test tests/core.test.js tests/compare.test.js
       - run: node --check proofreader/static/app.js
       - run: node --check proofreader/static/workflows.js
+      - run: node --check proofreader/static/compare.js
   browser-and-tei:
     runs-on: ubuntu-latest
     steps:
