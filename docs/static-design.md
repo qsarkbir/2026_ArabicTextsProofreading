@@ -53,6 +53,7 @@
 | D-24 | 採用 | バックアップから戻した PDF の資料（`source.file` はあるが Blob が無い）：校正画面は開き、`image` は `{pdf: null, no_file: true, …}` を返す。画像の欄に「このブラウザにありません。元のPDFを選び直してください」とファイル選択を出し、選ばれた PDF のページ数が `source.count` と違えば `confirm` で確認してから、ブラウザ版だけの `POST /api/projects/<slug>/source/pdf/attach` で同じ名前の Blob として保存する（project は変えない）。設定画面（資料の対応付け）にも同じファイル選択を出し（対応は変えない。確認済みで別のページ数なら選び直したあとに対応の画面を描き直す）、選ばれた PDF のページ数が記録と違い、利用者が確認したときは、付け直しと同じトランザクションで `source.count` を直し `source.revision` を新しくする（`LocalStore.attachFile` の `{count, revision}`。画像の key は revision から作るので、別の PDF が同じ key にならない。`offset`・`anchors` は保つ）。IA の資料はブラウザ版では画像を取得せず、プロジェクトは開く。`image`（`image` ルートも `pages/<i>` の `image` も）は server.py の `image_for` と同じ `index`・`key`・`count`・`label`・`link`（範囲外は `index`・`missing`・`count`）だけを返し、`url`・`service`・`w`・`h` は無い。画面は画像の欄に「ブラウザ版では表示できません」と出し、画像が無いままずらして対応を壊さないよう、校正画面の ◀▶ と設定画面の対応の操作（−10・−1・+1・+10・画像の番号・確定）を無効にする（検索・書き出し・本文の編集は使える）。共通の事例は `tests/fixtures/source/ia-ops.json`（Python の出力を正とする `ia-expected.json`。`url` などを除いて比べる）。設定画面の IA の検索欄は隠し、PDF のアップロードだけを出す | 読み込んだだけでは画像が出ないことを隠さず、PDF を付け直せば元の状態に戻せる。IA を使うには段階2が要る |
 | D-25 | 採用 | `local/draft.js` は `importers/draft.py` の `build` の移植（`Draft.build(metadata)` が `[fetched, details]` を返し、不正なら例外）。数値は Python の `int()` に合わせる（整数・小数は切り捨て・ASCII 以外の Unicode の数字も可、`null`・配列・空文字・`1.5` の文字列は拒否）、文字列は `str().strip()`（`null` は `None` という文字列）。ルーターは例外をすべて server.py と同じ「書名、PDFの対象範囲、巻と印刷ページ番号を確認してください」にし、PDF の先頭が `%PDF` でないときは「500 MB以下のPDFを選択してください」。500 MB を超える本体は、`new-pdf`・`source/pdf`・`source/pdf/attach` のどれも server.py の `body()` と同じ 413「送信データが大きすぎます（上限500 MB）」（ちょうど 500 MB は通る）。`str(None)` に当たる値は `Draft.pyStr` で `None` にし、画像の key の元になる `revision` が `null` のときも `ia:None:<idx>` と、Python の `src.get('revision', …)` と同じに数える（キーが無いときだけ `id`、さらに `file` に落ちる）。共通の事例は `tests/fixtures/draft/`（Python の出力を正とする `expected.json`。URI はランダムなので形だけ確かめて置き換える）。資料の経路（`source/pdf`・`mapping`・`image`・ページの `image`）は `tests/fixtures/source/ops.json` の手順を Python（`test_source_parity.py`）と Node（`router.test.js`）で再生して、応答の形・キー（sha256）・エラーを突き合わせる | 同じ入力が両方の版で同じプロジェクトになる |
 | D-26 | 採用 | 静的版と server.py の**成功時**の応答は上の事例で一致させるが、**エラー時**は完全には一致しない。違いは次のとおりで、メッセージの一致を保証しない：(1) 整数でない `X-Page-Count`・`offset`・`anchor` は、server.py では `int()` が例外を投げて 500、静的版は 400「整数で指定してください」。(2) `new-pdf` の `filename` が文字列でないとき、server.py は値をそのまま `title` にし、静的版は `source.pdf`。(3) 本体の大きさは server.py が Content-Length で先に 413 にし、静的版は Blob の `size` で同じ 413 にする（本体を読まない点は同じ）。(4) `source/pdf/attach` は静的版だけの経路。(5) `source/ia/*`・`ia/search`・OCR・`files/<name>`・`scan/<idx>` は 501 のまま。検証メッセージを server.py と揃えるのは、事例に載せたものだけ | 成功時の一致を保ちつつ、エラーの文言まで一致するとは言わない |
+| D-27 | 採用 | 段階2の範囲（[IA の CORS の確認結果](#ia-の-cors-の確認結果2026-11-16)による）：静的版は IA の**検索**（`advancedsearch.php`）、**資料情報**（`/metadata/<id>`）、**IIIF マニフェスト**、**IIIF のページ画像**をブラウザから直接取得する。BookReader の画像（`archive.org/download/<id>/page/…`）と PDF（`archive.org/download/<id>/<file>`）は 302 の転送に CORS の許可が無く取得できないので、IIIF が失敗したときの予備の経路は静的版には無く、PDF は利用者がダウンロードしたファイルを選ぶ（1b の付け直しと同じ経路）。IIIF は 504 を返すことが多く、エラー応答には CORS のヘッダーが付かないため、ブラウザでは CORS の拒否と区別できない（`Failed to fetch`）。数秒おきに数回再試行し、それでも失敗したら「IA の画像サーバーが応答しません。時間をおいて試すか、ローカル版を使ってください」と表示する。サムネイル（`/services/img/<id>`）は `<img>` での表示だけに使う | 取得できるものだけをブラウザ版に移し、取得できないものは利用者の操作（ダウンロードとファイル選択）か、ローカル版に任せる |
 
 ## 段階と状態
 
@@ -60,7 +61,7 @@
 |---|---|---|
 | 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（#5）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
 | 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（#5）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
-| 2 | Internet Archive 連携（マニフェスト、検索、ページ画像、PDF） | 未着手（CORS の確認が先） |
+| 2 | Internet Archive 連携（検索、資料情報、IIIF マニフェスト、ページ画像。PDF は利用者がダウンロードして選ぶ） | 未着手（CORS は確認済み → D-27） |
 | 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 未着手 |
 
 状態は「未着手 → 作業中 → 完了」で書き、完了したら対応する PR を併記する。
@@ -199,8 +200,22 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 
 ## 段階2以降の注意（概要）
 
-- **Internet Archive**：エンドポイントごとに CORS を確かめ、結果をこの文書に表で残してから実装する。`<img>` での表示は CORS が無くてもできるが、OCR に画像を送るには必要になる。
-- **IA の PDF**：数百 MB をブラウザに保存するのは容量と消去の面で不安定なため、利用者がダウンロードしたファイルを選ぶ方式を基本にする。
+- **Internet Archive**：エンドポイントごとの CORS の確認結果は下の表のとおり。範囲は D-27。`<img>` での表示は CORS が無くてもできるが、OCR に画像を送るには必要になる。IA の仕様は変わりうるので、段階2の実装前と、ブラウザ版で IA の取得が失敗するようになったときに、同じ手順で確かめ直して表に行を足す。
+- **IA の PDF**：ブラウザからは取得できない（下の表）。利用者がダウンロードしたファイルを選ぶ。
+
+### IA の CORS の確認結果（2026-11-16）
+
+Chrome のシークレットウィンドウで `https://example.com/` を開き、開発者ツールのコンソールから `fetch(url, {mode: 'cors'})` で取得した結果。
+
+| 対象 | URL | 結果 |
+|---|---|---|
+| 検索 | `https://archive.org/advancedsearch.php?…&output=json` | 取得できる（200） |
+| 資料情報 | `https://archive.org/metadata/<id>` | 取得できる（200） |
+| IIIF マニフェスト | `https://iiif.archive.org/iiif/<id>/manifest.json` | 成功時は取得できる（`ElBoustane`）。504 がよく返り、そのエラー応答には CORS のヘッダーが無いため `Failed to fetch` になる。画像の無い資料（`.7z` など）でも 504・500 になる |
+| IIIF のページ画像 | `https://iiif.archive.org/image/iiif/3/<id>%2F…/full/1600,/0/default.jpg` | 取得できる（200、`ElBoustane` の1ページ目で約 420 KB） |
+| BookReader の画像 | `https://archive.org/download/<id>/page/n0_w1600.jpg` | 取得できない（302 の応答に `Access-Control-Allow-Origin` が無い） |
+| PDF（Range） | `https://archive.org/download/<id>/<file>.pdf` | 取得できない（同上） |
+| サムネイル | `https://archive.org/services/img/<id>` | 取得できない（200 だが `Access-Control-Allow-Origin` が無い）。`<img>` での表示はできる |
 - **OCR**：API キーは利用者が画面で入力し、ブラウザ内にだけ置く。キーを書き出しファイルに含めない。1ページずつ、利用者の操作で実行するという原則は変えない。
 
 ## 未決事項
@@ -225,3 +240,4 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | 2026-11-16 | 再レビューへの対応：`install` の競合で他のプロジェクトを消さない、深い入れ子・`NaN`・`done` の型の拒否、`LocalStore.open` の古いコールバック、ポート 80 の Host と `Sec-Fetch-Site`（D-18〜D-21 を更新） |
 | 2026-11-16 | 段階1b を完了（PR 未作成）にした。手元の PDF を資料にする（`files` への保存・object URL での表示・`mapping`・`image`）、バックアップから戻した資料への PDF の付け直し、`local/draft.js` と PDF からの新規作成を静的版に追加。D-22〜D-25 を追記し、機能の対応表とテストの節を更新。トランザクションの `onerror` でリクエストのエラー（容量不足）を拾うようにした |
 | 2026-11-16 | 段階1b のレビュー指摘への対応：IA の資料の `image` を server.py と同じ metadata（url なし）にし、画像が無いままの対応の操作を無効にした（D-24）。退役した URL の pdf.js の文書を破棄し、未確定の資料を設定画面の終了で捨てる（D-23）。設定画面でも PDF を付け直せるようにし、確認済みの別のページ数では `count`・`revision` を更新（D-24）。`source/pdf`・`attach` の 500 MB の 413、`revision: null` の key（D-25）。エラー時の違いを D-26 に記録。`LocalStore.run` のコミット時エラーと、置き換えで古い Blob が消えることのテストを追加 |
+| 2026-11-16 | 段階1a・1b を #5 でマージ。IA の CORS をブラウザで確かめ、結果の表と段階2の範囲（D-27）を追記 |
