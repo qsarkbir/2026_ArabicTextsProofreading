@@ -95,6 +95,9 @@ def main():
             expect(page.locator('#readings option')).to_have_count(3)
             editor.fill('wrong %~% bad beta extra')
             expect(page.locator('#diff .chip').first).to_be_disabled()
+            editor.fill('alpha beta extra')
+            expect(page.locator('#diff .nodiff')).to_contain_text('AIの読みと本文は一致しています')
+            expect(page.locator('#ocrmsg')).to_contain_text('食い違いなし')
             print('PASS provider selection, reading archive and markup protection', flush=True)
 
             page.get_by_role('link', name='OpenITI 校正', exact=True).click()

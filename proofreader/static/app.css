@@ -81,6 +81,7 @@ td .ar{font-size:17px}
 .diff .chip{display:inline-block;font-size:15px;line-height:1.5;margin:0 3px;padding:0 6px;border:1px dashed var(--warn-ink);border-radius:4px;color:var(--warn-ink);background:transparent;cursor:pointer;vertical-align:baseline}
 .diff .chip:hover{background:var(--warn)}
 .diff .chip.del{font-family:system-ui,sans-serif;font-size:11px}
+.diff .nodiff{margin:0;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;color:var(--ok-ink);white-space:normal}
 .diff .chip.ins::before{content:"＋";margin-left:2px}
 .ocrraw{white-space:pre-wrap;font-size:16px;line-height:1.9;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 12px;max-height:30vh;overflow:auto}
 details summary{cursor:pointer;color:var(--muted);font-size:12px}

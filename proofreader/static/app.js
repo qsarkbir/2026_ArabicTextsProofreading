@@ -933,7 +933,11 @@ async function proofView(slug, idx, life) {
       + (ocr.legacy ? ' <span class="badge b-warn" title="資料・画像の識別情報がない旧形式のキャッシュです。読み取り時の資料と同じかは確かめられません。「読み直す」で新しく読み取れます。">旧形式の読み取り（この画像を読んだものか未確認）</span>' : '')
       + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '')
       + (ocr.model ? ` ${esc(ocr.model)} の読み` : '');
-    if (!blocks.length) { box.innerHTML = ''; return; }
+    if (!blocks.length) {
+      const skip = ['タトウィール', !prefs.vowels && '母音記号', prefs.ortho && 'ハムザなどの字形', prefs.punct && '句読点', prefs.space && '語の区切り方', !prefs.header && '柱・ページ番号', !prefs.foot && '脚注'].filter(Boolean);
+      box.innerHTML = `<p class="nodiff">AIの読みと本文は一致しています（${esc(skip.join('・'))}の違いは比べていません）。読み取った全文は下の「読み取り結果の全文」で確認できます。</p>`;
+      return;
+    }
     const text = ed.value;
     let html = '', pos = 0;
     blocks.forEach(([a1, a2, b1, b2], bi) => {
