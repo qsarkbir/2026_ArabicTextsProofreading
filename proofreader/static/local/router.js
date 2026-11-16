@@ -10,7 +10,10 @@ const LocalRouter = (() => {
     const [path, search = ''] = url.split('#')[0].split(/\?(.*)/s); // new URL() は ".." を畳み込んでしまう
     for (const [m, rx, fn] of routes) {
       const found = m === method ? rx.exec(path) : null;
-      if (found) return fn({...found.groups, query: new URLSearchParams(search), body, headers});
+      if (found) {
+        try { return await fn({...found.groups, query: new URLSearchParams(search), body, headers}); }
+        finally { flushRetired(); }
+      }
     }
     throw err(UNSUPPORTED, 501);
   };
@@ -49,13 +52,28 @@ const LocalRouter = (() => {
     for (const [aPage, aImg] of project.anchors || []) if (aPage <= i && (best === null || aPage > best[0])) best = [aPage, aImg];
     return best ? best[1] + (i - best[0]) : (project.offset || 0) + i;
   };
+  const tooLarge = blob => { if (blob instanceof Blob && blob.size > PDF_LIMIT) throw err('送信データが大きすぎます（上限500 MB）', 413); }; // server.py の body()
   const sourceView = src => src && {...Object.fromEntries(Object.entries(src).filter(([k]) => k !== 'pages')), count: src.type === 'ia' ? src.pages.length : src.count ?? 0};
 
   // PDF の Blob を pdf.js に渡すための object URL。画面を離れるとき revokeUrls で解放する
   const urls = new Map(), retired = [];
+  let releaser = null; // 画面が登録する。退役した URL の pdf.js の文書を破棄してから URL を失効させる（Blob 全体がメモリに残るため）
   const objectUrl = (key, blob) => { let u = urls.get(key); if (!u) urls.set(key, u = URL.createObjectURL(blob)); return u; };
   const forget = key => { const u = urls.get(key); if (u) { retired.push(u); urls.delete(key); } };
+  const flushRetired = () => {
+    if (!releaser || !retired.length) return;
+    const list = retired.splice(0), fn = releaser;
+    Promise.resolve().then(() => fn(list)).catch(() => {});
+  };
   const revokeUrls = () => { for (const u of [...urls.values(), ...retired.splice(0)]) URL.revokeObjectURL(u); urls.clear(); };
+  const setReleaser = fn => { releaser = fn; };
+  // 確定していない資料（DRAFTS）を捨てる。keep の slug のものだけ残す
+  const clearDrafts = keep => {
+    for (const [slug, d] of [...DRAFTS]) if (slug !== keep) { DRAFTS.delete(slug); forget(`draft:${slug}:${d.src.revision}`); }
+    flushRetired();
+  };
+  // いま使っている URL（slug の確定済みの PDF と、setup 中なら未確定の PDF）
+  const urlsOf = (slug, withDraft) => [...urls].filter(([k]) => slug && (k.startsWith(`${slug}/`) || (withDraft && k.startsWith(`draft:${slug}:`)))).map(([, u]) => u);
   const fileUrl = async (slug, name) => {
     const key = `${slug}/${name}`;
     if (urls.has(key)) return urls.get(key);
@@ -63,14 +81,25 @@ const LocalRouter = (() => {
     return blob ? objectUrl(key, blob) : null;
   };
 
-  // image_for：IA の資料はブラウザ版では扱わない。PDF の Blob が無い（バックアップから戻した）ときは pdf: null, no_file: true
+  // image_for：IA の資料は画像を取得せず、server.image_for と同じ index・key・count・label・link だけを返す（url・service・w・h は無い）。
+  // PDF の Blob が無い（バックアップから戻した）ときは pdf: null, no_file: true
+  const pyStr = v => Draft.pyStr(v);
+  const identity = src => {
+    const has = k => Object.prototype.hasOwnProperty.call(src, k); // Python の dict.get(k, default) と同じく、null でも「ある」とみなす
+    return has('revision') ? pyStr(src.revision) : has('id') ? pyStr(src.id) : has('file') ? pyStr(src.file) : '';
+  };
   const imageFor = async (p, i, index = null, draft = null) => {
     const pages = (await LocalStore.parts(p.slug)).pages;
     if (index === null && i >= 0 && i < pages.length && pages[i].unassigned) return null;
     const src = draft ? draft.src : p.source;
-    if (!src || src.type !== 'pdf') return null;
+    if (!src || (src.type !== 'pdf' && src.type !== 'ia')) return null;
     const idx = index === null ? imageIndex(p, i) : index;
-    const key = await sha256(`${src.type}:${src.revision ?? src.id ?? src.file ?? ''}:${idx}`);
+    const key = await sha256(`${src.type}:${identity(src)}:${idx}`);
+    if (src.type === 'ia') {
+      const n = (src.pages || []).length;
+      if (!(idx >= 0 && idx < n)) return {index: idx, missing: true, count: n};
+      return {index: idx, key, count: n, label: src.pages[idx].label, link: `https://archive.org/details/${src.id}/page/n${idx}/mode/1up`};
+    }
     const count = src.count ?? 0;
     const out = {index: idx, key, missing: !(idx >= 0 && idx < count), count};
     if (draft) return {...out, pdf: objectUrl(`draft:${p.slug}:${src.revision}`, draft.blob)};
@@ -140,7 +169,8 @@ const LocalRouter = (() => {
 
   // ---------- PDF の資料（server.py の create_pdf_draft / set_pdf / set_mapping / preview_image） ----------
   route('POST', '/api/projects/new-pdf', async ({body, headers}) => {
-    if (!(await isPdf(body)) || body.size > PDF_LIMIT) throw err('500 MB以下のPDFを選択してください');
+    tooLarge(body);
+    if (!(await isPdf(body))) throw err('500 MB以下のPDFを選択してください');
     let metadata, fetched, details, count;
     try {
       metadata = JSON.parse(unquote(header(headers, 'X-Metadata') ?? '{}'));
@@ -153,6 +183,7 @@ const LocalRouter = (() => {
   });
 
   route('POST', '/api/projects/(?<slug>[^/]+)/source/pdf', async ({slug, body, headers}) => {
+    tooLarge(body);
     if (!(await isPdf(body))) throw err('PDFファイルではありません');
     const count = int(header(headers, 'X-Page-Count') || 0);
     if (count < 1) throw err('PDFのページ数を確認できませんでした');
@@ -166,11 +197,14 @@ const LocalRouter = (() => {
 
   // ブラウザ版だけの経路：バックアップから戻した PDF の資料に、同じ名前で PDF を付け直す（ローカル版は files/ のファイルをそのまま使う）
   route('POST', '/api/projects/(?<slug>[^/]+)/source/pdf/attach', async ({slug, body, headers}) => {
+    tooLarge(body);
     const p = await loadProject(slug);
     if (!p.source || p.source.type !== 'pdf') throw err('PDFの資料ではありません');
     if (!(await isPdf(body))) throw err('PDFファイルではありません');
-    if (int(header(headers, 'X-Page-Count') || 0) < 1) throw err('PDFのページ数を確認できませんでした');
-    await LocalStore.attachFile(slug, p.source.file, body.slice(0, body.size, 'application/pdf'));
+    const count = int(header(headers, 'X-Page-Count') || 0);
+    if (count < 1) throw err('PDFのページ数を確認できませんでした');
+    // 画面で確認済みの別のページ数なら、同じトランザクションで count と revision（画像の key）も更新する
+    await LocalStore.attachFile(slug, p.source.file, body.slice(0, body.size, 'application/pdf'), {count, revision: uuidHex()});
     forget(`${slug}/${p.source.file}`);
     return projectView(slug);
   });
@@ -192,10 +226,12 @@ const LocalRouter = (() => {
       anchor = [int(b.anchor[0]), int(b.anchor[1])];
     }
     // 資料の切り替えは、PDF の保存とプロジェクトの更新を1つのトランザクションで行う（容量不足なら何も変わらない）
+    let oldFile = null;
     await LocalStore.updateProject(slug, p => {
       const files = {};
+      oldFile = null;
       if (staged) {
-        if (p.source && p.source.type === 'pdf' && p.source.file !== staged.src.file) files.remove = [p.source.file];
+        if (p.source && p.source.type === 'pdf' && p.source.file !== staged.src.file) { files.remove = [p.source.file]; oldFile = p.source.file; }
         p.source = {...staged.src}; p.offset = 0; p.anchors = [];
         files.put = [{name: staged.src.file, blob: staged.blob}];
       }
@@ -204,7 +240,7 @@ const LocalRouter = (() => {
       if (anchor) p.anchors = p.anchors.filter(a => a[0] !== anchor[0]).concat([anchor]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
       return files;
     });
-    if (staged) { DRAFTS.delete(slug); forget(`draft:${slug}:${staged.src.revision}`); forget(`${slug}/${staged.src.file}`); }
+    if (staged) { DRAFTS.delete(slug); forget(`draft:${slug}:${staged.src.revision}`); forget(`${slug}/${staged.src.file}`); if (oldFile) forget(`${slug}/${oldFile}`); }
     return projectView(slug);
   });
 
@@ -212,7 +248,6 @@ const LocalRouter = (() => {
     const p = await loadProject(slug), draftRevision = query.get('draft') || '';
     const draft = draftRevision ? draftFor(slug, draftRevision) : null;
     const src = draft ? draft.src : p.source;
-    if (src && src.type !== 'pdf') throw err(UNSUPPORTED, 501); // IA の画像はブラウザ版では扱わない
     return imageFor(p, 0, int(query.get('index') ?? '0'), draft);
   });
 
@@ -316,7 +351,7 @@ const LocalRouter = (() => {
     throw err('不明な形式です');
   });
 
-  return {UNSUPPORTED, handle, revokeUrls, searchTerms, notesCsv, csvField};
+  return {UNSUPPORTED, handle, revokeUrls, setReleaser, clearDrafts, urlsOf, searchTerms, notesCsv, csvField};
 })();
 
 if (typeof module !== 'undefined') module.exports = LocalRouter;

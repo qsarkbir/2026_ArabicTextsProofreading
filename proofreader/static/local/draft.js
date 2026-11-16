@@ -35,7 +35,7 @@ const Draft = (() => {
     }];
   };
 
-  return {build, pyInt};
+  return {build, pyInt, pyStr};
 })();
 
 if (typeof module !== 'undefined') module.exports = Draft;

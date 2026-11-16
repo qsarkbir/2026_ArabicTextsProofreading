@@ -96,11 +96,13 @@ const LocalStore = (() => {
     for (const r of await request(tx.objectStore('files').getAll())) out[r.slug] = (out[r.slug] || 0) + (r.blob ? r.blob.size : 0);
     return out;
   });
-  // バックアップから戻した資料に PDF を付け直す：source.file の名前で保存し、project は変えない
-  const attachFile = (slug, name, blob) => run(['projects', 'files'], 'readwrite', async tx => {
-    const p = await request(tx.objectStore('projects').get(slug));
+  // バックアップから戻した資料に PDF を付け直す：source.file の名前で保存する。確認済みで記録と違うページ数なら、
+  // 同じトランザクションで source.count を直し revision を替える（同じ key で別の PDF の画像を指さないように）。対応（offset・anchors）は変えない
+  const attachFile = (slug, name, blob, {count, revision} = {}) => run(['projects', 'files'], 'readwrite', async tx => {
+    const s = tx.objectStore('projects'), p = await request(s.get(slug));
     if (!p) throw notFound();
     if (!p.source || p.source.type !== 'pdf' || p.source.file !== name) throw apiError('このプロジェクトの資料はPDFではありません', 400);
+    if (count !== undefined && count !== p.source.count) { p.source = {...p.source, count, revision}; s.put(p); }
     tx.objectStore('files').put({slug, name, blob});
   });
 

@@ -17,6 +17,8 @@ from tests.test_regressions import Request
 
 FIXTURES = Path(__file__).parent / "fixtures" / "source"
 ops = json.loads((FIXTURES / "ops.json").read_text(encoding="utf-8"))
+ia_ops = json.loads((FIXTURES / "ia-ops.json").read_text(encoding="utf-8"))
+IA_ONLY = {"service", "w", "h", "url"}  # what the browser version leaves out of an IA image: it never fetches scans
 HEX = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -45,14 +47,22 @@ def view(slug):
     return {k: v[k] for k in ("slug", "offset", "anchors", "source", "draft")}
 
 
-def compute():
+def strip_ia(value):
+    if isinstance(value, dict):
+        return {k: strip_ia(v) for k, v in value.items() if k not in IA_ONLY}
+    return [strip_ia(v) for v in value] if isinstance(value, list) else value
+
+
+def compute(ops=ops, source=None):
+    source = source or ops["source"]
     out = []
     with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as tmp, patch.object(store, "ROOT", Path(tmp)):
         store._cache.clear()
         p = store.create({"uri": "fixture", "text": ops["text"], "meta": {}})
         slug = p["slug"]
-        store.file_path(slug, ops["source"]["file"]).write_bytes(b"%PDF-fixture")
-        p["source"] = ops["source"]
+        if source["type"] == "pdf":
+            store.file_path(slug, source["file"]).write_bytes(b"%PDF-fixture")
+        p["source"] = source
         store.save_project(slug, p)
         revisions = []
         try:
@@ -95,6 +105,14 @@ class SourceParityTests(unittest.TestCase):
     def test_matches_shared_expected_json(self):
         got = compute()
         path = FIXTURES / "expected.json"
+        if os.environ.get("UPDATE_FIXTURES"):
+            path.write_text(json.dumps(got, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        self.assertEqual(got, json.loads(path.read_text(encoding="utf-8")))
+
+    def test_ia_matches_shared_expected_json(self):
+        """IA images carry index, key, count, label and link; the browser version has no url, service, w or h."""
+        got = [strip_ia(compute(ia_ops, source)) for source in ia_ops["sources"]]
+        path = FIXTURES / "ia-expected.json"
         if os.environ.get("UPDATE_FIXTURES"):
             path.write_text(json.dumps(got, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         self.assertEqual(got, json.loads(path.read_text(encoding="utf-8")))

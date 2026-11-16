@@ -1,0 +1,137 @@
+{
+ "text": "one PageV01P001\ntwo PageV01P002\nthree PageV01P003\nfour PageV01P004\ntail without a number\n",
+ "sources": [
+  {
+   "type": "ia",
+   "id": "book",
+   "revision": null,
+   "title": "IA book",
+   "pages": [
+    {
+     "label": "1",
+     "service": "https://x.invalid/s0",
+     "w": 10,
+     "h": 20
+    },
+    {
+     "label": "2",
+     "service": "https://x.invalid/s1",
+     "w": 10,
+     "h": 20
+    },
+    {
+     "label": "3",
+     "service": "https://x.invalid/s2",
+     "w": 10,
+     "h": 20
+    },
+    {
+     "label": "4",
+     "service": "https://x.invalid/s3",
+     "w": 10,
+     "h": 20
+    },
+    {
+     "label": "5",
+     "service": "https://x.invalid/s4",
+     "w": 10,
+     "h": 20
+    },
+    {
+     "label": "6",
+     "service": "https://x.invalid/s5",
+     "w": 10,
+     "h": 20
+    }
+   ]
+  },
+  {
+   "type": "ia",
+   "id": "book/é",
+   "title": "No revision",
+   "pages": [
+    {
+     "label": "n0",
+     "service": "https://x.invalid/s",
+     "w": 1,
+     "h": 1
+    },
+    {
+     "label": "n1",
+     "service": "https://x.invalid/s",
+     "w": 1,
+     "h": 1
+    },
+    {
+     "label": "n2",
+     "service": "https://x.invalid/s",
+     "w": 1,
+     "h": 1
+    }
+   ]
+  }
+ ],
+ "steps": [
+  {
+   "op": "view"
+  },
+  {
+   "op": "page_image",
+   "i": 0
+  },
+  {
+   "op": "page_image",
+   "i": 4
+  },
+  {
+   "op": "image",
+   "index": 0
+  },
+  {
+   "op": "image",
+   "index": 99
+  },
+  {
+   "op": "image",
+   "index": -1
+  },
+  {
+   "op": "mapping",
+   "body": {
+    "offset": 5
+   }
+  },
+  {
+   "op": "page_image",
+   "i": 0
+  },
+  {
+   "op": "page_image",
+   "i": 1
+  },
+  {
+   "op": "mapping",
+   "body": {
+    "anchor": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "op": "page_image",
+   "i": 0
+  },
+  {
+   "op": "page_image",
+   "i": 1
+  },
+  {
+   "op": "page_image",
+   "i": 3
+  },
+  {
+   "op": "view"
+  }
+ ]
+}

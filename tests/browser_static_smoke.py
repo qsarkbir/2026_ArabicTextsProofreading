@@ -31,6 +31,9 @@ BOOK_YML = '10#BOOK#TITLEA#AR####: كتاب تجريبي\n'
 # a canvas that holds a rendered page has plenty of dark pixels; the hash tells two different pages apart
 CANVAS = '''sel => { const c = document.querySelector(sel); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let dark = 0, hash = 0; for (let i = 0; i < d.length; i += 4) { if (d[i] < 100) dark++; hash = (hash * 31 + d[i] + i) | 0; } return {dark, hash, width: c.width}; }'''
+DOCS = 'Object.keys(pdfDocs).length'  # pdf.js documents that are loaded (each keeps its whole Blob in memory)
+STORED_FILES = '''slug => LocalStore.open().then(db => new Promise((resolve, reject) => { const r = db.transaction('files').objectStore('files').getAll();
+    r.onsuccess = () => resolve(r.result.filter(x => x.slug === slug).map(x => [x.name, x.blob.size])); r.onerror = () => reject(r.error); }))'''
 QUOTA = '''() => { const put = IDBObjectStore.prototype.put; window.__restorePut = () => { IDBObjectStore.prototype.put = put; };
     IDBObjectStore.prototype.put = function (...args) { if (this.name === 'files') throw new DOMException('quota', 'QuotaExceededError'); return put.apply(this, args); }; }'''
 
@@ -326,6 +329,46 @@ def main():
             expect(page.locator('tbody tr', has_text='upload').first.locator('td').first).to_contain_text('PDF ')
             print('PASS local PDF: persistence, anchors and storage size on the home screen', flush=True)
 
+            # ---- pdf.js documents do not pile up; replacing a source deletes the old Blob in IndexedDB; a cancelled draft is dropped ----
+            page.evaluate("t => api('POST', '/api/projects/upload-text', new Blob([t]), {'X-Filename': 'docs'})", UPLOAD)
+            page.goto(base + '/#/p/docs/setup')
+            page.locator('#pdf').set_input_files(str(pdf4))
+            expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            assert page.evaluate(DOCS) == 1  # the staged draft only
+            page.locator('#ok').click()
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            assert page.evaluate(DOCS) == 1  # the draft's document was released when it was confirmed
+            first_files = page.evaluate(STORED_FILES, 'docs')
+            assert [f[1] for f in first_files] == [pdf4.stat().st_size], first_files
+            page.get_by_role('link', name='資料・ページ対応').click()
+            page.get_by_role('button', name='資料を選び直す').click()
+            page.locator('#pdf').set_input_files(str(pdf3))
+            expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            assert page.evaluate(DOCS) == 2  # the current source and the draft
+            page.locator('#ok').click()
+            expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+            page.wait_for_function(DOCS + ' === 1')
+            replaced_files = page.evaluate(STORED_FILES, 'docs')
+            assert [f[1] for f in replaced_files] == [pdf3.stat().st_size] and replaced_files[0][0] != first_files[0][0], (first_files, replaced_files)
+            for _ in range(3):  # staged and cancelled: nothing is left behind
+                page.get_by_role('link', name='資料・ページ対応').click()
+                page.get_by_role('button', name='資料を選び直す').click()
+                page.locator('#pdf').set_input_files(str(pdf4))
+                expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
+                page.locator('#cancel').click()
+                expect(page.locator('#imgview canvas')).to_be_visible(timeout=60000)
+                page.wait_for_function(DOCS + ' === 1')
+                assert len(page.evaluate("LocalRouter.urlsOf('docs', true)")) == 1
+            page.get_by_role('link', name='資料・ページ対応').click()  # leaving setup by the browser's back button drops the draft too
+            page.get_by_role('button', name='資料を選び直す').click()
+            page.locator('#pdf').set_input_files(str(pdf4))
+            expect(page.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            page.goto(base + '/#/')
+            page.wait_for_function(DOCS + ' === 0')
+            assert page.evaluate("LocalRouter.urlsOf('docs', true)") == []
+            assert [f[1] for f in page.evaluate(STORED_FILES, 'docs')] == [pdf3.stat().st_size]
+            print('PASS pdf.js documents are released (confirm, replace, cancel, leaving) and a replaced source deletes its old Blob in IndexedDB', flush=True)
+
             # ---- backup carries no PDF: restored in a fresh browser profile, the PDF is chosen again ----
             with page.expect_download() as downloaded:
                 page.locator('tbody tr', has_text='upload').first.locator('a[data-bundle]').click()
@@ -364,7 +407,27 @@ def main():
             other.reload()
             expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
             assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size}
+            assert other.evaluate(DOCS) == 1
             print('PASS restored PDF project asks for the PDF, warns on a different page count, then renders after a reload', flush=True)
+
+            # the setup screen of a restored PDF project offers the same file input, keeps the mapping, and updates count and revision on a confirmed different PDF
+            third = fresh.new_page()
+            third.on('dialog', lambda d: d.accept())
+            third.goto(base + '/')
+            third.locator('#bundle').set_input_files(str(pdf_bundle))
+            expect(third.locator('#imgview')).to_contain_text('このブラウザにありません', timeout=15000)
+            restored = re.search(r'#/p/([^/]+)/0', third.url).group(1)
+            before_source = third.evaluate(f"LocalStore.getProject({json.dumps(restored)}).then(p => [p.source, p.offset, p.anchors])")
+            third.goto(base + f'/#/p/{restored}/setup')
+            expect(third.locator('#mimg #reattach')).to_be_visible(timeout=15000)
+            third.locator('#reattach').set_input_files(str(pdf3))  # 3 pages instead of the recorded 4: confirmed by the dialog handler
+            expect(third.locator('#mimg canvas')).to_be_visible(timeout=60000)
+            after_source = third.evaluate(f"LocalStore.getProject({json.dumps(restored)}).then(p => [p.source, p.offset, p.anchors])")
+            assert after_source[0]['count'] == 3 and after_source[0]['revision'] != before_source[0]['revision'], (before_source, after_source)
+            assert after_source[1:] == before_source[1:], (before_source, after_source)  # offset and anchors kept
+            assert third.evaluate(f"LocalStore.fileSizes().then(s => s[{json.dumps(restored)}])") == pdf3.stat().st_size
+            third.close()
+            print('PASS setup screen of a restored PDF project re-attaches without touching the mapping; a different page count updates count and revision', flush=True)
 
             other.goto(base + '/')
             other.locator('#bundle').set_input_files(str(ia_bundle))
@@ -380,6 +443,31 @@ def main():
             expect(other.get_by_role('heading', name='Internet Archive を検索')).to_be_hidden()
             print('PASS restored IA project opens without images and stays editable', flush=True)
 
+            # an IA project's mapping is shown but cannot be moved without an image (offset 5 must survive the shift buttons and the setup controls)
+            ia_long = json.loads(PYTHON_BUNDLE.read_text(encoding='utf-8'))
+            ia_long['project']['source'] = {'type': 'ia', 'id': 'book', 'revision': 'r', 'title': 'IA long', 'pages': [{'label': str(i), 'service': 'https://example.invalid/x', 'w': 1, 'h': 1} for i in range(20)]}
+            ia_long['project']['offset'], ia_long['project']['anchors'] = 5, []
+            ia_long_bundle = Path(tmp) / 'ia-long.proofreader.json'
+            ia_long_bundle.write_text(json.dumps(ia_long), encoding='utf-8')
+            other.goto(base + '/')
+            other.locator('#bundle').set_input_files(str(ia_long_bundle))
+            expect(other_editor).to_be_enabled(timeout=15000)
+            ia_slug = re.search(r'#/p/([^/]+)/0', other.url).group(1)
+            other.goto(base + f'/#/p/{ia_slug}/1')
+            expect(other.locator('#imgview')).to_contain_text('Internet Archive の画像です', timeout=15000)
+            expect(other.locator('#imginfo')).to_have_text('画像 7/20')  # offset 5 + page index 1
+            expect(other.locator('#shl')).to_be_disabled()
+            expect(other.locator('#shr')).to_be_disabled()
+            other.evaluate("document.querySelector('#shr').click()")
+            other.get_by_role('link', name='資料・ページ対応').click()
+            expect(other.locator('#mimg')).to_contain_text('ブラウザ版では表示できません')
+            for control in ('m10', 'm1', 'p1', 'p10', 'imgn', 'ok'):
+                expect(other.locator('#' + control)).to_be_disabled()
+            other.evaluate("document.querySelector('#ok').click()")
+            other.wait_for_timeout(300)
+            assert other.evaluate(f"LocalStore.getProject({json.dumps(ia_slug)}).then(p => [p.offset, p.anchors])") == [5, []]
+            print('PASS IA project: shift and setup controls are disabled and the mapping is untouched', flush=True)
+
             # ---- a new draft from a PDF selection ----
             other.goto(base + '/')
             other.get_by_role('link', name='OpenITIにないテキストをPDFから作成する').click()
@@ -394,7 +482,7 @@ def main():
             other.get_by_role('button', name='校正を始める').click()
             expect(other.locator('#draftmsg')).to_contain_text('ブラウザの保存容量が足りません')
             assert other.evaluate("LocalStore.listProjects().then(l => l.length)") == before  # no project, no PDF
-            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size}
+            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, restored: pdf3.stat().st_size}
             other.evaluate('window.__restorePut()')
             other.get_by_role('button', name='校正を始める').click()
             expect(other_editor).to_be_enabled(timeout=30000)
@@ -412,7 +500,7 @@ def main():
             expect(other.locator('#imginfo')).to_have_text('画像 3/3')
             other.goto(base + f'/#/p/{draft_slug}/0')
             expect(other.locator('#imgview canvas')).to_be_visible(timeout=60000)
-            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, draft_slug: pdf3.stat().st_size}
+            assert other.evaluate("LocalStore.fileSizes()") == {'upload': pdf4.stat().st_size, restored: pdf3.stat().st_size, draft_slug: pdf3.stat().st_size}
             print('PASS new draft from a PDF selection, all-or-nothing on a full disk', flush=True)
             assert not other_errors and not other_csp, (other_errors, other_csp)
             fresh.close()
