@@ -119,7 +119,7 @@ const LocalRouter = (() => {
   const KEY_SETTING = 'key:anthropic';
   const NEED_KEY = 'AI の設定で Anthropic の API キーを入力してください';
   const NO_OPENAI = 'OpenAI はブラウザ版ではまだ使えません。ローカル版で利用できます';
-  const IMAGE_LIMIT = 5 * 1024 * 1024; // API が受け取る画像1枚の上限
+  const IMAGE_LIMIT = 5 * 1024 * 1024; // API が受け取る画像1枚の上限（base64 にした大きさ）
   let tabKey = null, savedKey; // tabKey: このタブが持つキー。savedKey: 保存済みかどうか（まだ確かめていなければ undefined）
   const aiKey = async () => {
     if (tabKey === null && savedKey === undefined) {
@@ -483,7 +483,7 @@ const LocalRouter = (() => {
       if (!img.pdf) throw err('PDFが付いていません。資料の設定でPDFを選んでください');
       image = decodeImage(b.image);
     } else image = await iiifImage(img);
-    if (image.data.length > IMAGE_LIMIT) throw err('画像が大きすぎます（API が受け取れるのは1枚5 MBまでです）', 413);
+    if (Math.ceil(image.data.length / 3) * 4 > IMAGE_LIMIT) throw err('画像が大きすぎます（API が受け取れるのは1枚5 MBまでです）', 413);
     let res;
     try { res = await OCR.transcribe(image.data, image.mtype, b.model, apiKey); }
     catch (e) { if (e instanceof OCR.Unavailable) throw err(e.message, 503); throw e; }
@@ -497,7 +497,7 @@ const LocalRouter = (() => {
     const b = object(body), key = typeof b.key === 'string' ? b.key.trim() : '';
     if (!/^[\x21-\x7e]{8,500}$/.test(key)) throw err('APIキーを入力してください（sk-ant- で始まる半角の文字列）');
     if (b.save === true) await LocalStore.setSetting(KEY_SETTING, key);
-    else if (savedKey !== false) await LocalStore.deleteSetting(KEY_SETTING);
+    else await LocalStore.deleteSetting(KEY_SETTING);
     tabKey = key; savedKey = b.save === true;
     return keyState();
   });

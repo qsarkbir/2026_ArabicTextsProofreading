@@ -218,6 +218,31 @@ class BundleTests(unittest.TestCase):
                          sorted(p.name for p in (store.ROOT / slug / "ocr" / "history" / "0").iterdir()))
         self.assertEqual(json.loads(json.dumps(bundle.build(copy)))["ocr"], data["ocr"])  # a second round trip changes nothing
 
+    def test_current_reading_missing_from_history_is_kept_by_the_next_ocr_put(self):
+        slug = self.project()
+        data = json.loads(json.dumps(bundle.build(slug)))
+        data["format_version"] = 2
+        data["ocr"] = {"0": {"current": {"text": "cur", "reading_id": "Cur1", "time": "2026-11-16T01:02:03Z"},
+                             "history": [{"text": "old", "reading_id": "old1", "time": "2026-11-16T01:00:00Z"}]}}
+        project, text, work, ocr = bundle.parse(data)
+        copy = store.create_from_bundle(project, text, work, ocr)["slug"]
+        folder = store.ROOT / copy / "ocr" / "history" / "0"
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["Cur1.json", "old1.json"])
+        with fixed_clock():
+            store.ocr_put(copy, 0, {"text": "new", "image_key": "k"})
+        self.assertEqual(sorted(r["text"] for r in bundle.build(copy)["ocr"]["0"]["history"]), ["cur", "new", "old"])
+        data["ocr"]["0"]["history"].append({"text": "same", "reading_id": "CUR1"})  # a history id that differs only in case: the current one is not written again
+        copy2 = store.create_from_bundle(*bundle.parse(data))["slug"]
+        self.assertEqual(sorted(x.name for x in (store.ROOT / copy2 / "ocr" / "history" / "0").iterdir()), ["CUR1.json", "old1.json"])
+
+    def test_generated_reading_ids_are_never_windows_device_names(self):
+        slug = self.project()
+        rid = store.ocr_put(slug, 0, {"text": "x"})["reading_id"]
+        self.assertRegex(rid, r"^[0-9a-f]{32}$")
+        self.assertIsNone(bundle.RESERVED_NAME.fullmatch(rid))
+        for bad in ("CON", "nul", "Com9", "lpt1"):
+            self.assertTrue(bundle.RESERVED_NAME.fullmatch(bad), bad)
+
     def test_backup_without_ocr_stays_format_1_and_ocr_can_be_left_out(self):
         slug = self.project()
         self.assertEqual((bundle.build(slug)["format_version"], "ocr" in bundle.build(slug)), (1, False))

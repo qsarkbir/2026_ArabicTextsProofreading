@@ -4593,5 +4593,325 @@
     }
    }
   }
+ },
+ {
+  "name": "ocr-reading-id-reserved-con",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "CON"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-reading-id-reserved-nul",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "nul"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-reading-id-reserved-com1",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "Com1"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-reading-id-reserved-lpt9",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "LPT9"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-reading-id-reserved-aux",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "aux"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-current-reading-id-reserved",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "current": {
+      "text": "x",
+      "reading_id": "PRN"
+     },
+     "history": []
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-reading-id-reserved-lookalikes",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "history": [
+      {
+       "text": "x",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "CON1"
+      },
+      {
+       "text": "y",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "COM0"
+      },
+      {
+       "text": "z",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "lpt10"
+      },
+      {
+       "text": "w",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "nul_"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "name": "ocr-legacy-current-id-collision",
+  "bundle": {
+   "format": "openiti-proofreader-project",
+   "format_version": 2,
+   "exported": "2026-11-16T00:00:00Z",
+   "app": {
+    "mode": "browser",
+    "version": "0.1.0"
+   },
+   "project": {
+    "uri": "syn.Book-ara1",
+    "title": "T",
+    "author": "A",
+    "created": "2026-01-01 00:00",
+    "schema_version": 2
+   },
+   "original": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+   "work": {
+    "edits": {},
+    "status": {},
+    "history": {},
+    "revisions": {},
+    "schema_version": 2
+   },
+   "ocr": {
+    "0": {
+     "current": {
+      "text": "c"
+     },
+     "history": [
+      {
+       "text": "h",
+       "time": "2026-11-16T01:02:03Z",
+       "reading_id": "legacy"
+      }
+     ]
+    }
+   }
+  }
  }
 ]

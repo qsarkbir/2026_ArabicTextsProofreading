@@ -14,13 +14,13 @@ Browsers cannot resolve bare module specifiers (an import map would be inline sc
 | `./node.mjs` (`internal/`, `tools/agent-toolset/`) and `@anthropic-ai/sdk/tools/agent-toolset/node` | `node.browser.mjs`: what the package's own `browser` field substitutes in browser builds (its exports throw "needs Node.js" when used) |
 | `standardwebhooks` (the Webhooks resource, server-side signature checks) | `_stubs/standardwebhooks.mjs`, a stub that throws if used |
 
-It also removes the trailing `//# sourceMappingURL=` comments (the maps are not shipped). Nothing else is modified. The `node:buffer` text in `internal/uploads.mjs` is inside an error message string, not an import.
+It also removes the trailing `//# sourceMappingURL=` comments (the maps are not shipped). Nothing else is modified, except that two specifiers quoted inside JSDoc comments were rewritten the same way (`resources/beta/sessions/events.mjs` line 138 and `lib/tools/SessionToolRunner.mjs` line 169); they are comments, not imports. The `node:buffer` text in `internal/uploads.mjs` is inside an error message string, not an import.
 
 To update or check:
 
 ```
 npm pack @anthropic-ai/sdk@<version>              # unpack into its own empty folder
-npm install --ignore-scripts @opentelemetry/api   # in another empty folder, for its dist/
+npm install --ignore-scripts @opentelemetry/api@1.10.0   # in another empty folder, for its dist/
 python3 -I assemble.py <sdk package dir> <@opentelemetry/api package dir> 1.4.0   # the target folder is replaced
 ```
 

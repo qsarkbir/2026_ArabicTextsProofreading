@@ -103,8 +103,14 @@ def _write_ocr(d, ocr):
                 if not READING_ID.fullmatch(r["reading_id"]):
                     raise ValueError("bad reading_id")
                 _write_json(folder / f"{r['reading_id']}.json", r)
-        if entry.get("current"):
-            _write_json(d / "ocr" / f"{i}.json", entry["current"])
+        current = entry.get("current")
+        if current:
+            _write_json(d / "ocr" / f"{i}.json", current)
+            rid = current.get("reading_id")
+            if rid and rid.lower() not in {r["reading_id"].lower() for r in entry["history"]}:
+                folder = d / "ocr" / "history" / str(i)  # keep the current reading in the readings list, as the browser version does
+                folder.mkdir(parents=True, exist_ok=True)
+                _write_json(folder / f"{rid}.json", current)
 
 
 def create(fetched):

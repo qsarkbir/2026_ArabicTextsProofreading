@@ -110,7 +110,7 @@ async function aiSettings(life, changed) {
     <form class="formgrid" id="aiform" autocomplete="off">
       <label>Anthropic の API キー <input type="password" id="aikey" autocomplete="off" spellcheck="false" data-1p-ignore placeholder="sk-ant-…"></label>
       <label><input type="checkbox" id="aisave"> このブラウザに保存する</label>
-      <p class="help">保存しないとき、キーはこのタブの中だけに置かれ、タブを閉じるか再読み込みすると消えます。保存すると、このブラウザを使う他の人やブラウザの拡張機能がキーを読める可能性があります。共用のパソコンでは保存しないでください。キーはバックアップや書き出しに含まれません。</p>
+      <p class="help">保存しないとき、キーはこのタブの中だけに置かれ、タブを閉じるか再読み込みすると消えます。保存すると、このブラウザを使う他の人やブラウザの拡張機能がキーを読める可能性があります。共用のパソコンでは保存しないでください。キーはバックアップや書き出しに含まれません。キーを消したり変えたりしても、すでに開いている他のタブには、再読み込みするまで反映されません。</p>
       <p class="help">Console（platform.claude.com）でこのアプリ専用のキーを作り、そのワークスペースに利用上限（月ごとの支出の上限）を設定することをお勧めします。</p>
       <div class="row"><button type="submit" class="primary" id="aisubmit">キーを設定する</button><button type="button" id="aiclear">キーを消す</button></div>
       <p role="status" id="aistatus"></p></form>`);

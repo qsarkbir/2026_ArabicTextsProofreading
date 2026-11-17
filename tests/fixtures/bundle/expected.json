@@ -1468,5 +1468,109 @@
  },
  "ocr-format-version-newer": {
   "error": "\u65b0\u3057\u3044\u7248\u306e\u30a2\u30d7\u30ea\u3067\u4f5c\u3089\u308c\u305f\u30c7\u30fc\u30bf\u3067\u3059\u3002\u30a2\u30d7\u30ea\u3092\u66f4\u65b0\u3057\u3066\u304b\u3089\u8aad\u307f\u8fbc\u3093\u3067\u304f\u3060\u3055\u3044"
+ },
+ "ocr-reading-id-reserved-con": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-nul": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-com1": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-lpt9": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-aux": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-current-reading-id-reserved": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-lookalikes": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "history": [
+     {
+      "text": "x",
+      "reading_id": "CON1",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "y",
+      "reading_id": "COM0",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "z",
+      "reading_id": "lpt10",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "w",
+      "reading_id": "nul_",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   }
+  }
+ },
+ "ocr-legacy-current-id-collision": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "c"
+    },
+    "history": [
+     {
+      "text": "h",
+      "reading_id": "legacy",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   }
+  }
  }
 }

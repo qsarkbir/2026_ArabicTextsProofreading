@@ -8,6 +8,7 @@ const Bundle = (() => {
   const NEWER = '新しい版のアプリで作られたデータです。アプリを更新してから読み込んでください';
   const NOT_BUNDLE = 'このファイルは校正プロジェクトのバックアップではありません';
   const INDEX = /^(0|[1-9][0-9]*)$/;
+  const RESERVED_NAME = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i; // Windows の装置名はファイル名にできない
   const READING_ID = /^[A-Za-z0-9_-]{1,64}$/; // ローカル版では ocr/history/<i>/ のファイル名にもなる
   const READING_TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/;
   const BAD_OCR = 'バックアップのOCRが正しくありません';
@@ -92,7 +93,7 @@ const Bundle = (() => {
       out.image_index = r.image_index;
     }
     if (has(r, 'reading_id')) {
-      if (!(isStr(r.reading_id) && READING_ID.test(r.reading_id))) throw err(BAD_READING);
+      if (!(isStr(r.reading_id) && READING_ID.test(r.reading_id) && !RESERVED_NAME.test(r.reading_id))) throw err(BAD_READING);
       out.reading_id = r.reading_id;
     } else if (history) throw err(BAD_READING);
     if (has(r, 'time')) {
@@ -151,10 +152,15 @@ const Bundle = (() => {
     return out;
   };
 
-  // 読み込み側：ocr（parse の結果）のページを、ストアに書く読みの一覧にする。current が履歴に無ければ足す（識別子が無い旧形式は 'legacy'）
+  // 読み込み側：ocr（parse の結果）のページを、ストアに書く読みの一覧にする。current が履歴に無ければ足す（識別子が無い旧形式は、履歴と重ならない legacy・legacy_2…）
   const readingsOf = page => {
-    const list = [...page.history];
-    if (page.current && !list.some(r => r.reading_id === page.current.reading_id && r.reading_id !== undefined)) list.push({...page.current, reading_id: page.current.reading_id || 'legacy'});
+    const list = [...page.history], ids = new Set(list.map(r => r.reading_id.toLowerCase()));
+    const c = page.current;
+    if (c && !(c.reading_id !== undefined && ids.has(c.reading_id.toLowerCase()))) {
+      let id = c.reading_id, n = 1;
+      if (id === undefined) for (id = 'legacy'; ids.has(id); id = `legacy_${++n}`);
+      list.push({...c, reading_id: id});
+    }
     return list;
   };
 

@@ -83,6 +83,13 @@ test('ocrPages picks the latest reading as current; readingsOf keeps a legacy cu
   assert.equal(pages[3].current.reading_id, 'b');
   assert.deepEqual(Bundle.readingsOf({current: {text: 'old'}, history: [a]}).map(r => r.reading_id), ['a', 'legacy']);
   assert.deepEqual(Bundle.readingsOf({current: a, history: [a, c]}).map(r => r.reading_id), ['a', 'c']);
+  // 識別子の無い current は、履歴の 'legacy' を上書きしない（大文字小文字も区別しない）
+  const lg = {text: 'h', reading_id: 'legacy'}, l2 = {text: 'h2', reading_id: 'Legacy_2'};
+  assert.deepEqual(Bundle.readingsOf({current: {text: 'old'}, history: [lg]}).map(r => r.reading_id), ['legacy', 'legacy_2']);
+  assert.deepEqual(Bundle.readingsOf({current: {text: 'old'}, history: [{...lg, reading_id: 'LEGACY'}, l2]}).map(r => r.reading_id), ['LEGACY', 'Legacy_2', 'legacy_3']);
+  assert.deepEqual(Bundle.readingsOf({current: {text: 'old'}, history: [lg]}).map(r => r.text), ['h', 'old']);
+  // 履歴に無い識別子の current は足す
+  assert.deepEqual(Bundle.readingsOf({current: {text: 'n', reading_id: 'zz'}, history: [a]}).map(r => r.reading_id), ['a', 'zz']);
 });
 
 test('the original text round-trips byte for byte (BOM, CRLF, CR)', () => {

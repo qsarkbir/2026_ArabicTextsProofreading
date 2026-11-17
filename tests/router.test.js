@@ -660,6 +660,12 @@ test('AI keys: kept in the tab by default, saved only on request, never returned
   assert.equal((await router.handle('GET', `/api/projects/${slug}`)).ocr, false);
   // 保存したキーは、新しいタブ（新しいルーター）で読み込まれる。プロジェクトを削除してもキーは消えない
   await setKey(router, true);
+  // 別のタブが保存したキーは、このタブで「このタブだけ」に設定し直すと IndexedDB からも消える（D-43 (4)）
+  delete require.cache[require.resolve('../proofreader/static/local/router.js')];
+  const tab3 = require('../proofreader/static/local/router.js');
+  await tab3.handle('PUT', '/api/ai/keys/anthropic', {key: KEY + '3', save: false});   // tab3 はまだ保存の有無を確かめていない
+  assert.equal(LocalStore.settings.has('key:anthropic'), false);
+  await setKey(router, true);
   delete require.cache[require.resolve('../proofreader/static/local/router.js')];
   const tab2 = require('../proofreader/static/local/router.js');
   assert.deepEqual(await tab2.handle('GET', '/api/ai/keys'), {anthropic: {set: true, saved: true}});
@@ -721,6 +727,12 @@ test('OCR refusals follow run_ocr: wrong image key 409, no image 400, OpenAI 501
   world.next = null;
   world.image = new Uint8Array(5 * 1024 * 1024 + 1);
   await status(router.handle('POST', url, {}), 413);
+  world.image = new Uint8Array(3932160 + 1);   // 生のバイト数は 5 MB 未満でも、base64 にすると 5 MB を超える
+  await status(router.handle('POST', url, {}), 413);
+  world.image = new Uint8Array(3932160);       // base64 でちょうど 5 MB は通る
+  await router.handle('POST', url, {});
+  assert.equal(world.calls.at(-1).data.length, 3932160);
+  LocalStore.ocr.clear();
   world.image = new Uint8Array([1]);
   world.imageStatus = 404;
   await assert.rejects(router.handle('POST', url, {}), e => e.status === 502 && /ページ画像を取得できませんでした/.test(e.message));

@@ -22,6 +22,7 @@ BAD_OCR = "バックアップのOCRが正しくありません"
 BAD_READING = "バックアップのOCRの読み取り結果が正しくありません"
 INDEX = re.compile(r"0|[1-9][0-9]*")
 READING_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # also the file name under ocr/history/<i>/
+RESERVED_NAME = re.compile(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])")  # Windows device names cannot be file names
 READING_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 
 
@@ -159,7 +160,7 @@ def _reading(r, history=False):
             raise BundleError(BAD_READING)
         out["image_index"] = r["image_index"]
     if "reading_id" in r:
-        if not (_str(r["reading_id"]) and READING_ID.fullmatch(r["reading_id"])):
+        if not (_str(r["reading_id"]) and READING_ID.fullmatch(r["reading_id"]) and not RESERVED_NAME.fullmatch(r["reading_id"])):
             raise BundleError(BAD_READING)
         out["reading_id"] = r["reading_id"]
     elif history:
