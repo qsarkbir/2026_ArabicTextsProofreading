@@ -87,3 +87,47 @@ test('a commit that completes resolves, and a synchronous quota error in fn abor
   await assert.rejects(LocalStore.updateProject('s', () => { throw quota(); }), e => e.status === 507);
   assert.equal(calls.abort, 1);
 });
+
+// ---- 版の移行：v1 → v2（OCR のストアを足す）----
+const upgradeFrom = oldVersion => {
+  delete require.cache[require.resolve('../proofreader/static/local/store.js')];
+  const created = [], opened = [];
+  globalThis.indexedDB = {open: (name, version) => {
+    const req = {};
+    opened.push([name, version]);
+    setImmediate(() => {
+      const stores = new Set(oldVersion >= 1 ? ['projects', 'originals', 'pages', 'files', 'settings'] : []);
+      req.result = {
+        createObjectStore: (n, opt) => { assert.ok(!stores.has(n), `${n} already exists`); stores.add(n); const s = {n, opt, indexes: []}; created.push(s); return {createIndex: (...a) => { s.indexes.push(a); }}; },
+        objectStoreNames: {contains: n => stores.has(n)},
+        transaction: () => ({objectStore: () => ({get: () => { const r = {}; setImmediate(() => { r.result = {slug: 'x'}; r.onsuccess(); }); return r; }}), }),
+        close() {}, set onversionchange(f) {}, set onclose(f) {},
+      };
+      req.transaction = {};
+      if (oldVersion < version) req.onupgradeneeded({oldVersion});
+      req.onsuccess();
+    });
+    return req;
+  }};
+  return {LocalStore: require('../proofreader/static/local/store.js'), created, opened};
+};
+
+test('upgrading a version 1 database only adds the ocr store: nothing existing is touched (migration 1 -> 2)', async () => {
+  const {LocalStore, created, opened} = upgradeFrom(1);
+  assert.equal(LocalStore.DB_VERSION, 2);
+  assert.equal(LocalStore.MIGRATIONS.length, LocalStore.DB_VERSION);
+  await LocalStore.open();
+  assert.deepEqual(opened, [['proofreader', 2]]);
+  assert.deepEqual(created.map(s => s.n), ['ocr']);
+  assert.deepEqual(created[0].opt, {keyPath: ['slug', 'i', 'reading_id']});
+  assert.deepEqual(created[0].indexes, [['page', ['slug', 'i']]]);
+});
+
+test('a new database gets every store in one go, and one that is newer than this app is refused without being changed', async () => {
+  const {LocalStore, created} = upgradeFrom(0);
+  await LocalStore.open();
+  assert.deepEqual(created.map(s => s.n), ['projects', 'originals', 'pages', 'files', 'settings', 'ocr']);
+  delete require.cache[require.resolve('../proofreader/static/local/store.js')];
+  globalThis.indexedDB = {open: () => { const req = {}; setImmediate(() => { req.error = Object.assign(new Error('v'), {name: 'VersionError'}); req.onerror(); }); return req; }};
+  await assert.rejects(require('../proofreader/static/local/store.js').open(), e => /新しい版のアプリで作られています/.test(e.message));
+});

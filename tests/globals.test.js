@@ -45,7 +45,10 @@ test('scripts load into one global scope without redeclaration errors', () => {
   assert.equal(typeof vm.runInContext('TEI.export', ctx), 'function');
   assert.equal(typeof vm.runInContext('Draft.build', ctx), 'function');
   assert.equal(typeof vm.runInContext('Sources.iaPages', ctx), 'function');
+  assert.equal(typeof vm.runInContext('OCR.transcribe', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalStore.savePage', ctx), 'function');
+  assert.equal(typeof vm.runInContext('LocalStore.ocrPut', ctx), 'function');
+  assert.equal(typeof vm.runInContext('aiSettings', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalStore.importBundle', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalRouter.handle', ctx), 'function');
   assert.equal(typeof vm.runInContext('LocalRouter.revokeUrls', ctx), 'function');

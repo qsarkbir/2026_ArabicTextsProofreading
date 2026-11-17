@@ -20,7 +20,8 @@
    "history": {},
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "no-work-tables": {
   "project": {
@@ -43,7 +44,8 @@
    "history": {},
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "messy-but-valid": {
   "project": {
@@ -103,7 +105,8 @@
     "1": 3
    },
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "ia-source-with-pdf-file": {
   "project": {
@@ -137,7 +140,8 @@
    "history": {},
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "history-capped": {
   "project": {
@@ -663,7 +667,8 @@
    },
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "not-an-object": {
   "error": "\u3053\u306e\u30d5\u30a1\u30a4\u30eb\u306f\u6821\u6b63\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3067\u306f\u3042\u308a\u307e\u305b\u3093"
@@ -811,7 +816,8 @@
    "history": {},
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "integral-floats": {
   "project": {
@@ -853,7 +859,8 @@
     "0": 3
    },
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "source-ia-id-number": {
   "error": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u60c5\u5831\u306e\u300csource\u300d\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
@@ -946,7 +953,8 @@
    "history": {},
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "status-done-array": {
   "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u6ce8\u8a18\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
@@ -986,12 +994,583 @@
    },
    "revisions": {},
    "schema_version": 2
-  }
+  },
+  "ocr": {}
  },
  "history-done-array": {
   "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u5c65\u6b74\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
  },
  "history-done-string": {
   "error": "\u4f5c\u696d\u30c7\u30fc\u30bf\u306e\u5c65\u6b74\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-full": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+     "model": "claude-opus-5-5",
+     "provider": "anthropic",
+     "requested_model": "claude-opus-5-5",
+     "prompt_version": "printed-arabic-3",
+     "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+     "truncated": false,
+     "usage": {
+      "input": 1200,
+      "output": 340
+     },
+     "image_index": 4,
+     "reading_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "time": "2026-11-16T01:02:03Z"
+    },
+    "history": [
+     {
+      "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+      "model": "claude-opus-5-5",
+      "provider": "anthropic",
+      "requested_model": "claude-opus-5-5",
+      "prompt_version": "printed-arabic-3",
+      "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "truncated": false,
+      "usage": {
+       "input": 1200,
+       "output": 340
+      },
+      "image_index": 4,
+      "reading_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+      "model": "claude-opus-5-5",
+      "provider": "anthropic",
+      "requested_model": "claude-opus-5-5",
+      "prompt_version": "printed-arabic-3",
+      "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "truncated": false,
+      "usage": {
+       "input": 1200,
+       "output": 340
+      },
+      "image_index": 4,
+      "reading_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   },
+   "1": {
+    "history": [
+     {
+      "text": "\u0646\u0635",
+      "reading_id": "c3",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   }
+  }
+ },
+ "ocr-legacy-current": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "\u0642\u062f\u064a\u0645"
+    },
+    "history": [
+     {
+      "text": "\u0623\u0642\u062f\u0645",
+      "reading_id": "0f3a"
+     }
+    ]
+   }
+  }
+ },
+ "ocr-unknown-fields-dropped": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+     "model": "claude-opus-5-5",
+     "provider": "anthropic",
+     "requested_model": "claude-opus-5-5",
+     "prompt_version": "printed-arabic-3",
+     "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+     "truncated": false,
+     "usage": {
+      "input": 1200,
+      "output": 340
+     },
+     "image_index": 4,
+     "reading_id": "x1",
+     "time": "2026-11-16T01:02:03Z"
+    },
+    "history": []
+   }
+  }
+ },
+ "ocr-integral-floats": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+     "model": "claude-opus-5-5",
+     "provider": "anthropic",
+     "requested_model": "claude-opus-5-5",
+     "prompt_version": "printed-arabic-3",
+     "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+     "truncated": false,
+     "usage": {
+      "input": 3,
+      "output": 4
+     },
+     "image_index": 2,
+     "reading_id": "x1",
+     "time": "2026-11-16T01:02:03Z"
+    },
+    "history": []
+   }
+  }
+ },
+ "ocr-empty-pages-dropped": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {}
+ },
+ "ocr-empty": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {}
+ },
+ "ocr-in-format-version-1": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "1": {
+    "current": {
+     "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+     "model": "claude-opus-5-5",
+     "provider": "anthropic",
+     "requested_model": "claude-opus-5-5",
+     "prompt_version": "printed-arabic-3",
+     "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+     "truncated": false,
+     "usage": {
+      "input": 1200,
+      "output": 340
+     },
+     "image_index": 4,
+     "reading_id": "x1",
+     "time": "2026-11-16T01:02:03Z"
+    },
+    "history": []
+   }
+  }
+ },
+ "ocr-negative-image-index": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "\u0633\u0637\u0631\n\u0633\u0637\u0631",
+     "model": "claude-opus-5-5",
+     "provider": "anthropic",
+     "requested_model": "claude-opus-5-5",
+     "prompt_version": "printed-arabic-3",
+     "image_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+     "truncated": false,
+     "usage": {
+      "input": 1200,
+      "output": 340
+     },
+     "image_index": -1,
+     "reading_id": "x1",
+     "time": "2026-11-16T01:02:03Z"
+    },
+    "history": []
+   }
+  }
+ },
+ "ocr-not-dict": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-null": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-page-not-dict": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-page-out-of-range": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u30da\u30fc\u30b8\u756a\u53f7\u304c\u7bc4\u56f2\u5916\u3067\u3059\uff1a5"
+ },
+ "ocr-page-leading-zero": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u30da\u30fc\u30b8\u756a\u53f7\u304c\u7bc4\u56f2\u5916\u3067\u3059\uff1a00"
+ },
+ "ocr-page-not-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u30da\u30fc\u30b8\u756a\u53f7\u304c\u7bc4\u56f2\u5916\u3067\u3059\uff1ax"
+ },
+ "ocr-history-not-list": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-current-string": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-text-missing": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-text-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-model-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-provider-null": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-truncated-string": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-truncated-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-usage-no-output": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-usage-negative": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-usage-string": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-usage-array": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-usage-bool": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-image-index-float": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-image-key-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-path": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-slash": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-dot": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-empty": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-long": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-newline": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-unicode": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-current-reading-id-bad": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-history-no-id": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-history-entry-not-dict": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-time-space": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-time-newline": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-time-number": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-time-fullwidth-digits": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-duplicate-id": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306b\u3001\u540c\u3058\u8aad\u307f\u53d6\u308a\u306e\u8b58\u5225\u5b50\uff08reading_id\uff09\u304c\u91cd\u8907\u3057\u3066\u3044\u307e\u3059"
+ },
+ "ocr-duplicate-id-case": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306b\u3001\u540c\u3058\u8aad\u307f\u53d6\u308a\u306e\u8b58\u5225\u5b50\uff08reading_id\uff09\u304c\u91cd\u8907\u3057\u3066\u3044\u307e\u3059"
+ },
+ "ocr-lone-surrogate": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306b\u4e0d\u6b63\u306a\u6587\u5b57\uff08\u5bfe\u306b\u306a\u3063\u3066\u3044\u306a\u3044\u30b5\u30ed\u30b2\u30fc\u30c8\uff09\u304c\u542b\u307e\u308c\u3066\u3044\u307e\u3059"
+ },
+ "ocr-format-version-newer": {
+  "error": "\u65b0\u3057\u3044\u7248\u306e\u30a2\u30d7\u30ea\u3067\u4f5c\u3089\u308c\u305f\u30c7\u30fc\u30bf\u3067\u3059\u3002\u30a2\u30d7\u30ea\u3092\u66f4\u65b0\u3057\u3066\u304b\u3089\u8aad\u307f\u8fbc\u3093\u3067\u304f\u3060\u3055\u3044"
+ },
+ "ocr-reading-id-reserved-con": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-nul": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-com1": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-lpt9": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-aux": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-current-reading-id-reserved": {
+  "error": "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306eOCR\u306e\u8aad\u307f\u53d6\u308a\u7d50\u679c\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093"
+ },
+ "ocr-reading-id-reserved-lookalikes": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "history": [
+     {
+      "text": "x",
+      "reading_id": "CON1",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "y",
+      "reading_id": "COM0",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "z",
+      "reading_id": "lpt10",
+      "time": "2026-11-16T01:02:03Z"
+     },
+     {
+      "text": "w",
+      "reading_id": "nul_",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   }
+  }
+ },
+ "ocr-legacy-current-id-collision": {
+  "project": {
+   "uri": "syn.Book-ara1",
+   "title": "T",
+   "author": "A",
+   "created": "2026-01-01 00:00",
+   "schema_version": 2,
+   "raw_url": "",
+   "meta": {},
+   "candidates": [],
+   "offset": 0,
+   "anchors": [],
+   "source": null
+  },
+  "text": "\ufeff# a PageV01P001\r\n# b PageV01P002\r\n",
+  "work": {
+   "edits": {},
+   "status": {},
+   "history": {},
+   "revisions": {},
+   "schema_version": 2
+  },
+  "ocr": {
+   "0": {
+    "current": {
+     "text": "c"
+    },
+    "history": [
+     {
+      "text": "h",
+      "reading_id": "legacy",
+      "time": "2026-11-16T01:02:03Z"
+     }
+    ]
+   }
+  }
  }
 }

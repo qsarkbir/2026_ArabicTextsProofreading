@@ -10,6 +10,9 @@ const LocalStore = (() => {
       db.createObjectStore('files', {keyPath: ['slug', 'name']});
       db.createObjectStore('settings', {keyPath: 'key'});
     },
+    db => { // 2: OCR の読み取り結果（段階3）。既存のデータには触れず、空のストアを足すだけ
+      db.createObjectStore('ocr', {keyPath: ['slug', 'i', 'reading_id']}).createIndex('page', ['slug', 'i']);
+    },
   ];
   const DB_VERSION = MIGRATIONS.length;
   const NEWER = 'このブラウザのデータは、新しい版のアプリで作られています。アプリを更新してから開いてください（データは変更していません）';
@@ -125,13 +128,14 @@ const LocalStore = (() => {
 
   const pageRange = slug => IDBKeyRange.bound([slug, -Infinity], [slug, Infinity]);
   const fileRange = slug => IDBKeyRange.bound([slug, ''], [slug, []]); // 配列は文字列より大きい
-  const clearSlug = (tx, slug) => { tx.objectStore('pages').delete(pageRange(slug)); tx.objectStore('files').delete(fileRange(slug)); };
+  const ocrRange = slug => IDBKeyRange.bound([slug, -Infinity, ''], [slug, Infinity, []]);
+  const clearSlug = (tx, slug) => { tx.objectStore('pages').delete(pageRange(slug)); tx.objectStore('files').delete(fileRange(slug)); tx.objectStore('ocr').delete(ocrRange(slug)); };
 
   // extra: {patch: project に足す項目, file: {name, blob}}。プロジェクト・原文・PDF を1つのトランザクションで書く
   const createProject = async (fetched, extra = {}) => {
     const meta = fetched.meta || {};
     let project, first;
-    await run(['projects', 'originals', 'files', 'pages'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'files', 'pages', 'ocr'], 'readwrite', async tx => {
       const s = tx.objectStore('projects');
       first = (await request(s.count())) === 0;
       const slug = await freeSlug(s, slugBase(fetched.uri));
@@ -153,11 +157,11 @@ const LocalStore = (() => {
     return project;
   };
 
-  // Bundle.parse が検証した {project, text, work} を新しいプロジェクトとして1つのトランザクションで書く。元の slug は使わない
-  const importBundle = async ({project, text, work}) => {
+  // Bundle.parse が検証した {project, text, work, ocr} を新しいプロジェクトとして1つのトランザクションで書く（OCR の読みも同じトランザクション）。元の slug は使わない
+  const importBundle = async ({project, text, work, ocr = {}}) => {
     const records = Work.workToRecords(work);
     let out, first;
-    await run(['projects', 'originals', 'pages', 'files'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'pages', 'files', 'ocr'], 'readwrite', async tx => {
       const s = tx.objectStore('projects');
       first = (await request(s.count())) === 0;
       const slug = await freeSlug(s, slugBase(project.uri));
@@ -167,6 +171,8 @@ const LocalStore = (() => {
       tx.objectStore('originals').put({slug, text});
       const pageStore = tx.objectStore('pages');
       for (const [k, r] of Object.entries(records)) pageStore.put({...r, slug, i: Number(k)});
+      const ocrStore = tx.objectStore('ocr');
+      for (const [k, page] of Object.entries(ocr)) for (const r of Bundle.readingsOf(page)) ocrStore.put({...r, slug, i: Number(k)});
     });
     cache.set(out.slug, OpenITI.split(text));
     if (first) requestPersist();
@@ -174,18 +180,20 @@ const LocalStore = (() => {
     return out;
   };
 
-  // バックアップの書き出し用：プロジェクト・原文・全ページの record を同じ時点で読む
-  const bundleSource = slug => run(['projects', 'originals', 'pages'], 'readonly', async tx => {
+  // バックアップの書き出し用：プロジェクト・原文・全ページの record と OCR の読みを同じ時点で読む
+  const bundleSource = slug => run(['projects', 'originals', 'pages', 'ocr'], 'readonly', async tx => {
     const project = await request(tx.objectStore('projects').get(slug)), original = await request(tx.objectStore('originals').get(slug));
     if (!project || !original) throw notFound();
     const records = {};
     for (const r of await request(tx.objectStore('pages').getAll(IDBKeyRange.bound([slug, -Infinity], [slug, Infinity])))) records[r.i] = r;
-    return {project, original: original.text, records};
+    const ocr = {};
+    for (const r of await request(tx.objectStore('ocr').getAll(ocrRange(slug)))) (ocr[r.i] ||= []).push(stripKey(r));
+    return {project, original: original.text, records, ocr};
   });
 
-  // プロジェクトに属するものをすべて1つのトランザクションで消す（途中で失敗したら何も消えない）。ocr の保存先はブラウザ版には無い
+  // プロジェクトに属するものをすべて1つのトランザクションで消す（途中で失敗したら何も消えない）。API キー（settings の key:*）はプロジェクトのものではないので消さない
   const deleteProject = async slug => {
-    await run(['projects', 'originals', 'pages', 'files', 'settings'], 'readwrite', async tx => {
+    await run(['projects', 'originals', 'pages', 'files', 'ocr', 'settings'], 'readwrite', async tx => {
       if (!(await request(tx.objectStore('projects').getKey(slug)))) throw notFound();
       tx.objectStore('projects').delete(slug);
       tx.objectStore('originals').delete(slug);
@@ -196,12 +204,23 @@ const LocalStore = (() => {
     notify({slug, deleted: true});
   };
 
+  // OCR の読み取り結果（ストアの slug・i は取り除いて返す）。1ページの読みは古い順
+  const stripKey = ({slug, i, ...reading}) => reading;
+  const ocrList = (slug, i) => run(['ocr'], 'readonly', async tx => (await request(tx.objectStore('ocr').index('page').getAll([slug, i]))).map(stripKey));
+  // プロジェクトがまだあることを同じトランザクションで確かめてから書く（別のタブで削除されたプロジェクトに読みだけが残らない）
+  const ocrPut = (slug, i, reading) => run(['projects', 'ocr'], 'readwrite', async tx => {
+    if (!(await request(tx.objectStore('projects').getKey(slug)))) throw notFound();
+    tx.objectStore('ocr').put({...reading, slug, i});
+    return reading;
+  });
+
   // 利用者ごとの設定（最後のバックアップの日時など）
   const getSetting = async key => ((await run(['settings'], 'readonly', tx => request(tx.objectStore('settings').get(key)))) || {}).value;
   const setSetting = async (key, value) => {
     await run(['settings'], 'readwrite', async tx => { tx.objectStore('settings').put({key, value}); });
     notify({key});
   };
+  const deleteSetting = async key => { await run(['settings'], 'readwrite', async tx => { tx.objectStore('settings').delete(key); }); };
   const backupTimes = async () => {
     const out = {};
     for (const r of await run(['settings'], 'readonly', tx => request(tx.objectStore('settings').getAll()))) if (r.key.startsWith('backup:')) out[r.key.slice(7)] = r.value;
@@ -231,7 +250,7 @@ const LocalStore = (() => {
     return next;
   };
 
-  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, getFile, fileSizes, attachFile, createProject, importBundle, deleteProject, bundleSource, getSetting, setSetting, backupTimes, parts, pages, page, savePage};
+  return {DB_NAME, DB_VERSION, MIGRATIONS, open, listProjects, getProject, updateProject, getFile, fileSizes, attachFile, createProject, importBundle, deleteProject, bundleSource, getSetting, setSetting, deleteSetting, ocrList, ocrPut, backupTimes, parts, pages, page, savePage};
 })();
 
 if (typeof module !== 'undefined') module.exports = LocalStore;

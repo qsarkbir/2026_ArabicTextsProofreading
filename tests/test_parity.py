@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from proofreader import openiti, server, store
+from proofreader import ocr, openiti, providers, server, store
 from tests.test_regressions import Request
 
 FIXTURES = Path(__file__).parent / "fixtures" / "openiti"
@@ -111,6 +111,31 @@ class WorkParityTests(unittest.TestCase):
         if os.environ.get("UPDATE_FIXTURES"):
             path.write_text(json.dumps(got, ensure_ascii=True, indent=1) + "\n", encoding="utf-8")
         self.assertEqual(got, json.loads(path.read_text(encoding="utf-8")))
+
+
+class OcrParityTests(unittest.TestCase):
+    """local/ocr.js (browser version) sends the same request as ocr.py: same prompt, models and versions (D-40)."""
+    js = (STATIC / "ocr.js").read_text(encoding="utf-8")
+
+    def test_prompt_and_versions_match(self):
+        self.assertEqual(re.search(r"const PROMPT = `(.*?)`;", self.js, re.S)[1], ocr.PROMPT)
+        self.assertEqual(re.search(r"const PROMPT_VERSION = '([^']*)'", self.js)[1], providers.PROMPT_VERSION)
+        self.assertEqual(re.search(r"const MODEL = '([^']*)'", self.js)[1], ocr.MODEL)
+
+    def test_models_match(self):
+        block = re.search(r"const MODELS = \{(.*?)\n  \};", self.js, re.S)[1]
+        self.assertEqual(dict(re.findall(r"'([^']+)': '([^']+)'", block)), ocr.MODELS)
+        names = re.search(r"const NO_FALLBACK = \[(.*?)\]", self.js)[1]
+        self.assertEqual(set(re.findall(r"'([^']+)'", names)), ocr.NO_FALLBACK)
+
+    def test_request_parameters_match(self):
+        py = Path(ocr.__file__).read_text(encoding="utf-8")
+        beta = re.search(r"const BETA = '([^']*)'", self.js)[1]
+        self.assertIn(f'"betas": ["{beta}"]', py)
+        for js_part, py_part in (("max_tokens: 16000", "max_tokens=16000"), ("output_config: {effort: 'medium'}", 'effort="medium"'),
+                                 ("fallbacks: 'default'", '"fallbacks": "default"')):
+            self.assertIn(js_part, self.js)
+            self.assertIn(py_part, py)
 
 
 if __name__ == "__main__":

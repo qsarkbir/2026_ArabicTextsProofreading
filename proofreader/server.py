@@ -188,10 +188,10 @@ def create_project(h):
 @route("POST", r"/api/projects/import-bundle")
 def import_bundle(h):
     try:
-        project, text, work = bundle.parse(h.json())
+        project, text, work, ocr = bundle.parse(h.json())
     except bundle.BundleError as e:
         raise ApiError(str(e))
-    return project_view(store.create_from_bundle(project, text, work)["slug"])
+    return project_view(store.create_from_bundle(project, text, work, ocr)["slug"])
 
 
 @route("POST", r"/api/projects/upload-text")
@@ -643,7 +643,7 @@ def export(h, slug):
     parts = store.parts(slug)
     w = store.work(slug)
     if fmt == "bundle":
-        data = json.dumps(bundle.build(slug), ensure_ascii=False, indent=1).encode("utf-8")
+        data = json.dumps(bundle.build(slug, ocr=h.query.get("ocr", ["1"])[0] != "0"), ensure_ascii=False, indent=1).encode("utf-8")
         return h.send_download(data, f"{slug}.proofreader.json", "application/json; charset=utf-8")
     if fmt == "tei":
         try:
