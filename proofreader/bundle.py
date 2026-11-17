@@ -1,7 +1,8 @@
 """Project backup file (<slug>.proofreader.json): the project, the original text and the work in one JSON.
 
 The format is shared with the browser version (static/local/bundle.js); docs/static-design.md describes it.
-PDFs and OCR results are not included: a restored project has to have its PDF attached again.
+PDFs are not included: a restored project has to have its PDF attached again. OCR readings are included (format_version 2);
+API keys never are.
 """
 import copy
 import json
@@ -11,12 +12,17 @@ import time
 from . import openiti, store
 
 FORMAT = "openiti-proofreader-project"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # the newest this app reads and writes; a backup without OCR readings is still written as BASE_VERSION
+BASE_VERSION = 1
 SCHEMA_VERSION = 2  # of project.json and work.json
 APP_VERSION = "0.1.0"
 NEWER = "新しい版のアプリで作られたデータです。アプリを更新してから読み込んでください"
 NOT_BUNDLE = "このファイルは校正プロジェクトのバックアップではありません"
+BAD_OCR = "バックアップのOCRが正しくありません"
+BAD_READING = "バックアップのOCRの読み取り結果が正しくありません"
 INDEX = re.compile(r"0|[1-9][0-9]*")
+READING_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")  # also the file name under ocr/history/<i>/
+READING_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 
 
 class BundleError(ValueError):
@@ -49,16 +55,18 @@ def _status(entry):
     return {**({"done": True} if entry.get("done") else {}), **({"note": entry["note"]} if entry.get("note") else {})}
 
 
-def build(slug):
-    """The backup of one project as a dict (the caller serializes it)."""
+def build(slug, ocr=True):
+    """The backup of one project as a dict (the caller serializes it). OCR readings make it format_version 2."""
     w = store.work(slug)
+    pages = _ocr_out(store.ocr_pages(slug)) if ocr else {}
     return {
-        "format": FORMAT, "format_version": FORMAT_VERSION,
+        "format": FORMAT, "format_version": FORMAT_VERSION if pages else BASE_VERSION,
         "exported": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "app": {"mode": "http", "version": APP_VERSION},
         "project": store.load(slug), "original": store.original_text(slug),
         "work": {"edits": w["edits"], "status": {k: s for k, v in w["status"].items() if (s := _status(v))},
                  "history": w.get("history", {}), "revisions": w.get("revisions", {}), "schema_version": SCHEMA_VERSION},
+        **({"ocr": pages} if pages else {}),
     }
 
 
@@ -127,6 +135,89 @@ def _table(work, name, n):
     return t
 
 
+def _reading(r, history=False):
+    """One OCR reading (a file of ocr/<i>.json or ocr/history/<i>/): known fields only, types checked. History readings need a reading_id."""
+    if not isinstance(r, dict) or not _str(r.get("text")):
+        raise BundleError(BAD_READING)
+    out = {"text": r["text"]}
+    for k in ("model", "provider", "requested_model", "prompt_version", "image_key"):
+        if k in r:
+            if not _str(r[k]):
+                raise BundleError(BAD_READING)
+            out[k] = r[k]
+    if "truncated" in r:
+        if not isinstance(r["truncated"], bool):
+            raise BundleError(BAD_READING)
+        out["truncated"] = r["truncated"]
+    if "usage" in r:
+        u = r["usage"]
+        if not (isinstance(u, dict) and all(_int(u.get(k)) and u[k] >= 0 for k in ("input", "output"))):
+            raise BundleError(BAD_READING)
+        out["usage"] = {"input": u["input"], "output": u["output"]}
+    if "image_index" in r:
+        if not _int(r["image_index"]):
+            raise BundleError(BAD_READING)
+        out["image_index"] = r["image_index"]
+    if "reading_id" in r:
+        if not (_str(r["reading_id"]) and READING_ID.fullmatch(r["reading_id"])):
+            raise BundleError(BAD_READING)
+        out["reading_id"] = r["reading_id"]
+    elif history:
+        raise BundleError(BAD_READING)
+    if "time" in r:
+        if not (_str(r["time"]) and READING_TIME.fullmatch(r["time"])):
+            raise BundleError(BAD_READING)
+        out["time"] = r["time"]
+    return out
+
+
+def _ocr_page(entry):
+    if not isinstance(entry, dict) or not isinstance(entry.get("history", []), list) or not (entry.get("current") is None or isinstance(entry["current"], dict)):
+        raise BundleError(BAD_OCR)
+    history = [_reading(r, True) for r in entry.get("history", [])]
+    ids = [r["reading_id"].lower() for r in history]  # file names: a case-insensitive file system would merge these
+    if len(set(ids)) != len(ids):
+        raise BundleError("バックアップのOCRに、同じ読み取りの識別子（reading_id）が重複しています")
+    current = _reading(entry["current"]) if entry.get("current") is not None else None
+    return {**({"current": current} if current else {}), "history": history}
+
+
+def _ocr(ocr, n):
+    """{page index: {"current": reading, "history": [readings]}}; pages without readings are dropped."""
+    if not isinstance(ocr, dict):
+        raise BundleError(BAD_OCR)
+    out = {}
+    for k, entry in ocr.items():
+        if not INDEX.fullmatch(k) or int(k) >= n:
+            raise BundleError(f"バックアップのOCRのページ番号が範囲外です：{k}")
+        page = _ocr_page(entry)
+        if page.get("current") or page["history"]:
+            out[k] = page
+    return out
+
+
+def _ocr_out(pages):
+    """The OCR of a project for writing: readings that would not pass _reading (never written by this app) are left out, so the backup stays readable."""
+    out = {}
+    for k, entry in pages.items():
+        history, seen = [], set()
+        for r in entry.get("history", []):
+            try:
+                r = _reading(r, True)
+            except BundleError:
+                continue
+            if r["reading_id"].lower() not in seen:
+                seen.add(r["reading_id"].lower())
+                history.append(r)
+        try:
+            current = _reading(entry["current"]) if entry.get("current") else None
+        except BundleError:
+            current = None
+        if current or history:
+            out[k] = {**({"current": current} if current else {}), "history": history}
+    return out
+
+
 def _work(work, pages):
     n = len(pages)
     edits, status, history, revisions = {}, {}, {}, {}
@@ -160,7 +251,7 @@ def _work(work, pages):
 
 
 def parse(data):
-    """Validate a backup and return (project, original text, work); BundleError carries a message for the user."""
+    """Validate a backup and return (project, original text, work, ocr); BundleError carries a message for the user."""
     try:
         return _parse(data)
     except RecursionError:
@@ -188,7 +279,8 @@ def _parse(data):
         raise BundleError("ページ区切り（PageV..P..）がないテキストは校正できません")
     if openiti.join(parts) != text:
         raise BundleError("バックアップの原文を分割して再結合すると一致しません。ファイルが壊れています")
-    out = _project(project), text, _work(work, parts["pages"])
+    ocr = _ocr(_integral(data["ocr"]), len(parts["pages"])) if "ocr" in data else {}
+    out = _project(project), text, _work(work, parts["pages"]), ocr
     try:
         json.dumps(out, ensure_ascii=False).encode("utf-8")
     except UnicodeEncodeError:

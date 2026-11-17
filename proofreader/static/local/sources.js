@@ -27,6 +27,23 @@ const Sources = (() => {
     throw last;
   };
 
+  // 画像など、バイト列の取得（OCR に送る IIIF の画像）。getJson と同じ再試行の規則で、{bytes: Uint8Array, type} を返す
+  const getBytes = async (url, {tries = retry.tries, delay = retry.delay, unavailable = UNAVAILABLE, fetchImpl = (...a) => fetch(...a), wait = sleep} = {}) => {
+    let last;
+    for (let n = 1; n <= tries; n++) {
+      if (n > 1) await wait(delay);
+      let r;
+      try { r = await fetchImpl(url); } catch { last = new FetchError(unavailable); continue; }
+      if (r.ok) {
+        try { return {bytes: new Uint8Array(await r.arrayBuffer()), type: (r.headers && r.headers.get('content-type')) || ''}; }
+        catch { last = new FetchError(unavailable); continue; }
+      }
+      if (r.status >= 500) { last = new FetchError(unavailable, r.status); continue; }
+      throw new FetchError(`${r.status} ${r.statusText || ''}: ${url}`, r.status);
+    }
+    throw last;
+  };
+
   // Python の `a or b or [""]` の [0]：空でないリストのうち最初のものの先頭
   const pick = (...lists) => { for (const l of lists) if (Array.isArray(l) && l.length) return l[0]; return ''; };
   const dig = (obj, path) => path.reduce((o, k) => (o !== null && o !== undefined ? o[k] : undefined), obj);
@@ -80,7 +97,7 @@ const Sources = (() => {
     imagecount: doc.imagecount ?? null, thumb: `https://archive.org/services/img/${doc.identifier}`}));
   const search = async (query, rows = 20, get = getJson) => parseSearch(await get(searchUrl(query, rows)));
 
-  return {UNAVAILABLE, OFFLINE, retry, PDF_FORMATS, FetchError, getJson, parseManifest, iaPages, imageUrl, isIiifService, FOREIGN_SERVICE, pdfChoice, iaPdf, pdfUrl, searchUrl, parseSearch, search};
+  return {UNAVAILABLE, OFFLINE, retry, PDF_FORMATS, FetchError, getJson, getBytes, parseManifest, iaPages, imageUrl, isIiifService, FOREIGN_SERVICE, pdfChoice, iaPdf, pdfUrl, searchUrl, parseSearch, search};
 })();
 
 if (typeof module !== 'undefined') module.exports = Sources;

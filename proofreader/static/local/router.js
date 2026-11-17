@@ -115,8 +115,40 @@ const LocalRouter = (() => {
     return url ? {...out, pdf: url} : {...out, pdf: null, no_file: true};
   };
 
+  // ---------- AI の設定（API キー）：ブラウザ版だけの経路。キーはこのタブのメモリに置き、利用者が選んだときだけ IndexedDB の settings に保存する（D-36） ----------
+  const KEY_SETTING = 'key:anthropic';
+  const NEED_KEY = 'AI の設定で Anthropic の API キーを入力してください';
+  const NO_OPENAI = 'OpenAI はブラウザ版ではまだ使えません。ローカル版で利用できます';
+  const IMAGE_LIMIT = 5 * 1024 * 1024; // API が受け取る画像1枚の上限
+  let tabKey = null, savedKey; // tabKey: このタブが持つキー。savedKey: 保存済みかどうか（まだ確かめていなければ undefined）
+  const aiKey = async () => {
+    if (tabKey === null && savedKey === undefined) {
+      const saved = await LocalStore.getSetting(KEY_SETTING);
+      savedKey = typeof saved === 'string' && saved !== '';
+      if (savedKey) tabKey = saved;
+    }
+    return tabKey;
+  };
+  const keyState = async () => ({anthropic: {set: !!(await aiKey()), saved: !!savedKey}}); // 値は返さない
+  const utcNow = () => new Date().toISOString().slice(0, 19) + 'Z';
+  // 読み取りの識別子：時刻（ミリ秒）で始まる32桁の16進。このタブでは必ず増えるので、同じ秒に2回読んでも「新しい順」（時刻→識別子）が読んだ順になる
+  let lastMs = 0;
+  const readingId = () => { lastMs = Math.max(Date.now(), lastMs + 1); return lastMs.toString(16).padStart(12, '0') + uuidHex().slice(12); };
+
+  // 読み取り結果：新しい順（server.py の ocr_history の並び）
+  const newest = (a, b) => ((b.time || '') < (a.time || '') ? -1 : (b.time || '') > (a.time || '') ? 1 : b.reading_id < a.reading_id ? -1 : b.reading_id > a.reading_id ? 1 : 0);
+  const forImage = (readings, img) => (img && !img.missing && img.key ? readings.filter(r => r.image_key === img.key).sort(newest) : []);
+  // ページの「現在の読み」（D-38）：その画像の image_key に合う最新の1件。識別情報のない旧形式（バックアップから戻した）は、IA の資料で画像番号が同じときだけ legacy として返す
+  const currentReading = (readings, img, p) => {
+    const keyed = forImage(readings, img)[0];
+    if (keyed) return keyed;
+    if (!img || img.missing || !p.source || p.source.type !== 'ia') return null;
+    const legacy = readings.filter(r => !r.image_key && r.image_index === img.index).sort(newest)[0];
+    return legacy ? {...legacy, legacy: true} : null;
+  };
+
   const projectView = async slug => {
-    const p = await loadProject(slug), parts = await LocalStore.parts(slug), records = await LocalStore.pages(slug);
+    const p = await loadProject(slug), parts = await LocalStore.parts(slug), records = await LocalStore.pages(slug), key = await aiKey();
     return {
       slug: p.slug, uri: p.uri, raw_url: p.raw_url, title: p.title, author: p.author, created: p.created,
       candidates: p.candidates, offset: p.offset, anchors: p.anchors, source: sourceView(p.source),
@@ -124,7 +156,11 @@ const LocalRouter = (() => {
       edited: keysOf(records, r => r.text !== undefined),
       done: keysOf(records, r => r.done),
       noted: keysOf(records, r => r.note),
-      ocr: false, ocr_reason: UNSUPPORTED, ocr_models: {}, ocr_providers: {},
+      ocr: !!key, ocr_reason: key ? null : NEED_KEY, ocr_models: OCR.MODELS,
+      ocr_providers: {
+        anthropic: {label: 'Anthropic', available: !!key, reason: NEED_KEY, models: OCR.MODELS, default: OCR.MODEL},
+        openai: {label: 'OpenAI', available: false, reason: NO_OPENAI, models: {}, default: ''},
+      },
       bibliography: p.bibliography || {}, draft: !!p.draft,
     };
   };
@@ -389,10 +425,10 @@ const LocalRouter = (() => {
   route('GET', '/api/projects/(?<slug>[^/]+)/pages/(?<i>\\d+)', async ({slug, i}) => {
     const p = await loadProject(slug);
     i = await pageIndex(slug, i);
-    const pg = (await LocalStore.parts(slug)).pages[i], r = (await LocalStore.page(slug, i)) || {};
+    const pg = (await LocalStore.parts(slug)).pages[i], r = (await LocalStore.page(slug, i)) || {}, image = await imageFor(p, i);
     return {i, vol: pg.vol, page: pg.page, marker: pg.marker || '未割当の末尾', revision: r.revision || 0,
       unassigned: !!pg.unassigned, original: pg.text, text: r.text ?? pg.text, done: !!r.done, note: r.note || '',
-      ocr: null, image: await imageFor(p, i)};
+      ocr: currentReading(await LocalStore.ocrList(slug, i), image, p), image};
   });
 
   route('PUT', '/api/projects/(?<slug>[^/]+)/pages/(?<i>\\d+)', async ({slug, i, body}) => {
@@ -407,6 +443,68 @@ const LocalRouter = (() => {
     await loadProject(slug);
     i = await pageIndex(slug, i);
     return ((await LocalStore.page(slug, i)) || {}).history || [];
+  });
+
+  // ---------- OCR（server.py の reading_history / run_ocr）：Anthropic だけ。画像はブラウザが取得し、API もブラウザから直接呼ぶ ----------
+  route('GET', '/api/projects/(?<slug>[^/]+)/pages/(?<i>\\d+)/readings', async ({slug, i}) => {
+    const p = await loadProject(slug);
+    i = await pageIndex(slug, i);
+    return forImage(await LocalStore.ocrList(slug, i), await imageFor(p, i));
+  });
+
+  const decodeImage = dataUrl => {
+    const m = /^data:(image\/(?:jpeg|png));base64,(.+)$/s.exec(dataUrl || '');
+    if (!m) throw err('PDFのページ画像が送られていません');
+    try { return {mtype: m[1], data: Uint8Array.from(atob(m[2]), c => c.charCodeAt(0))}; } catch { throw err('PDFのページ画像が正しくありません'); }
+  };
+  // IA の画像：IIIF を幅 2000 で取得する（再試行つき。取得先は iiif.archive.org だけ、D-31・D-37）。BookReader への予備の経路は無い（D-27）
+  const iiifImage = async img => {
+    if (img.unavailable) throw err(img.unavailable);
+    if (!Sources.isIiifService(img.service)) throw err(Sources.FOREIGN_SERVICE);
+    let got;
+    try { got = await Sources.getBytes(Sources.imageUrl(img.service, 2000)); } catch (e) { throw err(`ページ画像を取得できませんでした: ${e.message}`, 502); }
+    return {mtype: /^image\/png\b/.test(got.type) ? 'image/png' : 'image/jpeg', data: got.bytes};
+  };
+
+  route('POST', '/api/projects/(?<slug>[^/]+)/pages/(?<i>\\d+)/ocr', async ({slug, i, body}) => {
+    const p = await loadProject(slug);
+    i = await pageIndex(slug, i);
+    const b = object(body), img = await imageFor(p, i);
+    if (!img || img.missing) throw err('このページに対応する画像がありません');
+    if (b.image_key && b.image_key !== img.key) throw err('画像の対応が変更されています。ページを開き直してください', 409);
+    const cached = forImage(await LocalStore.ocrList(slug, i), img)[0];
+    if (cached && !b.force && (!b.provider || (cached.provider || 'anthropic') === b.provider)
+        && (!b.model || (cached.requested_model ?? cached.model) === b.model)) return cached;
+    if ((b.provider || 'anthropic') !== 'anthropic') throw err(NO_OPENAI, 501);
+    const apiKey = await aiKey();
+    if (!apiKey) throw err(OCR.NO_KEY, 503);
+    let image;
+    if (Object.hasOwn(img, 'pdf')) {
+      if (!img.pdf) throw err('PDFが付いていません。資料の設定でPDFを選んでください');
+      image = decodeImage(b.image);
+    } else image = await iiifImage(img);
+    if (image.data.length > IMAGE_LIMIT) throw err('画像が大きすぎます（API が受け取れるのは1枚5 MBまでです）', 413);
+    let res;
+    try { res = await OCR.transcribe(image.data, image.mtype, b.model, apiKey); }
+    catch (e) { if (e instanceof OCR.Unavailable) throw err(e.message, 503); throw e; }
+    if ((await imageFor(await loadProject(slug), i) || {}).key !== img.key) throw err('読み取り中に画像の対応が変更されました。もう一度読み取ってください', 409);
+    return LocalStore.ocrPut(slug, i, {...res, image_index: img.index, image_key: img.key, reading_id: readingId(), time: utcNow()});
+  });
+
+  // ---------- AI の設定（ブラウザ版だけ：ローカル版のキーは .env） ----------
+  route('GET', '/api/ai/keys', () => keyState());
+  route('PUT', '/api/ai/keys/anthropic', async ({body}) => {
+    const b = object(body), key = typeof b.key === 'string' ? b.key.trim() : '';
+    if (!/^[\x21-\x7e]{8,500}$/.test(key)) throw err('APIキーを入力してください（sk-ant- で始まる半角の文字列）');
+    if (b.save === true) await LocalStore.setSetting(KEY_SETTING, key);
+    else if (savedKey !== false) await LocalStore.deleteSetting(KEY_SETTING);
+    tabKey = key; savedKey = b.save === true;
+    return keyState();
+  });
+  route('DELETE', '/api/ai/keys/anthropic', async () => {
+    await LocalStore.deleteSetting(KEY_SETTING);
+    tabKey = null; savedKey = false;
+    return keyState();
   });
 
   // ---------- export ----------
@@ -437,7 +535,7 @@ const LocalRouter = (() => {
     if (fmt === 'bundle') {
       const src = await LocalStore.bundleSource(slug), now = new Date();
       // バックアップ日時は、ダウンロードを始めた後に saveDownload が done() で記録する
-      return {...file(`${slug}.proofreader.json`, 'application/json; charset=utf-8', JSON.stringify(Bundle.build({...src, now}), null, 1)),
+      return {...file(`${slug}.proofreader.json`, 'application/json; charset=utf-8', JSON.stringify(Bundle.build({...src, ocr: query.get('ocr') === '0' ? {} : src.ocr, now}), null, 1)),
               done: () => LocalStore.setSetting(`backup:${slug}`, now.toISOString())};
     }
     if (['package', 'diff'].includes(fmt)) throw err(UNSUPPORTED, 501);

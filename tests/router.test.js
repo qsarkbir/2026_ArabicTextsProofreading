@@ -10,8 +10,9 @@ globalThis.Bundle = require('../proofreader/static/local/bundle.js');
 globalThis.TEI = require('../proofreader/static/local/tei.js');
 globalThis.Draft = require('../proofreader/static/local/draft.js');
 globalThis.Sources = require('../proofreader/static/local/sources.js');
+globalThis.OCR = require('../proofreader/static/local/ocr.js');
 const memory = () => {
-  const projects = new Map(), originals = new Map(), records = new Map(), texts = new Map(), settings = new Map(), files = new Map();
+  const projects = new Map(), originals = new Map(), records = new Map(), texts = new Map(), settings = new Map(), files = new Map(), ocr = new Map();
   const make = (base, p, text) => {
     let slug = base, n = 2;
     while (projects.has(slug)) slug = `${base}_${n++}`;
@@ -21,10 +22,22 @@ const memory = () => {
   return {
     backupTimes: async () => Object.fromEntries([...settings].map(([k, v]) => [k.slice(7), v])),
     setSetting: async (k, v) => { settings.set(k, v); },
-    bundleSource: async slug => ({project: projects.get(slug), original: texts.get(slug), records: Object.fromEntries([...records].filter(([k]) => k.startsWith(slug + '\0')).map(([, r]) => [r.i, r]))}),
-    importBundle: async ({project, text, work}) => {
+    getSetting: async k => settings.get(k),
+    deleteSetting: async k => { settings.delete(k); },
+    settings,
+    ocr,
+    ocrList: async (slug, i) => structuredClone(ocr.get(`${slug}\0${i}`) || []),
+    ocrPut: async (slug, i, r) => {
+      if (!projects.has(slug)) throw new Work.ApiError('見つかりません', 404);
+      ocr.set(`${slug}\0${i}`, [...(ocr.get(`${slug}\0${i}`) || []), structuredClone(r)]);
+      return r;
+    },
+    bundleSource: async slug => ({project: projects.get(slug), original: texts.get(slug), records: Object.fromEntries([...records].filter(([k]) => k.startsWith(slug + '\0')).map(([, r]) => [r.i, r])),
+      ocr: Object.fromEntries([...ocr].filter(([k]) => k.startsWith(slug + '\0')).map(([k, v]) => [k.split('\0')[1], structuredClone(v)]))}),
+    importBundle: async ({project, text, work, ocr: readings = {}}) => {
       const p = make(project.uri.replace(/[^A-Za-z0-9._-]+/g, '_') || 'text', project, text);
       for (const [k, r] of Object.entries(Work.workToRecords(work))) records.set(`${p.slug}\0${k}`, {...r, slug: p.slug, i: Number(k)});
+      for (const [k, page] of Object.entries(readings)) ocr.set(`${p.slug}\0${k}`, Bundle.readingsOf(page));
       return p;
     },
 
@@ -50,6 +63,7 @@ const memory = () => {
       projects.delete(slug); originals.delete(slug); texts.delete(slug); settings.delete(`backup:${slug}`);
       for (const k of [...records.keys()]) if (k.startsWith(slug + '\0')) records.delete(k);
       for (const k of [...files.keys()]) if (k.startsWith(slug + '/')) files.delete(k);
+      for (const k of [...ocr.keys()]) if (k.startsWith(slug + '\0')) ocr.delete(k);
     },
     createProject: async (f, extra = {}) => {
       const p = make(f.uri.replace(/[^A-Za-z0-9._-]+/g, '_') || 'text',
@@ -137,7 +151,7 @@ test('unfinished upload, bibliography and unsupported routes', async () => {
   assert.deepEqual([p.title, p.author, p.bibliography], ['ت', 'a', {edition: 'e', source: '', rights: ''}]);
   await status(router.handle('GET', '/api/projects/nope'), 404);
   await status(router.handle('GET', '/api/projects/..'), 404);
-  for (const [m, u] of [['GET', `/api/projects/${slug}/scan/0`], ['POST', `/api/projects/${slug}/source/ia/pdf`], ['POST', `/api/projects/${slug}/pages/0/ocr`], ['GET', `/api/projects/${slug}/pages/0/readings`],
+  for (const [m, u] of [['GET', `/api/projects/${slug}/scan/0`], ['POST', `/api/projects/${slug}/source/ia/pdf`], 
     ['POST', '/api/shutdown'], ['POST', '/api/heartbeat'], ['GET', `/api/projects/${slug}/export?fmt=package`], ['GET', `/api/projects/${slug}/export?fmt=diff`]])
     await assert.rejects(router.handle(m, u, {}), e => e.status === 501 && e.message === 'この機能はローカル版で利用できます');
 });
@@ -164,7 +178,7 @@ test('bundle export and import follow the server routes', async () => {
   assert.deepEqual([view.slug, view.edited, view.done, view.noted], ['a_b_2', [1], [1], [1]]);
   const again = await router.handle('GET', `/api/projects/a_b_2/export?fmt=text`);
   assert.equal(new TextDecoder('utf-8', {ignoreBOM: true}).decode(again.data), TEXT.replace('\r\ngamma\r\ndelta ', 'Gamma'));
-  await assert.rejects(router.handle('POST', '/api/projects/import-bundle', {...bundle, format_version: 2}), e => e.status === 400 && /新しい版のアプリで作られたデータです/.test(e.message));
+  await assert.rejects(router.handle('POST', '/api/projects/import-bundle', {...bundle, format_version: 3}), e => e.status === 400 && /新しい版のアプリで作られたデータです/.test(e.message));
   await assert.rejects(router.handle('POST', '/api/projects/import-bundle', '{not json'), e => e.status === 400);
 });
 
@@ -597,3 +611,203 @@ test('DELETE removes the project, its work, files and staged source like server.
   await status(router.handle('DELETE', '/api/projects/a%2Fb'), 404);
   router.revokeUrls();
 });
+
+// ---------- OCR（段階3）：API の呼び出しは OCR.transcribe の差し替えで、画像の取得は fetch の差し替えで確かめる ----------
+const KEY = 'sk-ant-api03-test-key-0123456789';
+const ocrWorld = run => async () => {
+  const saved = [globalThis.OCR, globalThis.fetch, Sources.retry.delay];
+  const world = {calls: [], fetches: [], image: new Uint8Array([0xff, 0xd8, 1, 2, 3]), imageStatus: 200, next: null};
+  globalThis.OCR = {...OCR, transcribe: async (data, mtype, model, apiKey) => {
+    world.calls.push({data, mtype, model, apiKey});
+    if (world.next) return world.next(model);
+    model = model || OCR.MODEL;
+    return {text: `reading ${world.calls.length}`, model, truncated: false, usage: {input: 1500, output: 300}, provider: 'anthropic', requested_model: model, prompt_version: OCR.PROMPT_VERSION};
+  }};
+  globalThis.fetch = async url => {
+    world.fetches.push(url);
+    const status = world.imageStatus;
+    return {ok: status < 400, status, statusText: 'x', headers: {get: () => 'image/jpeg'}, arrayBuffer: async () => world.image.buffer.slice(0)};
+  };
+  Sources.retry.delay = 0;
+  try { await run(world); } finally { [globalThis.OCR, globalThis.fetch, Sources.retry.delay] = saved; }
+};
+const setKey = (router, save = false) => router.handle('PUT', '/api/ai/keys/anthropic', {key: KEY, save});
+const ocrUrl = (slug, i = 0) => `/api/projects/${slug}/pages/${i}/ocr`;
+
+test('AI keys: kept in the tab by default, saved only on request, never returned, removed by DELETE (D-36)', async () => {
+  const {router, slug} = await fresh();
+  assert.deepEqual(await router.handle('GET', '/api/ai/keys'), {anthropic: {set: false, saved: false}});
+  let p = await router.handle('GET', `/api/projects/${slug}`);
+  assert.deepEqual([p.ocr, p.ocr_providers.anthropic.available, p.ocr_providers.openai.available], [false, false, false]);
+  assert.match(p.ocr_providers.anthropic.reason, /AI の設定/);
+  assert.deepEqual(p.ocr_providers.anthropic.models, OCR.MODELS);
+  for (const key of ['', '   ', 'short', 'sk-ant-has space-inside', 'sk-ant-\u3042\u3044\u3046\u3048\u304a\u304b', 'x'.repeat(501), 5, null])
+    await assert.rejects(router.handle('PUT', '/api/ai/keys/anthropic', {key, save: true}), e => e.status === 400, String(key));
+  assert.equal(LocalStore.settings.size, 0);
+  assert.deepEqual(await setKey(router), {anthropic: {set: true, saved: false}});
+  assert.equal(LocalStore.settings.has('key:anthropic'), false);   // タブの中だけ
+  p = await router.handle('GET', `/api/projects/${slug}`);
+  assert.equal(p.ocr, true);
+  assert.equal(JSON.stringify(p).includes(KEY), false);
+  assert.equal(JSON.stringify(await router.handle('GET', '/api/ai/keys')).includes(KEY), false);
+  assert.deepEqual(await setKey(router, true), {anthropic: {set: true, saved: true}});
+  assert.equal(LocalStore.settings.get('key:anthropic'), KEY);
+  assert.deepEqual(await setKey(router, false), {anthropic: {set: true, saved: false}});  // 「保存する」を外すと保存した分も消える
+  assert.equal(LocalStore.settings.has('key:anthropic'), false);
+  await setKey(router, true);
+  assert.deepEqual(await router.handle('DELETE', '/api/ai/keys/anthropic'), {anthropic: {set: false, saved: false}});
+  assert.equal(LocalStore.settings.size, 0);
+  assert.equal((await router.handle('GET', `/api/projects/${slug}`)).ocr, false);
+  // 保存したキーは、新しいタブ（新しいルーター）で読み込まれる。プロジェクトを削除してもキーは消えない
+  await setKey(router, true);
+  delete require.cache[require.resolve('../proofreader/static/local/router.js')];
+  const tab2 = require('../proofreader/static/local/router.js');
+  assert.deepEqual(await tab2.handle('GET', '/api/ai/keys'), {anthropic: {set: true, saved: true}});
+  await tab2.handle('DELETE', `/api/projects/${slug}`);
+  assert.equal(LocalStore.settings.get('key:anthropic'), KEY);
+  delete require.cache[require.resolve('../proofreader/static/local/router.js')];
+  assert.deepEqual(await require('../proofreader/static/local/router.js').handle('GET', '/api/ai/keys'), {anthropic: {set: true, saved: true}});
+});
+
+test('OCR on an IA page: fetches the IIIF image at 2000 px, saves the reading with its image key, reuses it like server.py run_ocr', ocrWorld(async world => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug);
+  const url = ocrUrl(slug);
+  await status(router.handle('POST', url, {}), 503);   // キーが無い
+  assert.deepEqual([world.calls.length, world.fetches.length], [0, 0]);
+  await setKey(router);
+  const pg = await router.handle('GET', `/api/projects/${slug}/pages/0`);
+  assert.equal(pg.ocr, null);
+  const r1 = await router.handle('POST', url, {image_key: pg.image.key, model: 'claude-opus-5-5', provider: 'anthropic'});
+  assert.deepEqual(world.fetches, ['https://iiif.archive.org/image/iiif/3/x%2Fs0/full/2000,/0/default.jpg']);
+  assert.deepEqual([world.calls[0].mtype, world.calls[0].model, world.calls[0].apiKey, [...world.calls[0].data]], ['image/jpeg', 'claude-opus-5-5', KEY, [0xff, 0xd8, 1, 2, 3]]);
+  assert.deepEqual([r1.text, r1.image_index, r1.image_key, r1.provider, r1.usage], ['reading 1', 0, pg.image.key, 'anthropic', {input: 1500, output: 300}]);
+  assert.match(r1.reading_id, /^[0-9a-f]{32}$/);
+  assert.match(r1.time, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  assert.equal(JSON.stringify(r1).includes(KEY), false);
+  assert.deepEqual((await router.handle('GET', `/api/projects/${slug}/pages/0`)).ocr, r1);
+  // 同じ条件なら API を呼ばずに保存した読みを返す。force・別のモデル・別の提供元では呼び直す
+  assert.deepEqual(await router.handle('POST', url, {image_key: pg.image.key, model: 'claude-opus-5-5'}), r1);
+  assert.deepEqual(await router.handle('POST', url, {}), r1);
+  assert.equal(world.calls.length, 1);
+  const r2 = await router.handle('POST', url, {force: true, model: 'claude-opus-5-5'});
+  assert.equal(r2.text, 'reading 2');
+  const r3 = await router.handle('POST', url, {model: 'claude-sonnet-5-5'});
+  assert.deepEqual([r3.text, r3.requested_model, world.calls.length], ['reading 3', 'claude-sonnet-5-5', 3]);
+  assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/0`)).ocr.reading_id, r3.reading_id);
+  assert.deepEqual((await router.handle('GET', `/api/projects/${slug}/pages/0/readings`)).map(r => r.text).sort(), ['reading 1', 'reading 2', 'reading 3']);
+  // 別のページ・別の画像には混ざらない
+  assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/1`)).ocr, null);
+  assert.deepEqual(await router.handle('GET', `/api/projects/${slug}/pages/1/readings`), []);
+}));
+
+test('OCR refusals follow run_ocr: wrong image key 409, no image 400, OpenAI 501, API errors 503, nothing saved on failure', ocrWorld(async world => {
+  const {router, slug} = await fresh();
+  const url = ocrUrl(slug);
+  await status(router.handle('POST', url, {}), 400);   // 資料が無い
+  await iaProject(router, slug);
+  await setKey(router);
+  await assert.rejects(router.handle('POST', url, {image_key: 'stale'}), e => e.status === 409 && e.message === '画像の対応が変更されています。ページを開き直してください');
+  await assert.rejects(router.handle('POST', url, {provider: 'openai', model: 'gpt-x'}), e => e.status === 501 && /OpenAI はブラウザ版ではまだ使えません/.test(e.message));
+  await assert.rejects(router.handle('POST', ocrUrl(slug, 9), {}), e => e.status === 404);
+  assert.equal(world.calls.length, 0);
+  world.next = () => { throw new OCR.Unavailable('このページは読み取りを断られました'); };
+  await assert.rejects(router.handle('POST', url, {}), e => e.status === 503 && e.message === 'このページは読み取りを断られました');
+  world.next = () => { throw new TypeError('boom'); };
+  await assert.rejects(router.handle('POST', url, {}), e => e instanceof TypeError);
+  assert.deepEqual(await router.handle('GET', `/api/projects/${slug}/pages/0/readings`), []);
+  assert.equal(LocalStore.ocr.size, 0);
+  // 画像：5 MB を超える・取得できない・別のホスト
+  world.next = null;
+  world.image = new Uint8Array(5 * 1024 * 1024 + 1);
+  await status(router.handle('POST', url, {}), 413);
+  world.image = new Uint8Array([1]);
+  world.imageStatus = 404;
+  await assert.rejects(router.handle('POST', url, {}), e => e.status === 502 && /ページ画像を取得できませんでした/.test(e.message));
+  world.imageStatus = 504;
+  world.fetches.length = 0;
+  await assert.rejects(router.handle('POST', url, {}), e => e.status === 502 && e.message.includes(Sources.UNAVAILABLE));
+  assert.equal(world.fetches.length, Sources.retry.tries);   // 5xx は再試行する
+  await LocalStore.updateProject(slug, p => { p.source.pages[1].service = 'https://evil.example/x'; });
+  world.fetches.length = 0;
+  await assert.rejects(router.handle('POST', ocrUrl(slug, 1), {}), e => e.message === Sources.FOREIGN_SERVICE);
+  assert.deepEqual(world.fetches, []);   // 別のホストへは要求しない
+  assert.equal(LocalStore.ocr.size, 0);
+}));
+
+test('OCR: a mapping change while the API call is in flight saves nothing (409); the reading follows the image key afterwards (D-38)', ocrWorld(async world => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug);
+  await setKey(router);
+  const url = ocrUrl(slug);
+  world.next = async model => {
+    await router.handle('POST', `/api/projects/${slug}/mapping`, {anchor: [0, 1]});
+    return {text: 'late', model, truncated: false, usage: {input: 1, output: 1}, provider: 'anthropic', requested_model: model, prompt_version: 'v'};
+  };
+  await assert.rejects(router.handle('POST', url, {}), e => e.status === 409 && /読み取り中に画像の対応が変更されました/.test(e.message));
+  assert.equal(LocalStore.ocr.size, 0);
+  world.next = null;
+  const r = await router.handle('POST', url, {});   // いまの対応（画像 1）で読む
+  assert.equal(r.image_index, 1);
+  await router.handle('POST', `/api/projects/${slug}/mapping`, {anchor: [0, 2]});
+  assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/0`)).ocr, null);   // 別の画像の読みは出さない
+  assert.deepEqual(await router.handle('GET', `/api/projects/${slug}/pages/0/readings`), []);
+  await router.handle('POST', `/api/projects/${slug}/mapping`, {anchor: [0, 1]});
+  assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/0`)).ocr.reading_id, r.reading_id);   // 戻すと、その画像の読みが出る
+}));
+
+test('OCR on a PDF page: the page image comes from the screen as a data URL, like http mode', ocrWorld(async world => {
+  const {router, slug} = await fresh();
+  const staged = await router.handle('POST', `/api/projects/${slug}/source/pdf`, pdfBlob(), {'X-Page-Count': '3', 'X-Filename': 'a.pdf'});
+  await router.handle('POST', `/api/projects/${slug}/mapping`, {source: staged.draft.revision, offset: 0});
+  await setKey(router);
+  const url = ocrUrl(slug);
+  for (const image of [undefined, '', 'data:image/gif;base64,AAAA', 'data:image/jpeg;base64,', 'http://x/y.jpg'])
+    await assert.rejects(router.handle('POST', url, {image}), e => e.status === 400 && /PDFのページ画像が送られていません/.test(e.message));
+  await assert.rejects(router.handle('POST', url, {image: 'data:image/png;base64,@@@'}), e => e.status === 400);
+  assert.equal(world.calls.length, 0);
+  const r = await router.handle('POST', url, {image: 'data:image/png;base64,' + Buffer.from([1, 2, 3, 4]).toString('base64')});
+  assert.deepEqual([world.calls[0].mtype, [...world.calls[0].data], world.fetches.length], ['image/png', [1, 2, 3, 4], 0]);
+  assert.equal(r.image_index, 0);
+  assert.equal((await router.handle('POST', url, {})).reading_id, r.reading_id);   // 保存した読みは画像なしでも返す
+  // バックアップから戻して PDF が無い資料
+  LocalStore.files.delete(`${slug}/${(await LocalStore.getProject(slug)).source.file}`);
+  router.revokeUrls();
+  await assert.rejects(router.handle('POST', ocrUrl(slug, 1), {image: 'data:image/png;base64,AAAA'}), e => e.status === 400 && /PDFが付いていません/.test(e.message));
+  router.revokeUrls();
+}));
+
+test('legacy readings from a Python backup (no image key) show as legacy only on the IA image they were read from', ocrWorld(async () => {
+  const {router, slug} = await fresh();
+  await iaProject(router, slug);
+  LocalStore.ocr.set(`${slug}\0` + 0, [{text: 'old', reading_id: 'legacy', image_index: 0}]);
+  LocalStore.ocr.set(`${slug}\0` + 1, [{text: 'old1', reading_id: 'legacy', image_index: 5}]);
+  const p0 = await router.handle('GET', `/api/projects/${slug}/pages/0`);
+  assert.deepEqual([p0.ocr.text, p0.ocr.legacy], ['old', true]);
+  assert.equal((await router.handle('GET', `/api/projects/${slug}/pages/1`)).ocr, null);
+  assert.deepEqual(await router.handle('GET', `/api/projects/${slug}/pages/0/readings`), []);
+}));
+
+test('deleting a project removes its readings in the same step; a backup carries them and restores them (D-38, D-42)', ocrWorld(async () => {
+  const {router, slug} = await fresh();
+  const other = (await router.handle('POST', '/api/projects/upload-text', new Blob([TEXT]), {'X-Filename': 'other.mARkdown'})).slug;
+  for (const s of [slug, other]) await iaProject(router, s);
+  await setKey(router, true);
+  const mine = await router.handle('POST', ocrUrl(slug), {}), kept = await router.handle('POST', ocrUrl(other), {});
+  await router.handle('POST', ocrUrl(slug), {force: true});
+  const exported = JSON.parse(new TextDecoder().decode((await router.handle('GET', `/api/projects/${slug}/export?fmt=bundle`)).data));
+  assert.equal(exported.format_version, 2);
+  assert.deepEqual(exported.ocr[0].history.map(r => r.text), ['reading 1', 'reading 3']);
+  assert.equal(JSON.stringify(exported).includes(KEY), false);
+  const plain = JSON.parse(new TextDecoder().decode((await router.handle('GET', `/api/projects/${slug}/export?fmt=bundle&ocr=0`)).data));
+  assert.deepEqual([plain.format_version, 'ocr' in plain], [1, false]);
+  const copy = (await router.handle('POST', '/api/projects/import-bundle', exported)).slug;
+  const restored = await router.handle('GET', `/api/projects/${copy}/pages/0`);
+  assert.equal(restored.ocr.text, 'reading 3');   // 資料の画像の key は同じ資料なので一致する
+  assert.equal((await router.handle('GET', `/api/projects/${copy}/pages/0/readings`)).length, 2);
+  await router.handle('DELETE', `/api/projects/${slug}`);
+  assert.deepEqual([...LocalStore.ocr.keys()].filter(k => k.startsWith(slug + '\0')), []);
+  assert.equal((await router.handle('GET', `/api/projects/${other}/pages/0`)).ocr.reading_id, kept.reading_id);
+  assert.ok(mine.reading_id);
+  assert.equal(LocalStore.settings.get('key:anthropic'), KEY);   // キーは消えない
+}));

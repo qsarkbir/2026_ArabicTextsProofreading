@@ -98,3 +98,38 @@ async function showPageHistory(life, slug, idx, restore) {
     };
   } catch (error) { if (life.alive) toast(error.message, true); }
 }
+
+// ブラウザ版の「AI の設定」：Anthropic の API キーを入力する（D-36）。キーは入力したらすぐ欄から消し、画面にも出さない。
+// 既定ではこのタブの中だけに置き、「このブラウザに保存する」を選んだときだけ IndexedDB に保存する。changed() は設定が変わったあとに呼ぶ。
+async function aiSettings(life, changed) {
+  const describe = s => {
+    const a = s && s.anthropic;
+    return !a || !a.set ? 'APIキーは設定されていません。' : a.saved ? 'APIキーは設定済みです（このブラウザに保存されています）。' : 'APIキーは設定済みです（このタブの中だけ。閉じるか再読み込みすると消えます）。';
+  };
+  const dialog = workflowDialog(life, 'AI の設定', `<p>AIによる読み取り（OCR）は、このブラウザから Anthropic の API に直接送ります。ページの画像が Anthropic に送られ、1ページ読み取るごとに利用料がかかります。</p>
+    <form class="formgrid" id="aiform" autocomplete="off">
+      <label>Anthropic の API キー <input type="password" id="aikey" autocomplete="off" spellcheck="false" data-1p-ignore placeholder="sk-ant-…"></label>
+      <label><input type="checkbox" id="aisave"> このブラウザに保存する</label>
+      <p class="help">保存しないとき、キーはこのタブの中だけに置かれ、タブを閉じるか再読み込みすると消えます。保存すると、このブラウザを使う他の人やブラウザの拡張機能がキーを読める可能性があります。共用のパソコンでは保存しないでください。キーはバックアップや書き出しに含まれません。</p>
+      <p class="help">Console（platform.claude.com）でこのアプリ専用のキーを作り、そのワークスペースに利用上限（月ごとの支出の上限）を設定することをお勧めします。</p>
+      <div class="row"><button type="submit" class="primary" id="aisubmit">キーを設定する</button><button type="button" id="aiclear">キーを消す</button></div>
+      <p role="status" id="aistatus"></p></form>`);
+  const status = dialog.querySelector('#aistatus'), input = dialog.querySelector('#aikey');
+  const show = text => { if (life.alive) status.textContent = text; };
+  const refresh = async () => show(describe(await life.api('GET', '/api/ai/keys')));
+  refresh().catch(e => show(e.message));
+  dialog.querySelector('#aiform').onsubmit = async e => {
+    e.preventDefault();
+    const key = input.value, save = dialog.querySelector('#aisave').checked;
+    input.value = ''; // 入力したキーは欄に残さない
+    try {
+      show(describe(await life.api('PUT', '/api/ai/keys/anthropic', {key, save})));
+      toast(save ? 'APIキーをこのブラウザに保存しました' : 'APIキーをこのタブに設定しました');
+      if (changed) await changed();
+    } catch (error) { show(error.message); }
+  };
+  dialog.querySelector('#aiclear').onclick = async () => {
+    try { show(describe(await life.api('DELETE', '/api/ai/keys/anthropic'))); if (changed) await changed(); } catch (error) { show(error.message); }
+  };
+  input.focus();
+}

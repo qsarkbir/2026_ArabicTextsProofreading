@@ -9,7 +9,9 @@ import json
 import os
 import re
 import tempfile
+import itertools
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -23,12 +25,23 @@ STATIC = Path(__file__).parent.parent / "proofreader" / "static"
 ORIGINAL = "\ufeff#META#Header#End#\r\n# alpha beta PageV01P001\r\n# gamma\r\n~~ delta PageV01P002\r\n# epsilon PageV02P001\r\n"
 
 
+def fixed_clock():
+    """Deterministic reading ids and times (one minute apart) for store.ocr_put."""
+    from contextlib import ExitStack
+    real, count = time.gmtime, itertools.count()
+    ids = (type("U", (), {"hex": f"{n:032x}"}) for n in itertools.count(1))
+    stack = ExitStack()
+    stack.enter_context(patch.object(store.time, "gmtime", lambda *a: real(1800000000 + 60 * next(count))))
+    stack.enter_context(patch.object(store.uuid, "uuid4", lambda: next(ids)))
+    return stack
+
+
 def outcome(case):
     try:
-        project, text, work = bundle.parse(case["bundle"])
+        project, text, work, ocr = bundle.parse(case["bundle"])
     except bundle.BundleError as e:
         return {"error": str(e)}
-    return {"project": project, "text": text, "work": work}
+    return {"project": project, "text": text, "work": work, "ocr": ocr}
 
 
 class BundleTests(unittest.TestCase):
@@ -85,8 +98,8 @@ class BundleTests(unittest.TestCase):
                     slug = store.create({"uri": f"rt{len(bom)}{len(nl)}", "text": text, "meta": {}})["slug"]
                     store.update_page(slug, 1, text="changed")
                     data = bundle.build(slug)
-                    project, original, work = bundle.parse(json.loads(json.dumps(data)))
-                    copy = store.create_from_bundle(project, original, work)
+                    project, original, work, ocr = bundle.parse(json.loads(json.dumps(data)))
+                    copy = store.create_from_bundle(project, original, work, ocr)
                     self.assertNotEqual(copy["slug"], slug)
                     self.assertEqual(copy["slug"], f"{slug}_2")
                     self.assertEqual(store.original_text(copy["slug"]), text)
@@ -98,8 +111,8 @@ class BundleTests(unittest.TestCase):
 
     def test_unedited_export_is_byte_identical_after_import(self):
         slug = store.create({"uri": "plain", "text": ORIGINAL, "meta": {}})["slug"]
-        project, text, work = bundle.parse(json.loads(json.dumps(bundle.build(slug))))
-        copy = store.create_from_bundle(project, text, work)["slug"]
+        project, text, work, ocr = bundle.parse(json.loads(json.dumps(bundle.build(slug))))
+        copy = store.create_from_bundle(project, text, work, ocr)["slug"]
         self.assertEqual(server.export(Request(), copy), ORIGINAL.encode("utf-8"))
         with (store.ROOT / copy / "original.txt").open("rb") as f:
             self.assertEqual(f.read(), ORIGINAL.encode("utf-8"))
@@ -176,8 +189,70 @@ class BundleTests(unittest.TestCase):
         js = (STATIC / "local" / "bundle.js").read_text(encoding="utf-8")
         for name in ("FORMAT", "APP_VERSION"):
             self.assertEqual(re.search(rf"const {name} = '([^']+)'", js)[1], getattr(bundle, name), name)
-        for name in ("FORMAT_VERSION", "SCHEMA_VERSION"):
+        for name in ("FORMAT_VERSION", "BASE_VERSION", "SCHEMA_VERSION"):
             self.assertEqual(int(re.search(rf"const {name} = (\d+)", js)[1]), getattr(bundle, name), name)
+
+    def readings(self, slug):
+        """Three readings on page 0 (the middle one replaced a legacy file without an id) and one on page 2."""
+        folder = store.ROOT / slug / "ocr"
+        store._write_json(folder / "0.json", {"text": "legacy", "model": "claude-opus-5-5", "image_index": 0})  # written before readings had ids
+        with fixed_clock():
+            store.ocr_put(slug, 0, {"text": "one", "image_key": "k", "usage": {"input": 5, "output": 6}})
+            store.ocr_put(slug, 0, {"text": "two", "image_key": "k", "truncated": True})
+            store.ocr_put(slug, 2, {"text": "three", "image_key": "z", "provider": "openai"})
+
+    def test_ocr_round_trip_through_a_backup(self):
+        slug = self.project()
+        self.readings(slug)
+        data = json.loads(json.dumps(bundle.build(slug)))
+        self.assertEqual(data["format_version"], 2)
+        self.assertEqual(sorted(data["ocr"]), ["0", "2"])
+        self.assertEqual([r["text"] for r in data["ocr"]["0"]["history"]], ["legacy", "one", "two"])  # legacy first: it has no time
+        self.assertEqual(data["ocr"]["0"]["current"]["text"], "two")
+        project, text, work, ocr = bundle.parse(data)
+        copy = store.create_from_bundle(project, text, work, ocr)["slug"]
+        self.assertEqual(store.ocr_get(copy, 0), store.ocr_get(slug, 0))
+        self.assertEqual(store.ocr_get(copy, 2), store.ocr_get(slug, 2))
+        self.assertEqual(store.ocr_history(copy, 0, "k"), store.ocr_history(slug, 0, "k"))
+        self.assertEqual(sorted(p.name for p in (store.ROOT / copy / "ocr" / "history" / "0").iterdir()),
+                         sorted(p.name for p in (store.ROOT / slug / "ocr" / "history" / "0").iterdir()))
+        self.assertEqual(json.loads(json.dumps(bundle.build(copy)))["ocr"], data["ocr"])  # a second round trip changes nothing
+
+    def test_backup_without_ocr_stays_format_1_and_ocr_can_be_left_out(self):
+        slug = self.project()
+        self.assertEqual((bundle.build(slug)["format_version"], "ocr" in bundle.build(slug)), (1, False))
+        self.readings(slug)
+        request = lambda q: type("R", (Request,), {"send_download": lambda s, data, *a: data})(query={"fmt": ["bundle"], **q})
+        self.assertEqual(json.loads(server.export(request({}), slug))["format_version"], 2)
+        plain = json.loads(server.export(request({"ocr": ["0"]}), slug))
+        self.assertEqual((plain["format_version"], "ocr" in plain), (1, False))
+
+    def test_backup_never_holds_an_api_key_field(self):
+        slug = self.project()
+        self.readings(slug)
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-secret-123", "OPENAI_API_KEY": "sk-secret-456"}):
+            text = json.dumps(bundle.build(slug))
+        self.assertNotIn("secret", text)
+
+    def test_unreadable_or_invalid_readings_are_left_out_of_the_backup(self):
+        slug = self.project()
+        self.readings(slug)
+        (store.ROOT / slug / "ocr" / "history" / "0" / "broken.json").write_text("{not json", encoding="utf-8")
+        store._write_json(store.ROOT / slug / "ocr" / "history" / "0" / "odd.json", {"text": 5})
+        store._write_json(store.ROOT / slug / "ocr" / "1.json", {"text": "bad time", "time": "yesterday"})
+        data = bundle.build(slug)
+        self.assertEqual(len(data["ocr"]["0"]["history"]), 3)
+        self.assertNotIn("1", data["ocr"])
+        bundle.parse(json.loads(json.dumps(data)))  # still readable
+
+    def test_install_with_a_bad_reading_id_writes_nothing(self):
+        data = json.loads((FIXTURES / "cases.json").read_text(encoding="utf-8"))[0]["bundle"]
+        project, text, work, _ = bundle.parse(data)
+        for ocr in ({"0": {"history": [{"text": "x", "reading_id": "../escape"}]}}, {"../0": {"history": []}}):
+            with self.assertRaises(ValueError):
+                store.create_from_bundle(project, text, work, ocr)
+        self.assertEqual(list(store.ROOT.iterdir()), [])
+        self.assertFalse((store.ROOT.parent / "escape.json").exists())
 
     def test_python_export_fixture(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(store, "ROOT", Path(tmp)), patch.object(store.time, "time", lambda: 1800000000):
@@ -189,6 +264,11 @@ class BundleTests(unittest.TestCase):
             p["created"], p["bibliography"] = "2026-11-16 00:00", {"edition": "Synthetic edition"}
             p["source"] = {"type": "pdf", "file": "gone.pdf", "revision": "r", "title": "Synthetic", "count": 3}
             store.save_project(slug, p)
+            with fixed_clock():
+                for i, text in ((0, "first reading"), (0, "second reading"), (1, "page two")):
+                    store.ocr_put(slug, i, {"text": text, "model": "claude-opus-5-5", "provider": "anthropic", "requested_model": "claude-opus-5-5",
+                                            "prompt_version": "printed-arabic-3", "truncated": False, "usage": {"input": 1000, "output": 200 + i},
+                                            "image_index": i, "image_key": f"key{i}"})
             data = bundle.build(slug) | {"exported": "2026-11-16T00:00:00Z"}
             store._cache.clear()
         path = FIXTURES / "python-export.proofreader.json"

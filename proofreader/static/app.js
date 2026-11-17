@@ -109,6 +109,7 @@ function isBlank(ctx, c) {
   for (let i = 4; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) > 8 || Math.abs(d[i + 1] - d[1]) > 8 || Math.abs(d[i + 2] - d[2]) > 8 || Math.abs(d[i + 3] - d[3]) > 8) return false;
   return true;
 }
+let aiCostConfirmed = false; // ブラウザ版：このタブで最初の読み取りを確認したか
 const BLANK_NOTE = '画像が真っ白です。PDFの画像を読み取れていない可能性があります（白紙のページなら問題ありません）';
 const blankNote = () => { const n = document.createElement('div'); n.className = 'imgwarn'; n.setAttribute('role', 'status'); n.textContent = BLANK_NOTE; return n; };
 async function renderPdfPage(url, index, width) {
@@ -264,6 +265,7 @@ async function homeView(life) {
       <div class="row" style="margin-top:8px"><label class="muted small" for="file">または手元のOpenITI形式ファイル：</label><input type="file" id="file" accept=".txt,.mARkdown,.completed,.inProgress,text/plain"></div>
       <div class="row" style="margin-top:8px"><label class="muted small" for="bundle">バックアップから読み込む（.proofreader.json）：</label><input type="file" id="bundle" accept=".json,application/json"></div>
     </div>
+    ${browserMode ? '<div class="card"><h2>AI（OCR）の設定</h2><p class="muted small">ページ画像のAI読み取りに使う Anthropic の API キーを、このブラウザの中で設定します。</p><div class="row"><button id="aisettings">AI の設定</button><span class="muted small" id="aistate" role="status"></span></div></div>' : ''}
     <div class="card">
       <h2>校正中のテキスト</h2>
       ${browserMode ? '<p class="muted small">このブラウザの中に保存されます。サイトのデータを消したり、容量が足りなくなったりすると失われることがあります。「バックアップを書き出す」で定期的にファイルへ保存してください。</p><p class="muted small" id="usage"></p>' : ''}
@@ -291,6 +293,11 @@ async function homeView(life) {
     const p = b && projects.find(x => x.slug === b.dataset.delete);
     if (p) confirmDelete(p, {life, api, done: refresh});
   });
+  if (browserMode) {
+    const keyNote = s => { if (life.alive) $('#aistate').textContent = s && s.anthropic && s.anthropic.set ? (s.anthropic.saved ? 'APIキー：設定済み（このブラウザに保存）' : 'APIキー：設定済み（このタブだけ）') : 'APIキー：未設定'; };
+    api('GET', '/api/ai/keys').then(keyNote).catch(() => {});
+    $('#aisettings').onclick = () => aiSettings(life, async () => keyNote(await api('GET', '/api/ai/keys')));
+  }
   $('#bundle').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try {
@@ -617,7 +624,7 @@ async function proofView(slug, idx, life) {
     <div class="grp" style="margin-left:auto">
       <a href="#/p/${slug}/setup/${idx}">資料・ページ対応</a>
       <button id="findb">ページを探す</button><button id="bibliob">書誌</button>
-      <div class="menu needs-server"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
+      <div class="menu"><button id="optb">比較の設定</button><div class="pop" id="opt" hidden>
         <label><input type="checkbox" data-k="ortho"> ハムザ・ター・マルブータ・ヤーの違いを無視</label>
         <label><input type="checkbox" data-k="punct"> 句読点・記号の違いを無視</label>
         <label><input type="checkbox" data-k="space"> 語の続け書き・分かち書きの違いを無視</label>
@@ -662,9 +669,9 @@ async function proofView(slug, idx, life) {
         <button id="historyb">保存履歴</button><button id="revert" hidden>原文に戻す</button>
         <span class="saved" id="saved" role="status" aria-live="polite">保存済み</span><button id="retry" hidden>保存を再試行</button>
       </div>
-      <div class="ocrpane needs-server">
+      <div class="ocrpane">
         <div class="ocrhead">
-          <button id="ocrb" class="primary">AIで読み取る</button>
+          <button id="ocrb" class="primary">AIで読み取る</button><button id="aib" class="browser-only" title="Anthropic の API キーを設定します">AI の設定</button>
           <select id="ocrprovider" aria-label="AI提供元">${Object.entries(p.ocr_providers || {}).map(([k,v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('')}</select>
           <input id="ocrm" list="ocrmodels" aria-label="読み取りモデル" placeholder="画像対応モデルID"><datalist id="ocrmodels"></datalist>
           <label class="small">保存した読み <select id="readings" aria-label="保存した読み取り結果"><option value="">現在の読み</option></select></label>
@@ -897,7 +904,7 @@ async function proofView(slug, idx, life) {
       const mapped = await api('GET', `/api/projects/${slug}/pages/${idx}`);
       pg = {...pg, image: mapped.image, ocr: mapped.ocr};
       ocr = latestReading = pg.ocr;
-      if (!browserMode) await refreshReadings();
+      await refreshReadings();
       toast('このページ以降の画像の対応をずらしました');
       showImage(); renderDiff();
     } catch (e) { if (life.alive) toast(e.message, true); }
@@ -932,7 +939,8 @@ async function proofView(slug, idx, life) {
     $('#ocrmsg').innerHTML = (blocks.length ? `<span class="badge b-warn">食い違い ${blocks.length} か所</span>` : '<span class="badge b-ok">食い違いなし</span>')
       + (ocr.legacy ? ' <span class="badge b-warn" title="資料・画像の識別情報がない旧形式のキャッシュです。読み取り時の資料と同じかは確かめられません。「読み直す」で新しく読み取れます。">旧形式の読み取り（この画像を読んだものか未確認）</span>' : '')
       + (ocr.truncated ? ' <span class="badge b-bad">読み取りが途中で切れています</span>' : '')
-      + (ocr.model ? ` ${esc(ocr.model)} の読み` : '');
+      + (ocr.model ? ` ${esc(ocr.model)} の読み` : '')
+      + (browserMode && ocr.usage ? ` <span class="muted" title="この読み取りに使われたトークン数">（入力 ${(+ocr.usage.input || 0).toLocaleString('ja-JP')}・出力 ${(+ocr.usage.output || 0).toLocaleString('ja-JP')} トークン）</span>` : '');
     if (!blocks.length) {
       const skip = ['タトウィール', !prefs.vowels && '母音記号', prefs.ortho && 'ハムザなどの字形', prefs.punct && '句読点', prefs.space && '語の区切り方', !prefs.header && '柱・ページ番号', !prefs.foot && '脚注'].filter(Boolean);
       box.innerHTML = `<p class="nodiff">AIの読みと本文は一致しています（${esc(skip.join('・'))}の違いは比べていません）。読み取った全文は下の「読み取り結果の全文」で確認できます。</p>`;
@@ -972,6 +980,11 @@ async function proofView(slug, idx, life) {
   const runOcr = async force => {
     if (ocrBusy || shifting) return;
     if (!canOcr()) { toast(ocrWhy(), true); return; }
+    if (browserMode && !aiCostConfirmed) { // ブラウザ版：最初の読み取りの前に、モデルと料金がかかることを確かめる（D-39）
+      const model = $('#ocrm').value.trim();
+      if (!confirm(`${(providerInfo().models || {})[model] || model} で読み取ります。ページの画像を Anthropic の API に送り、1ページごとに利用料がかかります。続けますか？`)) { $('#ocrmsg').textContent = canOcr() ? '' : ocrWhy(); return; }
+      aiCostConfirmed = true;
+    }
     ocrBusy = true;
     const imageKey = pg.image && pg.image.key;
     $('#shl').disabled = $('#shr').disabled = true;
@@ -1011,13 +1024,14 @@ async function proofView(slug, idx, life) {
     $('#ocrb').disabled = !canOcr();
   };
   configureProvider();
+  if (browserMode) $('#aib').onclick = () => aiSettings(life, async () => { p = await api('GET', `/api/projects/${slug}`); configureProvider(); renderDiff(); });
   let readings = [];
   const refreshReadings = async () => {
     readings = await api('GET', `/api/projects/${slug}/pages/${idx}/readings`);
     $('#readings').innerHTML = '<option value="">現在の読み</option>' + readings.map((r, i) => `<option value="${i}">${esc(r.time || '')} ${esc(r.provider || 'anthropic')} ${esc(r.model || '')}</option>`).join('');
   };
   $('#readings').onchange = e => { ocr = e.target.value === '' ? latestReading : readings[+e.target.value]; renderDiff(); };
-  if (!browserMode) refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
+  refreshReadings().catch(e => { if (life.alive) toast(e.message, true); });
   $('#historyb').onclick = () => showPageHistory(life, slug, idx, async text => { await flush(); ed.value = text; textChanged(); save({checkpoint: true}); renderDiff(); await flush(); });
   $('#bibliob').onclick = () => editBibliography(life, p, updated => { p = updated; });
   renderDiff();

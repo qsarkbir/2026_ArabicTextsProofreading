@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 from playwright.sync_api import sync_playwright, expect
 
-from proofreader import bundle, openiti, store
+from proofreader import bundle, ocr as py_ocr, openiti, providers, store
 from proofreader.exporters import tei
 from tests.preview_server import synthetic_pdf, jpx_pdf, flate_pdf
 
@@ -74,7 +74,7 @@ IA_ORIGIN = re.compile(r'^https://([a-z0-9-]+\.)*archive\.org/')
 IA_CORS = {'access-control-allow-origin': '*'}
 IA_PAGES = 4
 XSS_COUNT = '<img src=x onerror="window.__xss = 1">'  # imagecount arrives from the search response: only an integer may be shown
-ia = {'manifest_failures': 0, 'image_failures': {}, 'dead': set(), 'images': {}, 'manifests': 0, 'searches': [], 'metadata': [], 'unexpected': [], 'private_pdf': True}
+ia = {'ocr_images': [], 'manifest_failures': 0, 'image_failures': {}, 'dead': set(), 'images': {}, 'manifests': 0, 'searches': [], 'metadata': [], 'unexpected': [], 'private_pdf': True}
 
 
 def ia_manifest(identifier):
@@ -107,6 +107,10 @@ def ia_route(route):
             ia['manifest_failures'] -= 1
             return route.fulfill(status=504, body='')  # the real one has no CORS header either: the page sees "Failed to fetch"
         return json_reply(ia_manifest(m.group(1)))
+    m = re.match(r'^/image/iiif/3/[^/]+%2F([^/]+)/full/2000,/0/default\.jpg$', path) if url.startswith('https://iiif.') else None
+    if m:  # the page image that OCR sends to the model (width 2000)
+        ia['ocr_images'].append(m.group(1))
+        return route.fulfill(status=200, body=png(), content_type='image/png', headers=IA_CORS)
     m = re.match(r'^/image/iiif/3/[^/]+%2F([^/]+)/full/1600,/0/default\.jpg$', path) if url.startswith('https://iiif.') else None
     if m:
         name = m.group(1)
@@ -119,6 +123,284 @@ def ia_route(route):
         return route.fulfill(status=200, body=png(20, 30), content_type='image/png')
     ia['unexpected'].append(url)  # e.g. /download/<id>/<file>.pdf: the page must only link to it
     return route.abort()
+
+
+# ---- AI reading (stage 3): the Anthropic API is answered from here; the paid API is never called ----
+SMOKE_KEY = 'sk-ant-smoke-0123456789abcdef-FAKE'
+ANTHROPIC = {'requests': [], 'mode': 'ok', 'hook': None, 'stray': []}
+ANTHROPIC_CORS = {'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-expose-headers': '*'}
+V1_DB = '''async ({project, text}) => new Promise((resolve, reject) => {
+    const r = indexedDB.open('proofreader', 1);   // the version 1 layout, made by hand: no ocr store
+    r.onupgradeneeded = () => { const db = r.result;
+        db.createObjectStore('projects', {keyPath: 'slug'}); db.createObjectStore('originals', {keyPath: 'slug'}); db.createObjectStore('pages', {keyPath: ['slug', 'i']});
+        db.createObjectStore('files', {keyPath: ['slug', 'name']}); db.createObjectStore('settings', {keyPath: 'key'}); };
+    r.onsuccess = () => { const db = r.result, tx = db.transaction(['projects', 'originals', 'pages', 'files', 'settings'], 'readwrite');
+        tx.objectStore('projects').put(project); tx.objectStore('originals').put({slug: project.slug, text});
+        tx.objectStore('pages').put({slug: project.slug, i: 0, text: 'edited in v1', done: true, note: 'v1 note', revision: 1, history: []});
+        tx.objectStore('files').put({slug: project.slug, name: 'kept.bin', blob: new Blob(['kept'])});
+        tx.objectStore('settings').put({key: 'backup:' + project.slug, value: '2026-11-01T00:00:00.000Z'});
+        tx.oncomplete = () => { db.close(); resolve(db.version); }; tx.onerror = () => reject(tx.error); };
+    r.onerror = () => reject(r.error); })'''
+DUMP = '''() => LocalStore.open().then(db => Promise.all([...db.objectStoreNames].map(name => new Promise((resolve, reject) => {
+    const r = db.transaction(name).objectStore(name).getAll(); r.onsuccess = () => resolve([name, r.result]); r.onerror = () => reject(r.error); }))))
+    .then(all => Object.fromEntries(all.map(([name, rows]) => [name, JSON.stringify(rows)])))'''
+OCR_KEYS = '''slug => LocalStore.open().then(db => new Promise((resolve, reject) => { const r = db.transaction('ocr').objectStore('ocr').getAllKeys();
+    r.onsuccess = () => resolve(r.result.filter(k => !slug || k[0] === slug)); r.onerror = () => reject(r.error); }))'''
+SETTING = '''key => LocalStore.getSetting(key)'''
+
+
+def anthropic_message(text, **over):
+    return {'id': 'msg_smoke', 'type': 'message', 'role': 'assistant', 'model': 'claude-opus-5-5', 'content': [{'type': 'text', 'text': text}],
+            'stop_reason': 'end_turn', 'stop_sequence': None, 'usage': {'input_tokens': 1234, 'output_tokens': 56}, **over}
+
+
+def anthropic_route(route):
+    request = route.request
+    if request.method == 'OPTIONS':
+        return route.fulfill(status=204, headers=ANTHROPIC_CORS)
+    if not request.url.startswith('https://api.anthropic.com/v1/messages'):
+        ANTHROPIC['stray'].append(request.url)
+        return route.fulfill(status=404, body='{}', headers=ANTHROPIC_CORS)
+    ANTHROPIC['requests'].append({'url': request.url, 'headers': request.headers, 'body': json.loads(request.post_data)})
+    if ANTHROPIC['hook']:
+        ANTHROPIC['hook']()
+    mode = ANTHROPIC['mode']
+    error = lambda status, kind, message: route.fulfill(status=status, body=json.dumps({'type': 'error', 'error': {'type': kind, 'message': message}}),
+                                                        content_type='application/json', headers={**ANTHROPIC_CORS, 'x-should-retry': 'false'})
+    if mode == '401':
+        return error(401, 'authentication_error', 'invalid x-api-key')
+    if mode == '429':
+        return error(429, 'rate_limit_error', 'Number of request tokens has exceeded your rate limit')
+    if mode == 'refusal':
+        body = anthropic_message('', content=[], stop_reason='refusal')
+    elif mode == 'empty':
+        body = anthropic_message('  ')
+    else:
+        body = anthropic_message(f"alpha beta gamma\n{len(ANTHROPIC['requests'])}")
+    return route.fulfill(status=200, body=json.dumps(body), content_type='application/json', headers=ANTHROPIC_CORS)
+
+
+def ocr_stage(browser, base, tmp):
+    context = browser.new_context(accept_downloads=True)
+    context.route(IA_ORIGIN, ia_route)
+    context.route('https://api.anthropic.com/**', anthropic_route)
+    context.route(re.compile(r'^https://(?!api\.anthropic\.com|([a-z0-9-]+\.)*archive\.org)'), lambda route: route.fulfill(status=200, body='', content_type='text/css'))  # web fonts: no network
+    errors, csp, dialogs, answers = [], [], [], []
+    page = context.new_page()
+    page.on('console', lambda m: csp.append(m.text) if 'Content Security Policy' in m.text else None)
+    page.on('pageerror', lambda error: errors.append(str(error)))
+
+    def on_dialog(dialog):
+        dialogs.append(dialog.message)
+        dialog.accept() if (answers.pop(0) if answers else True) else dialog.dismiss()
+    page.on('dialog', on_dialog)
+    requests = lambda: len(ANTHROPIC['requests'])
+    editor = page.get_by_role('textbox', name='校正テキスト', exact=True)
+    ocr_button = page.locator('#ocrb')
+    toast = page.locator('#toast')
+
+    # a database made by the previous version (v1) is upgraded without losing anything
+    slug = 'v1-project'
+    project = {'slug': slug, 'uri': 'v1.Project-ara1', 'raw_url': '', 'title': 'V1 book', 'author': 'A', 'created': '2026-11-01 00:00', 'meta': {}, 'schema_version': 2,
+               'candidates': [], 'offset': 0, 'anchors': [], 'source': {'type': 'ia', 'id': 'smoke-book', 'revision': 'r1', 'title': 'Smoke Book', 'pages': [
+                   {'label': str(n), 'service': f'https://iiif.archive.org/image/iiif/3/smoke-book%2Fp{n}', 'w': 400, 'h': 600} for n in range(IA_PAGES)]}}
+    page.goto(base + '/mode.js')
+    assert page.evaluate(V1_DB, {'project': project, 'text': OPENITI}) == 1
+    page.goto(base + '/')
+    expect(page.locator('tbody tr')).to_have_count(1, timeout=15000)
+    db = page.evaluate("LocalStore.open().then(db => [db.version, [...db.objectStoreNames].sort()])")
+    assert db == [2, ['files', 'ocr', 'originals', 'pages', 'projects', 'settings']], db
+    assert page.evaluate("LocalStore.getFile('v1-project', 'kept.bin').then(b => b.size)") == 4
+    assert page.evaluate("LocalStore.getSetting('backup:v1-project')") == '2026-11-01T00:00:00.000Z'
+    assert page.evaluate("LocalStore.page('v1-project', 0).then(r => [r.text, r.done, r.note, r.revision])") == ['edited in v1', True, 'v1 note', 1]
+    assert page.evaluate(OCR_KEYS, None) == []
+    print('PASS a version 1 database is upgraded to version 2: the ocr store is added and nothing else changes', flush=True)
+
+    # the key: kept in the tab by default, never in the DOM, localStorage or IndexedDB unless saved
+    page.get_by_role('button', name='AI の設定', exact=True).click()
+    dialog = page.locator('dialog[open]')
+    expect(dialog.locator('#aikey')).to_have_attribute('type', 'password')
+    expect(dialog.locator('#aisave')).not_to_be_checked()
+    expect(dialog).to_contain_text('APIキーは設定されていません')
+    expect(dialog).to_contain_text('利用上限')
+    dialog.locator('#aikey').fill('too short')
+    dialog.locator('#aisubmit').click()
+    expect(dialog.locator('#aistatus')).to_contain_text('APIキーを入力してください')
+    dialog.locator('#aikey').fill(SMOKE_KEY)
+    dialog.locator('#aisubmit').click()
+    expect(dialog.locator('#aistatus')).to_contain_text('このタブの中だけ')
+    assert page.evaluate("document.querySelector('#aikey').value") == ''
+    assert SMOKE_KEY not in page.content()
+    storage = page.evaluate("JSON.stringify([{...localStorage}, {...sessionStorage}])")
+    assert SMOKE_KEY not in storage and SMOKE_KEY not in json.dumps(page.evaluate(DUMP))
+    assert page.evaluate(SETTING, 'key:anthropic') is None
+    dialog.get_by_role('button', name='閉じる').click()
+    expect(page.locator('#aistate')).to_have_text('APIキー：設定済み（このタブだけ）')
+    print('PASS AI settings: the key stays in the tab, the input is cleared, nothing is stored', flush=True)
+
+    # first use: confirm (cancel does nothing), the request reaches api.anthropic.com with the right shape
+    page.get_by_role('link', name='開く').click()
+    expect(editor).to_be_enabled(timeout=15000)
+    expect(editor).to_have_value('edited in v1')
+    expect(ocr_button).to_be_enabled()
+    answers[:] = [False]
+    ocr_button.click()
+    expect(ocr_button).to_be_enabled()
+    assert len(dialogs) == 1 and 'Opus 5.5' in dialogs[0] and '1ページごとに利用料がかかります' in dialogs[0], dialogs
+    assert requests() == 0 and not ia['ocr_images']
+    ocr_button.click()
+    expect(page.locator('#ocrmsg')).to_contain_text('claude-opus-5-5 の読み', timeout=15000)
+    expect(page.locator('#ocrmsg')).to_contain_text('入力 1,234・出力 56 トークン')
+    assert len(dialogs) == 2 and requests() == 1 and ia['ocr_images'] == ['p0'], (dialogs, requests(), ia['ocr_images'])
+    sent = ANTHROPIC['requests'][0]
+    assert sent['url'].startswith('https://api.anthropic.com/v1/messages'), sent['url']
+    assert sent['headers']['anthropic-dangerous-direct-browser-access'] == 'true'
+    assert sent['headers'].get('authorization') == f'Bearer {SMOKE_KEY}' or sent['headers'].get('x-api-key') == SMOKE_KEY, sent['headers']
+    body = sent['body']
+    assert [body['model'], body['max_tokens'], body['fallbacks'], body['output_config']] == ['claude-opus-5-5', 16000, 'default', {'effort': 'medium'}]
+    assert sent['headers']['anthropic-beta'] == 'server-side-fallback-2026-07-01'
+    image, prompt = body['messages'][0]['content']
+    assert image == {'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': base64.b64encode(png()).decode()}}
+    assert prompt == {'type': 'text', 'text': py_ocr.PROMPT}
+    assert body['messages'][0]['role'] == 'user' and SMOKE_KEY not in json.dumps(body)
+    expect(page.locator('#diff')).not_to_be_empty()
+    expect(ocr_button).to_have_text('読み直す')
+    ocr_button.click()   # re-read: the cost was confirmed once in this tab
+    expect(page.locator('#ocrmsg')).to_contain_text('入力 1,234', timeout=15000)
+    assert len(dialogs) == 2 and requests() == 2
+    expect(page.locator('#readings option')).to_have_count(3)  # current + two saved readings
+    keys = page.evaluate(OCR_KEYS, slug)
+    assert len(keys) == 2 and all(k[0] == slug and k[1] == 0 for k in keys), keys
+    stored = page.evaluate("LocalStore.ocrList('v1-project', 0)")
+    assert {r['provider'] for r in stored} == {'anthropic'} and all(re.fullmatch(r'[0-9a-f]{32}', r['reading_id']) and r['usage'] == {'input': 1234, 'output': 56} for r in stored), stored
+    assert all(r['image_key'] and r['prompt_version'] == providers.PROMPT_VERSION and r['requested_model'] == 'claude-opus-5-5' for r in stored), stored
+    print('PASS OCR: one confirm per tab, the request to api.anthropic.com has the documented shape, the reading and its usage are saved and shown', flush=True)
+
+    # reload: the key is gone (tab only), the saved reading is still there and nothing is sent
+    page.reload()
+    expect(editor).to_have_value('edited in v1', timeout=15000)
+    expect(page.locator('#ocrmsg')).to_contain_text('claude-opus-5-5 の読み')
+    expect(ocr_button).to_be_disabled()
+    assert requests() == 2
+    page.locator('#aib').click()
+    dialog = page.locator('dialog[open]')
+    expect(dialog).to_contain_text('APIキーは設定されていません')
+    dialog.locator('#aikey').fill(SMOKE_KEY)
+    dialog.locator('#aisave').check()
+    dialog.locator('#aisubmit').click()
+    expect(dialog.locator('#aistatus')).to_contain_text('このブラウザに保存されています')
+    assert page.evaluate(SETTING, 'key:anthropic') == SMOKE_KEY
+    assert SMOKE_KEY not in page.evaluate("JSON.stringify([{...localStorage}, {...sessionStorage}])") and SMOKE_KEY not in page.content()
+    dialog.get_by_role('button', name='閉じる').click()
+    expect(ocr_button).to_be_enabled()
+    page.reload()   # a saved key survives a reload; the cost is confirmed again in the new tab session
+    expect(ocr_button).to_be_enabled(timeout=15000)
+    ocr_button.click()
+    expect(page.locator('#ocrmsg')).to_contain_text('入力 1,234', timeout=15000)
+    assert len(dialogs) == 3 and requests() == 3
+    page.locator('#aib').click()
+    dialog = page.locator('dialog[open]')
+    expect(dialog).to_contain_text('このブラウザに保存されています')
+    dialog.get_by_role('button', name='キーを消す').click()
+    expect(dialog.locator('#aistatus')).to_contain_text('APIキーは設定されていません')
+    assert page.evaluate(SETTING, 'key:anthropic') is None
+    expect(ocr_button).to_be_disabled()
+    dialog.get_by_role('button', name='閉じる').click()
+    assert SMOKE_KEY not in json.dumps(page.evaluate(DUMP)), 'the key is gone from IndexedDB'
+    print('PASS saved key: stored only on request, read back after a reload, removed by キーを消す', flush=True)
+
+    # failures: refusal, 401, 429 and an empty reading are explained and save nothing; the key is never shown
+    page.locator('#aib').click()
+    dialog = page.locator('dialog[open]')
+    dialog.locator('#aikey').fill(SMOKE_KEY)
+    dialog.locator('#aisubmit').click()
+    dialog.get_by_role('button', name='閉じる').click()
+    page.goto(base + f'/#/p/{slug}/1')
+    expect(page.locator('#psel')).to_have_value('V01P002')
+    expect(ocr_button).to_be_enabled()
+    before = len(page.evaluate(OCR_KEYS, slug))
+    for mode, text in (('refusal', 'このページは読み取りを断られました'), ('401', 'APIの認証に失敗しました'), ('429', 'APIの利用上限に達しました'), ('empty', '読み取り結果が空でした')):
+        ANTHROPIC['mode'] = mode
+        ocr_button.click()
+        expect(toast).to_contain_text(text, timeout=15000)
+        assert SMOKE_KEY not in toast.inner_text() and SMOKE_KEY not in page.content()
+        expect(ocr_button).to_be_enabled()
+    assert len(page.evaluate(OCR_KEYS, slug)) == before
+    ANTHROPIC['mode'] = 'ok'
+    print('PASS OCR errors (refusal, 401, 429, empty) are shown in Japanese and save nothing', flush=True)
+
+    # the mapping changes while the request is in flight: 409, nothing saved
+    def remap():
+        page.evaluate("api('POST', '/api/projects/v1-project/mapping', {anchor: [1, 3]})")
+    ANTHROPIC['hook'] = remap
+    count = requests()
+    ocr_button.click()
+    expect(toast).to_contain_text('読み取り中に画像の対応が変更されました', timeout=15000)
+    ANTHROPIC['hook'] = None
+    assert requests() == count + 1 and len(page.evaluate(OCR_KEYS, slug)) == before
+    page.evaluate("api('POST', '/api/projects/v1-project/mapping', {anchor: [1, 1]})")
+    page.reload()
+    expect(page.locator('#psel')).to_have_value('V01P002', timeout=15000)
+    print('PASS a mapping change during the request is a 409 and saves nothing', flush=True)
+
+    # autoOcr: reads a page that has no reading when it is opened (after the cost question in a new tab session), and never runs without a key
+    page.locator('#optb').click()
+    page.locator('input[data-k=autoOcr]').check()   # opening a page does not read it yet: the setting only applies when a page is opened
+    page.locator('#optb').click()
+    page.evaluate("LocalRouter.handle('PUT', '/api/ai/keys/anthropic', {key: %s, save: true})" % json.dumps(SMOKE_KEY))
+    page.goto(base + f'/?auto=1#/p/{slug}/2')  # a new page load: the cost question is asked again
+    expect(page.locator('#psel')).to_have_value('V02P001', timeout=15000)
+    expect(page.locator('#ocrmsg')).to_contain_text('claude-opus-5-5 の読み', timeout=15000)
+    assert len(dialogs) == 4 and 'Opus 5.5' in dialogs[-1] and requests() == count + 2, (len(dialogs), requests(), count)
+    assert ia['ocr_images'][-1] == 'p3' or ia['ocr_images'][-1] == 'p2', ia['ocr_images']
+    assert len(page.evaluate(OCR_KEYS, slug)) == before + 1
+    page.evaluate("LocalRouter.handle('DELETE', '/api/ai/keys/anthropic')")
+    page.goto(base + f'/?auto=2#/p/{slug}/1')
+    expect(page.locator('#psel')).to_have_value('V01P002', timeout=15000)
+    expect(ocr_button).to_be_disabled()
+    page.wait_for_timeout(500)
+    assert len(dialogs) == 4 and requests() == count + 2 and len(page.evaluate(OCR_KEYS, slug)) == before + 1
+    page.locator('#optb').click()
+    page.locator('input[data-k=autoOcr]').uncheck()
+    page.locator('#optb').click()
+    print('PASS autoOcr follows the same rules: cost question first, needs a key, one page per open', flush=True)
+
+    # backup with OCR: browser -> Python and back; the key is not in the file; deleting the project clears its readings but not the key
+    page.evaluate("LocalRouter.handle('PUT', '/api/ai/keys/anthropic', {key: %s, save: true})" % json.dumps(SMOKE_KEY))
+    page.get_by_role('link', name='OpenITI 校正', exact=True).click()
+    with page.expect_download() as downloaded:
+        page.locator('a[data-bundle]').first.click()
+    text = Path(downloaded.value.path()).read_text(encoding='utf-8')
+    exported = json.loads(text)
+    assert SMOKE_KEY not in text and 'sk-ant' not in text
+    assert exported['format_version'] == 2 and sorted(exported['ocr']) == ['0', '2'] and len(exported['ocr']['0']['history']) == 3, exported.get('ocr', {}).keys()
+    assert exported['ocr']['0']['current'] == exported['ocr']['0']['history'][-1]
+    with patch.object(store, 'ROOT', Path(tmp) / 'ocr-python-store'):
+        store._cache.clear()
+        copy = store.create_from_bundle(*bundle.parse(exported))['slug']
+        assert store.ocr_get(copy, 0)['reading_id'] == exported['ocr']['0']['current']['reading_id']
+        assert len(store.ocr_history(copy, 0, exported['ocr']['0']['current']['image_key'])) == 3
+        store._cache.clear()
+    backup = Path(tmp) / 'with-ocr.proofreader.json'
+    backup.write_text(text, encoding='utf-8')
+    page.evaluate("LocalRouter.handle('DELETE', '/api/projects/v1-project')")
+    assert page.evaluate(OCR_KEYS, slug) == [] and page.evaluate(SETTING, 'key:anthropic') == SMOKE_KEY
+    page.reload()
+    expect(page.locator('tbody tr')).to_have_count(0)
+    page.locator('#bundle').set_input_files(str(backup))
+    expect(editor).to_be_enabled(timeout=15000)
+    restored = re.search(r'#/p/([^/]+)/0', page.url).group(1)
+    expect(page.locator('#ocrmsg')).to_contain_text('claude-opus-5-5 の読み')
+    expect(page.locator('#readings option')).to_have_count(4)
+    assert len(page.evaluate(OCR_KEYS, restored)) == 4
+    page.evaluate("LocalRouter.handle('DELETE', '/api/ai/keys/anthropic')")
+    assert page.evaluate(SETTING, 'key:anthropic') is None
+    print('PASS backup with OCR round-trips through Python and the browser; keys are never exported; deleting a project removes its readings only', flush=True)
+
+    assert not errors and not csp, (errors, csp)  # the vendored SDK loads under script-src 'self', and only api.anthropic.com was added to connect-src
+    assert not ANTHROPIC['stray'], ANTHROPIC['stray']
+    context.close()
+    print('PASS no page errors or CSP violations while loading the SDK and calling the API', flush=True)
 
 
 def main():
@@ -165,7 +447,7 @@ def main():
             expect(editor).to_have_value(re.compile(r'alpha beta gamma'))
             print('PASS project from OpenITI URI', flush=True)
 
-            for name, visible in (('比較の設定', False), ('書誌', True)):
+            for name, visible in (('比較の設定', True), ('書誌', True)):
                 button = page.get_by_role('button', name=name, exact=True) if visible else page.get_by_text(name, exact=True)
                 expect(button).to_be_visible() if visible else expect(button).to_be_hidden()
             expect(page.get_by_role('link', name='資料・ページ対応')).to_be_visible()
@@ -177,7 +459,7 @@ def main():
             expect(page).to_have_url(re.compile(f'#/p/{re.escape(URI)}/setup$'))
             page.go_back()
             expect(editor).to_be_enabled()
-            expect(page.get_by_role('button', name='AIで読み取る')).to_be_hidden()
+            expect(page.get_by_role('button', name='AIで読み取る')).to_be_disabled()  # OCR is offered; it needs a key (see the AI stage below)
             page.get_by_role('button', name='書き出し', exact=True).click()
             expect(page.get_by_role('button', name='校正済みテキスト（OpenITI形式）')).to_be_visible()
             expect(page.get_by_role('button', name='TEI XML（基本構造）')).to_be_visible()
@@ -327,6 +609,7 @@ def main():
                 page.get_by_role('button', name='バックアップを書き出す（.proofreader.json）').click()
             again = json.loads(Path(downloaded.value.path()).read_text(encoding='utf-8'))
             assert again['original'] == fixture['original'] and again['work'] == fixture['work']
+            assert again['format_version'] == 2 and again['ocr'] == fixture['ocr'], 'OCR readings of a Python backup come back unchanged'
             assert {k: v for k, v in again['project'].items() if k != 'slug'} == {k: v for k, v in fixture['project'].items() if k != 'slug'}
             print('PASS Python backup imports into the browser and exports back unchanged', flush=True)
 
@@ -345,7 +628,7 @@ def main():
             assert Path(downloaded.value.path()).read_bytes() == UPLOAD.encode('utf-8')  # BOM and CRLF survive the round trip
             page.get_by_role('link', name='OpenITI 校正', exact=True).click()
             newer_file = Path(tmp) / 'newer.json'
-            newer_file.write_text(json.dumps({**exported, 'format_version': 2}), encoding='utf-8')
+            newer_file.write_text(json.dumps({**exported, 'format_version': 3}), encoding='utf-8')
             page.locator('#bundle').set_input_files(str(newer_file))
             expect(page.locator('#toast')).to_contain_text('新しい版のアプリで作られたデータです')
             broken = Path(tmp) / 'broken.json'
@@ -784,6 +1067,8 @@ def main():
             print('PASS project deletion: cancel keeps it, confirmation removes all its data, other tabs leave it', flush=True)
             assert not other_errors and not other_csp, (other_errors, other_csp)
             fresh.close()
+
+            ocr_stage(browser, base, tmp)
 
             newer = browser.new_context()
             probe = newer.new_page()

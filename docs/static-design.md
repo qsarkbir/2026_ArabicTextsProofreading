@@ -2,8 +2,8 @@
 
 | 項目 | 内容 |
 |---|---|
-| 文書の状態 | 段階1a・1b は実装済み（[#5](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/5)）。段階2 は実装済み（PR 未作成）。段階3 は設計のみ |
-| 対象 | 段階1（ブラウザ内での校正と、手元の PDF を資料にすること）と段階2（Internet Archive）。段階3は概要のみ |
+| 文書の状態 | 段階1a・1b は実装済み（[#5](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/5)）。段階2・段階3 は実装済み（PR 未作成） |
+| 対象 | 段階1（ブラウザ内での校正と、手元の PDF を資料にすること）、段階2（Internet Archive）、段階3（ブラウザ版の OCR。Anthropic のみ） |
 | 最終更新 | 2026-11-16 |
 | 関連 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md) |
 
@@ -40,7 +40,7 @@
 | D-11 | 一部置き換え済み（OCR の結果は → D-42） | バックアップに PDF と OCR の結果は入れない（Q-2 は「含めない」で当面決着）。資料の情報（`project.source`、`pdf_file`）はそのまま残す。ローカル版は `pdf_file` が指すファイルが無いとき、PDF ではなくオンラインの画像を使う。PDF は読み込み後に付け直す | ファイルが数百 MB になるのを避ける。読み込んだだけで画像が出なくなる状態を避ける |
 | D-12 | 採用 | `local/tei.js` は `exporters/tei.py` の出力と**バイト単位で一致**させる（ElementTree の書き方に合わせる：宣言は `<?xml version='1.0' encoding='utf-8'?>`、空の要素は `<x />`、属性の `\n\r\t` は文字参照）。一致は `tests/fixtures/tei/` の合成入力と、Python の出力を正とする `expected.json` で、Python（`test_tei_parity.py`）と Node（`tei.test.js`）の両方から確かめる。CI のスキーマ検証は Python の出力に加え、`tei.js` が書いたファイルも検証する | どちらの版で書き出しても同じ TEI になる |
 | D-13 | 採用 | Arabic フォントは当面 Google Fonts のまま使い、CSP の `style-src` に `https://fonts.googleapis.com`、`font-src` に `https://fonts.gstatic.com` を許可する（Q-1 の決着）。同梱への切り替えは、オフライン利用の要望が出たとき改めて決める | 追加の配布物とライセンス表示を増やさずに済む。外部接続はフォントの取得だけで、利用者のデータは送られない |
-| D-14 | 採用 | CSP は `<meta>` で `default-src 'self'; script-src 'self'; connect-src 'self' blob: https://raw.githubusercontent.com https://archive.org https://iiif.archive.org; img-src 'self' blob: data: https://archive.org https://*.archive.org; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'` とする。`style-src-attr 'unsafe-inline'` が要るのは、テンプレート文字列の `style="..."`（進捗バーの幅など）を使っているため。スクリプトとスタイルシートの `'unsafe-inline'` は許可しない。`connect-src blob:` は pdf.js が Blob の PDF を `fetch` で読むため、`img-src` の archive.org は IA のサムネイルとページ画像（`iiif.archive.org`、`*.archive.org` に含まれる）の `<img>` 用。段階2で `connect-src` に `https://archive.org`（検索・資料情報）と `https://iiif.archive.org`（マニフェスト）を足した（D-28）。ページ画像と PDF は `fetch` しないので、これ以上は足さない | 同じ `index.html` をローカル版でも使うので、ローカル版の機能（IA のサムネイル、PDF 表示）を止めない範囲にする |
+| D-14 | 採用 | CSP は `<meta>` で `default-src 'self'; script-src 'self'; connect-src 'self' blob: https://raw.githubusercontent.com https://archive.org https://iiif.archive.org https://api.anthropic.com; img-src 'self' blob: data: https://archive.org https://*.archive.org; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'` とする。`style-src-attr 'unsafe-inline'` が要るのは、テンプレート文字列の `style="..."`（進捗バーの幅など）を使っているため。スクリプトとスタイルシートの `'unsafe-inline'` は許可しない。`connect-src blob:` は pdf.js が Blob の PDF を `fetch` で読むため、`img-src` の archive.org は IA のサムネイルとページ画像（`iiif.archive.org`、`*.archive.org` に含まれる）の `<img>` 用。段階2で `connect-src` に `https://archive.org`（検索・資料情報）と `https://iiif.archive.org`（マニフェスト）を足した（D-28）。ページ画像と PDF は `<img>`・pdf.js が読むだけなので、段階2ではこれ以上は足さなかった。**段階3で `connect-src` に `https://api.anthropic.com`（OCR の API、D-41）を足した**。IIIF の画像を OCR に送るための `fetch` は `https://iiif.archive.org` が既に許可されている。同梱した SDK は同じオリジンの `import()` で読むので `script-src` は変えない（D-43）。OpenAI を足すときは `https://api.openai.com` を足す | 同じ `index.html` をローカル版でも使うので、ローカル版の機能（IA のサムネイル、PDF 表示）を止めない範囲にする |
 | D-15 | 採用 | GitHub Pages への配信は Actions の `deploy` ジョブで行う。テスト（`core`・`browser-and-tei`）が成功した `main` への push のときだけ動き、`proofreader/static/` をそのまま配信する。リポジトリの Settings → Pages → Source を「GitHub Actions」にしておく必要がある（README に書く） | ビルド工程が無いので、成果物はディレクトリそのもの。テストに通らないものは公開しない |
 | D-16 | 採用 | ローカル版のサーバーは、存在する静的ファイルでも `/api/` でもない GET を `/` へ 302 で戻す。`index.html` を返さない | 相対パスにしたため `/x/` で開くと `/x/mode.js` が `index.html` を返して画面が空になった |
 | D-17 | 採用 | IndexedDB の扱い：書き込みトランザクションは `durability: 'strict'`（知らないブラウザでは無視される）、`navigator.storage.persist()` は待たずに依頼する（Firefox は許可の確認が出る）、接続が閉じられたら（`onclose`・`versionchange`）次の操作で開き直し、他のタブに止められたら（`onblocked`）日本語で案内する。ホームの一覧は BroadcastChannel の通知（保存・作成・読み込み・バックアップの記録）で更新する | 保存の信頼性と、複数タブでの利用 |
@@ -61,14 +61,15 @@
 | D-32 | 採用 | D-7 のうち「資料が無い画像欄を隠す」「作成後に校正画面へ直行する」を置き換える（段階2でブラウザ版にも資料が選べるようになったため）。ブラウザ版でも、OpenITI の URI・テキストのアップロード・資料の無いバックアップから作った直後は `#/p/<slug>/setup`（ローカル版と同じ）へ進む。資料の無いプロジェクトの校正画面は開く（復元したプロジェクトに資料が無いことがあり、編集は続けられる）が、画像欄は隠さず、「ページ画像の資料がまだ設定されていません。」と設定画面へのボタンを表示し、◀▶・拡大縮小・原本リンク・画像の情報は隠す。資料のあるバックアップは従来どおり先頭ページへ。ローカル版の動作は変えない | 資料の選び方が分からないまま本文だけの画面になる問題の解消 |
 | D-33 | 採用 | PDF.js の補助データ（`vendor/pdfjs/6.5.438/` の `wasm/`・`iccs/`・`standard_fonts/`、合計約1.3 MB）を同梱し、`getDocument` に `wasmUrl`・`iccUrl`・`standardFontDataUrl` を `document.baseURI` で解決した絶対 URL（末尾 `/` 必須）で渡す（両方の版、Pages のサブパスでも動く）。背景：スキャン本の PDF は画像が JPEG 2000（JPXDecode）や JBIG2 のことが多く、PDF.js 6 はそのデコーダー（`openjpeg.wasm`・`jbig2.wasm`）と、ICC 色変換（`qcms_bg.wasm`・`iccs/`）を `wasmUrl` から取得する。無いと画像の読み取りに失敗した警告だけで描画が「成功」し、白紙の canvas になる（エラーは出ない）。同梱しないもの：`cmaps/`（1.7 MB。日本語・中国語・韓国語の定義済み CMap 用で、アラビア語の本には不要）、`quickjs-eval.*`（PDF 内のスクリプト用。`isEvalSupported: false` と同じ方針）、`*_nowasm_fallback.js`（WebAssembly の無い環境用。現在のブラウザには不要）。CSP：wasm は PDF.js の worker（同じオリジンの別スクリプト）の中で読み込まれ、`<meta>` の CSP は適用されず、Chromium で違反が出ないことをテストで確かめたので `'wasm-unsafe-eval'` は足さない。サーバーは `.wasm` を `application/wasm`、`.pfb`・`.icc` を `application/octet-stream` で返す。画像を含むページが全面同じ色で描画されたとき（全画素を調べるので、ページ番号だけのようなまばらな文字は白紙とみなさない）は、止めずに canvas を出したまま「画像が真っ白です。PDFの画像を読み取れていない可能性があります（白紙のページなら問題ありません）」と注意を出す（設定画面のプレビュー・校正画面。OCR は確認ダイアログを出し、了承すれば続ける。白紙の裏ページもあるため、エラーにはしない）。デコーダー無しの状態は `PDF_NO_ASSETS` を立てるテスト用の入口で作る。読み込み中は「読み込み中…」を表示する。検証は JPEG 2000 の合成 PDF（`tests/fixtures/pdf/page.jp2`、922 バイト）。まばらな文字・白紙・デコーダー無しの JPEG 2000 の各ページの扱いも両方のブラウザ検証で確かめる。JBIG2 は合成できなかったので未検証 | 実際の PDF で画像が白紙になる不具合の解消。必要なデータだけを同梱してリポジトリの増加を抑える |
 | D-34 | 採用 | プロジェクトの削除（両方の版）。ホームの各行の「削除」で `<dialog>` を開き、プロジェクトと全作業データ（修正・メモ・確認済み・保存履歴・OCR 結果・保存した PDF・画像、ブラウザ版では最後のバックアップの日時）が完全に消え元に戻せないこと、先にバックアップを書き出すことをお勧めする旨を示し（ダイアログからバックアップを書き出せる）、「削除」と入力するまで「完全に削除する」を押せない。キャンセル・Esc では何も消さない。`DELETE /api/projects/<slug>`：ローカル版は `store.delete_project`（`_dir` で検証し、symlink と ROOT の外は拒否、フォルダーを先に `.deleting-*` へ改名してからすべて削除。分割結果のキャッシュ・`DRAFTS`・PDF の状態も消す）。応答は `{deleted: slug}`、無ければ 404。`do_DELETE` は他のメソッドと同じ `dispatch` を通り、Origin／Host の検証（D-18）が適用される。ブラウザ版は `LocalStore.deleteProject` が `projects`・`originals`・`pages`・`files`・`settings`（`backup:<slug>`）を1つの readwrite トランザクションで消し（途中で失敗したら何も消えない）、ルーターが未確定の資料・object URL・pdf.js の文書を手放し、BroadcastChannel で `{slug, deleted: true}` を通知する。ほかのタブは、一覧なら更新し、そのプロジェクトを開いていれば一覧へ戻って知らせる。削除ダイアログは画面を離れると消える。後始末と競合：ローカル版の削除先の `.deleting-*` は一覧・`_dir`・slug の作成から除外し、`rmtree` の失敗は成功として扱って記録だけ残し、起動時に残りを掃除する。削除が終わった後に戻ってきた遅い要求（IA 画像の取得・PDF 情報の取得）は、`store.ensure_dir` が既存のプロジェクトの中にだけフォルダーを作るので、削除済みのフォルダーを作り直さず 404 になる。動作中の PDF ダウンロードは、削除で job が消えると次の受信で止まる。Windows でファイルが開かれていて改名できないときは、何も変えずに 409「PDFのダウンロード中または表示中は削除できません…」。ブラウザ版の `savePage` は同じトランザクションでプロジェクトの存在を確かめ（無ければ 404）、`createProject`・`importBundle` は同じ slug に残ったページ・ファイルを念のため消す | 取り返しのつかない操作なので、確認とバックアップの案内を挟む。削除後にデータが残らないことを、両方の版のテストで確かめる |
-| D-35 | 採用（段階3） | OCR の呼び出し：Anthropic は公式の TypeScript SDK（`@anthropic-ai/sdk`）を版を固定して `vendor/` に同梱し（PDF.js と同じく ESM、ビルドなし、sha256 を記録）、`new Anthropic({apiKey, dangerouslyAllowBrowser: true})` で呼ぶ（SDK がブラウザからの直接呼び出し用のヘッダー `anthropic-dangerous-direct-browser-access` を付ける）。要求の内容は `ocr.py` の `transcribe` と同じにする：`client.beta.messages.create`、`max_tokens: 16000`、`output_config: {effort: 'medium'}`、画像（base64）＋共通のプロンプト、Haiku 以外は `betas: ['server-side-fallback-2026-07-01']`・`fallbacks: 'default'`。`stop_reason` が `refusal` なら「このページは読み取りを断られました」、`max_tokens` なら `truncated`。エラーは型（認証・上限・接続など）ごとに `ocr.py` と同じ日本語にする。OpenAI は `providers/openai.py` と同じ Responses API の要求を `fetch` で送る（Python 版も SDK を使っていない）。OpenAI はブラウザからの呼び出し（CORS）を確かめてから足す（Q-8 の決定。それまでブラウザ版の提供元は Anthropic だけ） | 公式 SDK の型付きのエラー処理と再試行を使い、ローカル版と同じ読み取り結果になる要求を送る |
+| D-35 | 採用（段階3）。実装の詳細は D-43 で確定（SDK の同梱方法・認証ヘッダー・エラーの型。OpenAI は未実装のまま Q-8） | OCR の呼び出し：Anthropic は公式の TypeScript SDK（`@anthropic-ai/sdk`）を版を固定して `vendor/` に同梱し（PDF.js と同じく ESM、ビルドなし、sha256 を記録）、`new Anthropic({apiKey, dangerouslyAllowBrowser: true})` で呼ぶ（SDK がブラウザからの直接呼び出し用のヘッダー `anthropic-dangerous-direct-browser-access` を付ける）。要求の内容は `ocr.py` の `transcribe` と同じにする：`client.beta.messages.create`、`max_tokens: 16000`、`output_config: {effort: 'medium'}`、画像（base64）＋共通のプロンプト、Haiku 以外は `betas: ['server-side-fallback-2026-07-01']`・`fallbacks: 'default'`。`stop_reason` が `refusal` なら「このページは読み取りを断られました」、`max_tokens` なら `truncated`。エラーは型（認証・上限・接続など）ごとに `ocr.py` と同じ日本語にする。OpenAI は `providers/openai.py` と同じ Responses API の要求を `fetch` で送る（Python 版も SDK を使っていない）。OpenAI はブラウザからの呼び出し（CORS）を確かめてから足す（Q-8 の決定。それまでブラウザ版の提供元は Anthropic だけ） | 公式 SDK の型付きのエラー処理と再試行を使い、ローカル版と同じ読み取り結果になる要求を送る |
 | D-36 | 採用（段階3） | API キーの扱い：ホームの「AI の設定」で利用者が入力する。既定は**このタブの中だけ**（メモリに置き、再読み込みで消える）。「このブラウザに保存する」を選んだときだけ IndexedDB の `settings`（`key:anthropic`・`key:openai`）に置く。保存するときは、同じブラウザを使える人・拡張機能・万一の XSS から読まれうること、利用料が発生することを示す。キーはバックアップ・`prefs`（localStorage）・ログ・エラー表示に含めない。「キーを消す」で消せる（プロジェクトの削除ではキーは消さない）。案内として、Console で専用のキーを作り、ワークスペースの利用上限を設定することを勧める | 静的サイトにはキーを隠すサーバーが無いので、置く場所と期間を利用者が選べるようにし、既定は最も残らない形にする |
-| D-37 | 採用（段階3） | 送る画像：IA は IIIF の画像を幅 2000 で `fetch`（CORS 可、D-27）し、`Sources.retry` で再試行する。取得先は `https://iiif.archive.org/` に限る（D-31）。PDF は今のローカル版と同じく、`renderPdfPage` で幅 2000 に描いた canvas を JPEG（品質 0.9）にする。白紙の注意（D-33）が出たページは確認してから送る。API の画像の上限（大きさ・辺の長さ）は実装時に公式文書で確かめ、超えるときは縮小する。画像のキャッシュ（Cache API）は作らない（読み取り結果を保存して再利用するので、同じ画像を何度も取りに行かない。D-29 の見送りを確定） | ローカル版と同じ条件の画像を送り、結果を比べられるようにする |
-| D-38 | 採用（段階3） | 読み取り結果の保存：IndexedDB の版を 2 に上げ、`ocr` ストア（キー `[slug, i, reading_id]`、`[slug, i]` の索引）を作る（v1 からの移行は空のストアを作るだけ）。1件の形は `ocr/<i>.json` と同じ（`text`・`model`・`provider`・`requested_model`・`prompt_version`・`truncated`・`usage`・`image_index`・`image_key`・`reading_id`・`time`）。ページの「現在の読み」は、その画像の `image_key` に合う最新の1件。ルートは `POST pages/<i>/ocr`（`image_key` の照合・同じ条件ならキャッシュを返す・`force`）と `GET pages/<i>/readings` を `server.py` と同じ形で `local/router.js` に足す。読み取り中に対応が変わったら保存せず 409。プロジェクトの削除（D-34）は `ocr` の範囲も同じトランザクションで消す | ローカル版と同じ「再利用・過去の読み・画像との照合」をブラウザ版でも保つ |
-| D-39 | 採用（段階3） | 費用と実行の原則：1ページずつ、利用者がボタンを押したとき（または設定 `autoOcr` を有効にしてページを開いたとき）だけ読む。全ページの一括読み取りは作らない。最初の読み取りの前に、モデル名と「1ページごとに利用料がかかる」ことを確認する。読み取り後は使ったトークン数（`usage`）を表示する。料金表は持たない（変わるため）。既定のモデルは `ocr.py` の `MODEL`、選べるモデルは `MODELS` と同じ | CLAUDE.md の OCR の原則をブラウザ版にもそのまま当てはめる |
+| D-37 | 採用（段階3）。実装は D-43 で確定（5 MB の上限の扱い、PDF の画像形式） | 送る画像：IA は IIIF の画像を幅 2000 で `fetch`（CORS 可、D-27）し、`Sources.retry` で再試行する。取得先は `https://iiif.archive.org/` に限る（D-31）。PDF は今のローカル版と同じく、`renderPdfPage` で幅 2000 に描いた canvas を JPEG（品質 0.9）にする。白紙の注意（D-33）が出たページは確認してから送る。API の画像の上限（大きさ・辺の長さ）は実装時に公式文書で確かめ、超えるときは縮小する。画像のキャッシュ（Cache API）は作らない（読み取り結果を保存して再利用するので、同じ画像を何度も取りに行かない。D-29 の見送りを確定） | ローカル版と同じ条件の画像を送り、結果を比べられるようにする |
+| D-38 | 採用（段階3）。実装は D-43 で確定（「現在の読み」の決め方、識別子） | 読み取り結果の保存：IndexedDB の版を 2 に上げ、`ocr` ストア（キー `[slug, i, reading_id]`、`[slug, i]` の索引）を作る（v1 からの移行は空のストアを作るだけ）。1件の形は `ocr/<i>.json` と同じ（`text`・`model`・`provider`・`requested_model`・`prompt_version`・`truncated`・`usage`・`image_index`・`image_key`・`reading_id`・`time`）。ページの「現在の読み」は、その画像の `image_key` に合う最新の1件。ルートは `POST pages/<i>/ocr`（`image_key` の照合・同じ条件ならキャッシュを返す・`force`）と `GET pages/<i>/readings` を `server.py` と同じ形で `local/router.js` に足す。読み取り中に対応が変わったら保存せず 409。プロジェクトの削除（D-34）は `ocr` の範囲も同じトランザクションで消す | ローカル版と同じ「再利用・過去の読み・画像との照合」をブラウザ版でも保つ |
+| D-39 | 採用（段階3）。実装は D-43 で確定（確認の文言と回数、使用量の表示） | 費用と実行の原則：1ページずつ、利用者がボタンを押したとき（または設定 `autoOcr` を有効にしてページを開いたとき）だけ読む。全ページの一括読み取りは作らない。最初の読み取りの前に、モデル名と「1ページごとに利用料がかかる」ことを確認する。読み取り後は使ったトークン数（`usage`）を表示する。料金表は持たない（変わるため）。既定のモデルは `ocr.py` の `MODEL`、選べるモデルは `MODELS` と同じ | CLAUDE.md の OCR の原則をブラウザ版にもそのまま当てはめる |
 | D-40 | 採用（段階3） | プロンプトとモデルの共有：`local/ocr.js`（名前空間 `OCR`）に `PROMPT`・`PROMPT_VERSION`・`MODEL`・`MODELS`・`NO_FALLBACK` を置き、Python のテストで `ocr.py`・`providers/__init__.py` の値と一致することを確かめる（`HISTORY_*` と同じ方式）。プロンプトを変えるときは両方を同じ PR で直す | 2つの版で読み取りの条件がずれない |
 | D-41 | 採用（段階3） | CSP：`connect-src` に `https://api.anthropic.com` を足す（OpenAI を足すときに `https://api.openai.com`）。SDK は同梱するので `script-src` は変えない。テストは `page.route` で API への要求を差し替え、有料の API は呼ばない（要求のヘッダー・本文の形、キーがバックアップや localStorage に入らないこと、拒否・上限・認証エラーの表示、`image_key` の照合、IndexedDB v1 → v2 の移行を確かめる） | 必要な接続先だけを許し、テストで課金しない |
-| D-42 | 採用（段階3） | バックアップに OCR の読み取り結果を含める（Q-2 の決定。D-11 の「OCR を含めない」を置き換え。PDF は引き続き含めない）。`ocr` に、ページごとの現在の読みと過去の読み（`ocr/<i>.json` と `ocr/history/<i>/` と同じ形）を入れる。`ocr` を含むバックアップは `format_version` を 2 にし、含まないものは 1 のまま書く。古い版のアプリは 2 を「新しい版のデータ」として拒否するので、OCR が黙って落ちることはない。読み込みでは `image_key`・`reading_id`・`time` などの型を検証し、両方の版（`bundle.py`・`local/bundle.js`）で同じ事例（`tests/fixtures/bundle`）に通す。API キーは決して含めない | 文字だけで小さく、利用料を払って得た結果を、環境を移しても失わない |
+| D-42 | 採用（段階3）。形式の詳細は D-43 で確定（`ocr` の形、検証、書き出しの規則） | バックアップに OCR の読み取り結果を含める（Q-2 の決定。D-11 の「OCR を含めない」を置き換え。PDF は引き続き含めない）。`ocr` に、ページごとの現在の読みと過去の読み（`ocr/<i>.json` と `ocr/history/<i>/` と同じ形）を入れる。`ocr` を含むバックアップは `format_version` を 2 にし、含まないものは 1 のまま書く。古い版のアプリは 2 を「新しい版のデータ」として拒否するので、OCR が黙って落ちることはない。読み込みでは `image_key`・`reading_id`・`time` などの型を検証し、両方の版（`bundle.py`・`local/bundle.js`）で同じ事例（`tests/fixtures/bundle`）に通す。API キーは決して含めない | 文字だけで小さく、利用料を払って得た結果を、環境を移しても失わない |
+| D-43 | 採用（段階3の実装） | 段階3の実装で確定したこと。(1) **SDK**：`@anthropic-ai/sdk` 1.4.0（公開から2週間以上。`fallbacks: 'default'`・`betas`・`output_config` を受け取ることを型定義と実際の要求で確かめた）を `vendor/anthropic-sdk/1.4.0/` に置く。SDK の `.mjs` は `@opentelemetry/api` などを裸の指定子で import するが、ブラウザは import map（インラインのスクリプト）なしでは解決できず CSP が許さないので、`index.mjs` から到達する 294 モジュール（約 1.3 MB）をそのままコピーし、import の指定子だけを書き換えた（`@opentelemetry/api` は同梱した `_deps/opentelemetry-api/`、Node 用の `node.mjs` はパッケージ自身の `browser` フィールドが指す `node.browser.mjs`、`standardwebhooks` は使わない部分なので何もしない代用品）。手順は `vendor/anthropic-sdk/assemble.py` と README、ファイルごとの sha256 は `SHA256SUMS`。最初の読み取りのときだけ `import()`（`document.baseURI` 基準）で読み込む。APIキーは SDK が `Authorization: Bearer` で送る。エラーは SDK の型（`AuthenticationError`・`RateLimitError`・`APIConnectionError`・`APIError`。JS の SDK に `APIStatusError` は無い）で `ocr.py` と同じ日本語にする（認証の文言だけ「AI の設定でキーを確認してください」）。(2) **画像**：IA は IIIF を幅 2000 で取得し（再試行は `Sources.getBytes`、取得先は `iiif.archive.org` のみ）、PDF は画面が canvas から作った JPEG（白紙の注意の確認つき）の data URL を送る（ローカル版と同じ）。API が受け取る画像は1枚 5 MB までなので、超える画像は縮小せず 413 の案内を返す（幅 2000 の JPEG では通常超えない。公式文書での上限の再確認は未実施）。(3) **保存**：`LocalStore.ocrPut` がプロジェクトの存在を同じトランザクションで確かめて書く。「現在の読み」は**その画像の `image_key` に合う最新（時刻、同時刻は識別子）の1件**。ローカル版は `ocr/<i>.json`（最後に書いた1件）が現在の読みなので、対応を別の画像へ動かして戻すと、ローカル版は出さず、ブラウザ版は前の読みを出す（意図的な違い）。識別情報のない旧形式の読み（Python のバックアップから戻したもの）は、IA の資料で画像番号が同じときだけ `legacy` として出す。ブラウザ版の識別子は時刻（ミリ秒）で始まる32桁の16進で、このタブでは必ず増える（同じ秒に2回読んでも順序が読んだ順になる）。(4) **キー**：ルーターに `GET/PUT/DELETE /api/ai/keys[/anthropic]`（ブラウザ版だけ。値は返さない）。入力は半角の印字可能文字 8〜500 字。メモリに置き、`save: true` のときだけ IndexedDB の `settings`（`key:anthropic`）にも書く。保存を外して設定し直すと保存した分も消す。保存したキーは新しいタブが最初に必要としたときに読み込む。タブ間でメモリのキーは共有しない（ほかのタブでのキーの変更は、再読み込みするまで反映されない）。(5) **画面**：ホームの「AI の設定」とOCR欄の「AI の設定」から同じダイアログ（`aiSettings`、パスワード欄・「このブラウザに保存する」・説明・「キーを消す」）を開く。キーは入力したらすぐ欄から消し、画面・エラー・トーストには出さない。タブごとの最初の読み取りの前に、モデル名と「1ページごとに利用料がかかります」を `confirm()` で確かめ（キャンセルしたら何もしない）、`autoOcr` も同じ確認を通り、キーが無ければ動かない。読み取り後は入力・出力のトークン数を表示する。「比較の設定」メニュー（`autoOcr` を含む）もブラウザ版に出す。(6) **バックアップ**：`ocr` は `{"<ページ番号>": {"current": 読み, "history": [読み…]}}`（`current` は省略可、`history` は古い順の全部）。読みは `ocr/<i>.json` と同じ形で、既知の項目（`text`・`model`・`provider`・`requested_model`・`prompt_version`・`truncated`・`usage`・`image_index`・`image_key`・`reading_id`・`time`）だけを型を確かめて取り込む（`reading_id` は `[A-Za-z0-9_-]{1,64}`、`time` は `YYYY-MM-DDTHH:MM:SSZ`、`history` の読みは `reading_id` が必須、同じページで大文字小文字を無視して重複したら拒否）。`format_version` は読みがあるとき 2、無いとき 1（`FORMAT_VERSION = 2`、`BASE_VERSION = 1`。1 に `ocr` があっても読む）。書き出しでは、このアプリが作らない形の読みは外す（バックアップが読めなくならないように）。`export?fmt=bundle&ocr=0` は OCR を含めない（画面には出さない）。ローカル版の読み込みは `store.install` の中で `ocr/<i>.json` と `ocr/history/<i>/<reading_id>.json` を書く（失敗したら既存の後始末でフォルダごと消える）。`bundle.parse` は `(project, text, work, ocr)` を返す。ブラウザ版は `ocr` ストアへ同じトランザクションで書く（current が履歴に無ければ足し、識別子が無い旧形式は `legacy`） |
 
 ## 段階と状態
 
@@ -77,7 +78,7 @@
 | 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（#5）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
 | 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（#5）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
 | 2 | Internet Archive 連携（検索、資料情報、IIIF マニフェスト、ページ画像。PDF は利用者がダウンロードして選ぶ） | 完了（#6）。`local/sources.js`、ルーターの IA 経路（D-28）、再試行と案内（D-29）、PDF のリンクと選択（D-30）、CSP の `connect-src`（D-14）。CORS の確認は D-27 |
-| 3 | OCR（Anthropic・OpenAI をブラウザから直接呼ぶ。キーは利用者が入力） | 設計済み・未着手（D-35〜D-42。OpenAI は後で足す） |
+| 3 | OCR（Anthropic をブラウザから直接呼ぶ。キーは利用者が入力。OpenAI は後で足す） | 完了（PR 未作成）。`local/ocr.js`、`vendor/anthropic-sdk/`、IndexedDB 2（`ocr` ストア）、AI の設定、バックアップの `ocr`（format_version 2）。D-35〜D-43 |
 
 状態は「未着手 → 作業中 → 完了」で書き、完了したら対応する PR を併記する。
 
@@ -95,10 +96,12 @@
 | 手元の PDF の保存（`files/`）、`files/<name>` の配信 | IndexedDB の `files` に Blob で保存（D-22）。表示は object URL（D-23）。バックアップに含めないので、戻したあとは付け直す（D-24） | 1b |
 | ページの対応付け（`mapping`）・`image`・資料の設定画面 | `local/router.js`。PDF の資料（1b）と IA の資料（2。画像は IIIF の URL を `<img>` が直接読む、D-28） | 1b・2 |
 | `sources.py`（IA の検索・マニフェスト・資料情報・画像 URL） | `local/sources.js`。ブラウザから直接取得し、CORS を返さない経路（BookReader・PDF）は使わない（D-27・D-28）。IIIF の失敗は再試行して案内する（D-29） | 2 |
-| `scan` のディスクキャッシュ | 持たない（`<img>` が直接読む）。バイト列の取得と Cache API は段階3で決める（D-29） | 2 → 3 |
+| `scan` のディスクキャッシュ | 持たない。表示は `<img>` が直接読む。OCR 用のバイト列は幅 2000 で取得して API に送るだけで、キャッシュしない（読み取り結果を保存して再利用するので、同じ画像を取りに行かない。D-37・D-43） | 2 → 3 |
 | IA の PDF 保存（`source/ia/pdf`） | 状態の取得・`attach`（利用者がダウンロードして選んだ Blob を保存）・`detach` は対応。サーバー側のダウンロードは 501 で画面にも出さない（D-30） | 2 |
-| `providers/`・`ocr.py` | ブラウザから直接呼ぶ。プロンプトは共通の定義を使う | 3 |
-| `net.ALLOWED` | `<meta>` の CSP `connect-src`（D-14） | 1a で導入。段階2で `archive.org`・`iiif.archive.org` を足した |
+| `providers/`・`ocr.py`（Anthropic） | `local/ocr.js`（プロンプト・モデル・版は Python と同じ値でテストが確かめる）と、公式 SDK の同梱版（`vendor/anthropic-sdk/`）でブラウザから直接呼ぶ。OpenAI は「ブラウザ版ではまだ使えません」と表示（Q-8） | 3 |
+| `pages/<i>/ocr`・`pages/<i>/readings`・ページの `ocr` | `local/router.js` に同じ URL・応答の形で。保存は IndexedDB の `ocr`（D-38・D-43） | 3 |
+| `.env` の `ANTHROPIC_API_KEY` | 「AI の設定」（ブラウザ版だけのルート `/api/ai/keys`）。既定はタブの中だけ、選んだときだけ IndexedDB（D-36） | 3 |
+| `net.ALLOWED` | `<meta>` の CSP `connect-src`（D-14） | 1a で導入。段階2で `archive.org`・`iiif.archive.org`、段階3で `api.anthropic.com` を足した |
 | `presence.py`・自動終了・終了ボタン | 使わない（画面から隠す） | 1a |
 | `DELETE /api/projects/<slug>`（`store.delete_project`） | `LocalStore.deleteProject` と同じ URL のルート（D-34） | 2 以降 |
 | `send_file` の Range 対応 | 使わない（pdf.js が Blob の URL を直接読む） | 1b |
@@ -120,6 +123,8 @@ proofreader/static/
     bundle.js       バックアップの作成と検証（bundle.py と同じ規則。保存は store.js の importBundle）
     draft.js        PDF の選択範囲からの仮本文（importers/draft.py と同じ入出力）
     sources.js      IA の検索・マニフェスト・資料情報の解釈と取得（sources.py と同じ結果）。再試行と案内の文言
+    ocr.js          OCR のプロンプト・モデル・版（Python と同じ値）と Anthropic の呼び出し（同梱 SDK を最初に使うときだけ import）
+  vendor/anthropic-sdk/1.4.0/   公式 SDK の同梱版（D-43）。pdfjs/ は PDF.js
 ```
 
 - `local/*.js` は `<script>` で読み込む通常のスクリプトで、全体が1つのグローバルスコープを共有する。そのため各ファイルは名前空間の定数を1つだけ公開する（`OpenITI`、`Work` など）。Node からは `module.exports` でその同じオブジェクトを読む。名前の衝突は `tests/globals.test.js` で確かめる。
@@ -139,8 +144,8 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | `originals` | `slug` | `{slug, text}` | 作成時だけ。以後は書き換えない |
 | `pages` | `[slug, i]` | `{text?, done, note, revision, history[]}`。`text` は原文と異なるときだけ持つ | 保存のたび |
 | `files` | `[slug, name]` | PDF の Blob（名前は `source.pdf` か `source-<uuid>.pdf`）。資料の確定・新規作成・付け直しのときだけ書く | 1b から |
-| `ocr` | `[slug, i]` | `ocr/<i>.json` と同じ形と過去の読み | 3 から |
-| `settings` | `key` | 利用者ごとの設定 | 必要になったとき |
+| `ocr` | `[slug, i, reading_id]`（索引 `page` = `[slug, i]`） | 1件の読み取り結果（`ocr/<i>.json` と同じ形に `slug`・`i`）。現在の読みも過去の読みも同じストアに1件ずつ | 読み取りのたび。3 から（IndexedDB の版 2） |
+| `settings` | `key` | 利用者ごとの設定：`backup:<slug>`（最後のバックアップの日時）、`key:anthropic`（API キー。利用者が保存を選んだときだけ。プロジェクトの削除では消さず、バックアップにも含めない） | 必要になったとき |
 
 - **保存の手順**：1つの readwrite トランザクションの中で、`pages` を読む → revision を比べる → `work.js` で新しい状態を作る → 書く。revision が違えば 409 相当、revision が無ければ 428 相当のエラーにする。
 - **保存履歴**：ローカル版と同じ規則にする。`HISTORY_WINDOW`（5分）以内の自動保存は1件にまとめ、復元時は checkpoint で必ず1件残し、1ページ `HISTORY_LIMIT`（100件）まで残す。値は `work.js` の定数とし、ローカル版と食い違わないようテストで確かめる。
@@ -167,15 +172,16 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
   "app": {"mode": "browser", "version": "0.1.0"},
   "project": { "…": "project.json と同じ" },
   "original": "原文（original.txt と同じ文字列）",
-  "work": { "edits": {}, "status": {}, "history": {}, "revisions": {}, "schema_version": 2 }
+  "work": { "edits": {}, "status": {}, "history": {}, "revisions": {}, "schema_version": 2 },
+  "ocr": { "0": { "current": { "text": "…", "reading_id": "…", "time": "…" }, "history": [ { "…": "…" } ] } }
 }
 ```
 
 - `exported` は UTC。`app.mode` は書き出した版（`http` か `browser`）、`app.version` は `bundle.py` と `bundle.js` の `APP_VERSION`（テストで一致を確かめる）。
 - `work` は `work.json` の形。静的版は ページごとの record と相互に変換する（`Work.recordsToWork` / `workToRecords`）。
-- PDF などのファイルと OCR の結果は含めない（D-11）。資料の情報は `project` に残り、読み込み後にファイルを選び直してもらう（静的版は D-24 の手順）。
+- PDF などのファイルは含めない（D-11）。資料の情報は `project` に残り、読み込み後にファイルを選び直してもらう（静的版は D-24 の手順）。**OCR の読み取り結果は `ocr` に含める（D-42・D-43。読みが1件でもあれば `format_version` は 2、無ければ `ocr` を書かず 1）**。API キーは決して含めない。
 - 読み込みの規則は D-10。読み込んだプロジェクトは常に新しいプロジェクトとして作られ、既存のプロジェクトを上書きしない。
-- 静的版は1つの `readwrite` トランザクション（`projects`・`originals`・`pages`）で書くので、途中で失敗したプロジェクトは残らない。ローカル版は `work.json` の次に `project.json` を書き、`project.json` が無いフォルダは一覧に出ない。
+- 静的版は1つの `readwrite` トランザクション（`projects`・`originals`・`pages`・`ocr`）で書くので、途中で失敗したプロジェクトは残らない。ローカル版は `work.json` の次に `project.json` を書き、`project.json` が無いフォルダは一覧に出ない。
 
 ## 形式と版の管理
 
@@ -185,8 +191,8 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 |---|---|---|
 | プロジェクトの形式 | `project.json` の `schema_version` | 2 |
 | 作業データの形式 | `work.json` の `schema_version` | 2 |
-| IndexedDB の構造 | `indexedDB.open('proofreader', n)` の `n` | 1 |
-| 書き出しファイルの形式 | `format_version` | 1 |
+| IndexedDB の構造 | `indexedDB.open('proofreader', n)` の `n` | 2（`ocr` ストアを追加。移行は空のストアを作るだけ） |
+| 書き出しファイルの形式 | `format_version` | 2（`ocr` を含むとき。含まないバックアップは 1 で書く。両方の版が 1・2 を読み、3 以上は拒否） |
 
 規則：
 
@@ -208,18 +214,19 @@ DB 名は `proofreader`。DB の版は[形式と版の管理](#形式と版の�
 | PDF の資料と仮本文 | `tests/fixtures/draft/`（`Draft.build`）と `tests/fixtures/source/`（`source/pdf`・`mapping`・`image` の手順）を、Python（`test_draft_parity.py`・`test_source_parity.py`）と Node（`draft.test.js`・`router.test.js`）が突き合わせる。`browser_static_smoke` が、合成 PDF のアップロード・対応付け・描画（canvas の画素）・再読み込み・バックアップを別のブラウザに戻して付け直し・PDF からの新規作成・容量不足（`IDBObjectStore.put` が `QuotaExceededError` を投げる）で何も変わらないことを確かめる。IA の資料は `ia-ops.json`（`url` だけを置き換える）、退役した URL の解放・`clearDrafts`・別のページ数での付け直し・500 MB の 413・`revision: null` の key は `router.test.js`、コミット時のエラー（`tx.onerror`・`tx.onabort`、偽の IndexedDB）は `store_open.test.js`。ブラウザ検証は pdf.js の文書の数（置き換え・キャンセル・移動のあと）、置き換えで古い Blob が実際の IndexedDB から消えること、設定画面での付け直しを確かめる |
 | Internet Archive | `tests/fixtures/ia/inputs.json`（合成した IA の応答：IIIF v3 のマニフェストで service の無い canvas や label の変種を含むもの、PDF の選択の事例（非公開・形式・サイズ）、検索）の `expected.json` は Python の `sources.*` の出力（要求した URL は復号した問い合わせで比べる）。`test_ia_parity.py` と `sources.test.js` が突き合わせ、`sources.test.js` は再試行（5xx・ネットワークの失敗は再試行し 4xx はしない）も確かめる。`router.test.js` は検索・`source/ia`（504 の再試行、確定までの脇置き、`image` の `url`）・`ia/pdf` の状態・`attach`（検証・413・全か無か）・`detach`・バックアップから戻した資料のオンライン画像を、`fetch` を差し替えて確かめる。`browser_static_smoke` は `page.route` で archive.org と iiif.archive.org を合成データで置き換え（実際の接続は無く、PDF のリンクは開かない）、検索・選択・対応付け・画像（`naturalWidth`）・マニフェストと画像の 504 の再試行・止まったままの画像の案内・PDF のリンクと選択（ページ数違いの拒否、描画、再読み込み、`detach`）・バックアップから戻した IA の資料の画像と対応の操作・CSP 違反が無いことを確かめる |
 | TEI | `tests/fixtures/tei/inputs.json`（合成入力）の `expected.json` は Python の出力。`tests/test_tei_parity.py` と `tests/tei.test.js` が、`exporters/tei.py` と `tei.js` の出力が一致することを確かめる。CI は `tests/tei_fixtures.js` で `tei.js` の出力をファイルに書き、`tests.validate_tei` で公式スキーマに通す（Python の出力も同じ） |
-| 書き出しファイル | `tests/fixtures/bundle/cases.json`（受理・拒否の事例と期待値）を `test_bundle.py` と `bundle.test.js` が確かめる。`python-export.proofreader.json`（Python の出力）を `browser_static_smoke` が静的版に読み込んで書き戻し、静的版が書き出したものを Python が読み込む（BOM・CRLF の往復も含む）。`browser_smoke` はローカル版の書き出し・読み込みを確かめる |
+| OCR（ブラウザ版） | `tests/ocr.test.js`：同梱した SDK を本物のまま読み、`fetch` だけを差し替えて、要求の形（URL・`anthropic-dangerous-direct-browser-access`・`Authorization`・モデル・`output_config`・`fallbacks`・`betas`・base64 の画像・共通のプロンプト）、拒否・切れ・空・認証・上限・接続のエラーの日本語、キーがメッセージに入らないことを確かめる。`tests/test_parity.py` の `OcrParityTests` が `local/ocr.js` と `ocr.py`・`providers/` のプロンプト・モデル・版・要求のパラメーターの一致を確かめる（D-40）。`router.test.js` は、`OCR.transcribe` と画像の `fetch` を差し替えて、キー（既定はタブだけ・保存・削除）、IA と PDF の画像、キャッシュの再利用、`image_key` の 409、読み取り中の対応変更の 409、旧形式の読み、削除、バックアップの往復を確かめる。`store_open.test.js` は偽の IndexedDB で v1 → v2 の移行（ストアを足すだけ）と、新しすぎる版の拒否を確かめる。`browser_static_smoke` は `page.route` で `https://api.anthropic.com` を差し替え（有料の API は呼ばない）、手で作った v1 のデータベースの移行、キーの扱い（DOM・localStorage・IndexedDB）、確認の1回、要求のヘッダーと本文、使用量の表示、再読み込み後の再利用、拒否・401・429・空の読み、`autoOcr`、対応変更の 409、Python との往復、CSP 違反なしを確かめる |
+| 書き出しファイル | `tests/fixtures/bundle/cases.json`（受理・拒否の事例と期待値。OCR の読みの型・識別子・時刻・重複・旧形式・形式 3 の事例を含む）を `test_bundle.py` と `bundle.test.js` が確かめる。`python-export.proofreader.json`（Python の出力。OCR の読みを含む）を `browser_static_smoke` が静的版に読み込んで書き戻し（`ocr` も同じ）、静的版が書き出したものを Python が読み込む（BOM・CRLF の往復も含む）。`browser_smoke` はローカル版の書き出し・読み込みを確かめる |
 
 ## 配信
 
 - `index.html` などの参照は相対パスにする（GitHub Pages はリポジトリ名のサブパスで配信される）。
 - GitHub Actions の `deploy` ジョブが、テストがすべて成功した `main` への push のときだけ `proofreader/static/` を Pages に配信する（D-15）。ジョブの権限は `pages: write`・`id-token: write` に、チェックアウト用の `contents: read` を足したもの。
-- CSP を `<meta http-equiv="Content-Security-Policy">` で指定する（全文と理由は D-14）。段階ごとに必要な接続先だけを足し、足した接続先は対応表とこの節に書く。`browser_static_smoke` と `browser_smoke` は、CSP 違反が起きないことと、インラインのスクリプトが実際にブロックされることを確かめる。
+- CSP を `<meta http-equiv="Content-Security-Policy">` で指定する（全文と理由は D-14）。段階ごとに必要な接続先だけを足し、足した接続先は対応表とこの節に書く（段階3：`https://api.anthropic.com`）。OCR の SDK（`vendor/anthropic-sdk/`、約 1.3 MB・294 モジュール）は最初の読み取りのときだけ読み込まれる。`browser_static_smoke` と `browser_smoke` は、CSP 違反が起きないことと、インラインのスクリプトが実際にブロックされることを確かめる。
 - リポジトリが private の場合、Pages の利用には有料プランが必要で、配信されたサイトは公開される。
 
 ## 段階3以降の注意（概要）
 
-- **Internet Archive**：エンドポイントごとの CORS の確認結果は下の表のとおり。範囲は D-27、実装は D-28〜D-30。`<img>` での表示は CORS が無くてもできるが、OCR に画像を送るには必要になる（段階3。IIIF の画像は CORS を許可するので、`fetch` でバイト列を取れる）。IA の仕様は変わりうるので、ブラウザ版で IA の取得が失敗するようになったときは、同じ手順で確かめ直して表に行を足す。
+- **Internet Archive**：エンドポイントごとの CORS の確認結果は下の表のとおり。範囲は D-27、実装は D-28〜D-30。`<img>` での表示は CORS が無くてもできるが、OCR に画像を送るには必要になる（段階3。IIIF の画像は CORS を許可するので、`fetch` でバイト列を取れる。段階3で実装した）。IA の仕様は変わりうるので、ブラウザ版で IA の取得が失敗するようになったときは、同じ手順で確かめ直して表に行を足す。
 - **IA の PDF**：ブラウザからは取得できない（下の表）。利用者がダウンロードしたファイルを選ぶ。
 
 ### IA の CORS の確認結果（2026-11-16）
@@ -235,7 +242,7 @@ Chrome のシークレットウィンドウで `https://example.com/` を開き�
 | BookReader の画像 | `https://archive.org/download/<id>/page/n0_w1600.jpg` | 取得できない（302 の応答に `Access-Control-Allow-Origin` が無い） |
 | PDF（Range） | `https://archive.org/download/<id>/<file>.pdf` | 取得できない（同上） |
 | サムネイル | `https://archive.org/services/img/<id>` | 取得できない（200 だが `Access-Control-Allow-Origin` が無い）。`<img>` での表示はできる |
-- **OCR**：設計は D-35〜D-42。API キーは利用者が画面で入力し、ブラウザ内にだけ置く。キーを書き出しファイルに含めない。1ページずつ、利用者の操作で実行するという原則は変えない。
+- **OCR**：設計は D-35〜D-42、実装で確定したことは D-43。API キーは利用者が画面で入力し、ブラウザ内にだけ置く（既定はタブの中だけ）。キーを書き出しファイルに含めない。1ページずつ、利用者の操作で実行するという原則は変えない。**OpenAI（Q-8）はまだ無い**：ブラウザからの呼び出し（CORS）を確かめてから、`https://api.openai.com` を CSP に足し、同じ形で足す。
 
 ## 未決事項
 
@@ -270,3 +277,4 @@ Chrome のシークレットウィンドウで `https://example.com/` を開き�
 | 2026-11-16 | D-33・D-34 のレビュー対応：白紙の判定を全画素にし、エラーでなく注意の表示にした。削除の失敗時に残る `.deleting-*`・削除と競合する要求・ダウンロードの中止・Windows での 409・ブラウザ版の保存の競合を直した |
 | 2026-11-16 | 段階3（ブラウザ版の OCR）の設計を提案として追記した（D-35〜D-41）。Q-2 に案を書き、Q-6〜Q-8 を追加 |
 | 2026-11-16 | 段階3の設計を確定した：キーは既定でタブの中だけ（Q-6）、公式 SDK を同梱（Q-7）、OpenAI は後で足す（Q-8）、バックアップに OCR の結果を含める（Q-2 → D-42、D-11 の一部を置き換え） |
+| 2026-11-16 | 段階3（ブラウザ版の OCR）を完了（PR 未作成）にした。`local/ocr.js`・同梱した公式 SDK 1.4.0（`vendor/anthropic-sdk/`）・AI の設定（キーの扱い）・IndexedDB 2（`ocr` ストア）・ルーターの OCR 経路・バックアップの `ocr`（format_version 2）・CSP の `api.anthropic.com` を追加。D-14 を更新し、D-35・D-37〜D-39・D-42 の実装を D-43 に記録。機能の対応表・IndexedDB の表・形式と版の管理・テストの節を更新 |

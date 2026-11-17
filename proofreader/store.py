@@ -60,8 +60,8 @@ def slug_base(uri):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", uri)[:120] or "text"
 
 
-def install(base, text, make_project, work):
-    """Create a project folder under a free slug derived from base; make_project(slug) returns project.json."""
+def install(base, text, make_project, work, ocr=None):
+    """Create a project folder under a free slug derived from base; make_project(slug) returns project.json. ocr: {page: {current, history}} from a backup."""
     ROOT.mkdir(parents=True, exist_ok=True)
     if base.startswith(TRASH):
         base = "p" + base
@@ -80,11 +80,31 @@ def install(base, text, make_project, work):
             (d / "files").mkdir()
             (d / "original.txt").write_text(text, encoding="utf-8", newline="")
             _write_json(d / "work.json", work)
+            _write_ocr(d, ocr or {})
             _write_json(d / "project.json", project)  # written last: the folder is not a project until then
         except BaseException:
             shutil.rmtree(d, ignore_errors=True)  # do not leave a half-made folder that would hold the slug
             raise
     return project
+
+
+READING_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _write_ocr(d, ocr):
+    """Write the readings of a backup as ocr/<i>.json (current) and ocr/history/<i>/<reading_id>.json (all earlier ones)."""
+    for i, entry in ocr.items():
+        if not re.fullmatch(r"0|[1-9][0-9]*", str(i)):
+            raise ValueError(f"bad page index: {i}")
+        if entry["history"]:
+            folder = d / "ocr" / "history" / str(i)
+            folder.mkdir(parents=True)
+            for r in entry["history"]:
+                if not READING_ID.fullmatch(r["reading_id"]):
+                    raise ValueError("bad reading_id")
+                _write_json(folder / f"{r['reading_id']}.json", r)
+        if entry.get("current"):
+            _write_json(d / "ocr" / f"{i}.json", entry["current"])
 
 
 def create(fetched):
@@ -194,6 +214,30 @@ def ocr_put(slug, i, result):
         return result
 
 
+def ocr_pages(slug):
+    """Every reading of the project, for the backup: {page: {"current": reading or None, "history": [readings oldest first]}}.
+    A history file written before readings had an id gets its file name as reading_id."""
+    base = _dir(slug) / "ocr"
+    pages = {}
+
+    def read(path):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+    for folder in sorted((base / "history").glob("*")) if (base / "history").is_dir() else []:
+        if not folder.is_dir() or not re.fullmatch(r"0|[1-9][0-9]*", folder.name):
+            continue
+        readings = [{**r, "reading_id": r.get("reading_id") or p.stem} for p in folder.glob("*.json") if (r := read(p))]
+        pages.setdefault(folder.name, {"current": None, "history": []})["history"] = sorted(
+            readings, key=lambda r: (r.get("time", ""), r["reading_id"]))
+    for p in base.glob("*.json"):
+        if re.fullmatch(r"0|[1-9][0-9]*", p.stem) and (r := read(p)):
+            pages.setdefault(p.stem, {"current": None, "history": []})["current"] = r
+    return pages
+
+
 def ocr_history(slug, i, image_key):
     folder = _dir(slug) / "ocr" / "history" / str(i)
     readings = [json.loads(p.read_text(encoding="utf-8")) for p in folder.glob("*.json")]
@@ -275,8 +319,8 @@ def image_index(project, i):
     return best[1] + (i - best[0]) if best else project.get("offset", 0) + i
 
 
-def create_from_bundle(project, text, work):
+def create_from_bundle(project, text, work, ocr=None):
     """Install a validated backup (bundle.parse) as a new project; the incoming slug is never used."""
     def make(slug):
         return {**project, "slug": slug, "created": project.get("created") or time.strftime("%Y-%m-%d %H:%M")}
-    return install(slug_base(project["uri"]), text, make, work)
+    return install(slug_base(project["uri"]), text, make, work, ocr)
