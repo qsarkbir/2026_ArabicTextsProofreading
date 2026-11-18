@@ -117,6 +117,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
 .formgrid input{padding:6px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
 .history-preview{white-space:pre-wrap;max-height:45vh;overflow:auto;font-size:18px}
 #ocrm{width:220px}
+#ocrmsel[hidden],#ocrm[hidden]{display:none}
 @media (max-width:900px){
   .proof{grid-template-columns:1fr;height:auto}
   .imgpane{border-right:0;border-bottom:1px solid var(--line);height:60vh}

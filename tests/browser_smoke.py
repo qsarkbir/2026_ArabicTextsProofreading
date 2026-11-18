@@ -89,7 +89,8 @@ def main():
             print('PASS persistent history restoration', flush=True)
 
             page.get_by_label('AI提供元').select_option('openai')
-            expect(page.get_by_label('読み取りモデル')).to_have_value('fixture-model')
+            expect(page.locator('#ocrm')).to_have_value('fixture-model')
+            expect(page.locator('#ocrmsel')).to_be_hidden()
             page.get_by_role('button', name='読み直す', exact=True).click()
             expect(page.locator('#ocrmsg')).to_contain_text('fixture-model')
             expect(page.locator('#readings option')).to_have_count(3)

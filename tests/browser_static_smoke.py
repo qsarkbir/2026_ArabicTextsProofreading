@@ -243,6 +243,15 @@ def ocr_stage(browser, base, tmp):
     expect(editor).to_be_enabled(timeout=15000)
     expect(editor).to_have_value('edited in v1')
     expect(ocr_button).to_be_enabled()
+    # every Anthropic model can be chosen (a <select>, not a filtered datalist) and the choice is remembered
+    model_select = page.locator('#ocrmsel')
+    expect(model_select).to_be_visible()
+    expect(page.locator('#ocrm')).to_be_hidden()
+    assert model_select.locator('option').evaluate_all('os => os.map(o => o.value)') == ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']
+    expect(model_select).to_have_value('claude-opus-5-5')
+    model_select.select_option('claude-haiku-5-5')
+    assert page.evaluate("JSON.parse(localStorage.getItem('proof-prefs')).ocrModel") == 'claude-haiku-5-5'
+    model_select.select_option('claude-opus-5-5')
     answers[:] = [False]
     ocr_button.click()
     expect(ocr_button).to_be_enabled()
