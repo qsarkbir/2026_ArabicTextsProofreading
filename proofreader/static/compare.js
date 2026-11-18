@@ -14,8 +14,10 @@ function textTokens(text, options = {}) {
   for (const m of text.matchAll(/\S+/g)) {
     let w = m[0], start = m.index;
     if (/^(\|EDITOR\||%~%|\$+|@)$/.test(w)) continue;
-    const pre = w.match(/^(~~|#+\s*|\|+)/);
+    const pre = w.match(/^(?:~~|#+|\|+)+/); // markup stuck to either end of a word (~~word, ~~~~word, word~~) is not part of it
     if (pre) { w = w.slice(pre[0].length); start += pre[0].length; }
+    const post = w.match(/(?:~~)+$/);
+    if (post) w = w.slice(0, -post[0].length);
     if (!w || /^(ms\d+|PageV\d+P\d+|@\w+|\|+|#+|=+)$/.test(w)) continue;
     const n = normWord(w, options);
     if (!n) continue;

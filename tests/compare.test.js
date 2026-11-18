@@ -42,3 +42,9 @@ test('words without a close partner stay together, and a grouped run across a li
   assert.deepEqual(changes('alpha qqq www end', 'alpha xyz end'), ['alpha xyz end']);
   assert.deepEqual(changes('alpha qqq\n~~ www end', 'alpha xyz end'), [null]);
 });
+test('markup stuck to either end of a word is left alone when the word is replaced', () => {
+  assert.deepEqual(changes('alpha\n~~wrongg~~\nend', 'alpha wrong end'), ['alpha\n~~wrong~~\nend']);
+  assert.deepEqual(changes('alpha\n~~~~wrongg end', 'alpha wrong end'), ['alpha\n~~~~wrong end']);
+  assert.deepEqual(changes('alpha #|wrongg end', 'alpha wrong end'), ['alpha #|wrong end']);
+  assert.deepEqual(textTokens('~~~~ ~~ word~~~~', options).map(t => t.w), ['word']);
+});
