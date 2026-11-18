@@ -257,9 +257,18 @@ def ocr_stage(browser, base, tmp):
     expect(ocr_button).to_be_enabled()
     assert len(dialogs) == 1 and 'Opus 5.5' in dialogs[0] and '1ページごとに利用料がかかります' in dialogs[0], dialogs
     assert requests() == 0 and not ia['ocr_images']
+    # the SDK's entry file fails once on the first load: the import is retried (with ?retry=1) without bothering the user
+    sdk_hits = []
+    def flaky_sdk(route):
+        sdk_hits.append(route.request.url)
+        return route.abort() if len(sdk_hits) == 1 else route.continue_()
+    page.route(re.compile(r'/vendor/anthropic-sdk/1\.4\.0/index\.mjs(\?|$)'), flaky_sdk)
     ocr_button.click()
     expect(page.locator('#ocrmsg')).to_contain_text('claude-opus-5-5 の読み', timeout=15000)
     expect(page.locator('#ocrmsg')).to_contain_text('入力 1,234・出力 56 トークン')
+    page.unroute(re.compile(r'/vendor/anthropic-sdk/1\.4\.0/index\.mjs(\?|$)'))
+    assert len(sdk_hits) == 2 and sdk_hits[1].endswith('index.mjs?retry=1'), sdk_hits
+    expect(toast).not_to_contain_text('部品')
     assert len(dialogs) == 2 and requests() == 1 and ia['ocr_images'] == ['p0'], (dialogs, requests(), ia['ocr_images'])
     sent = ANTHROPIC['requests'][0]
     assert sent['url'].startswith('https://api.anthropic.com/v1/messages'), sent['url']

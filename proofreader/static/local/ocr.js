@@ -25,11 +25,25 @@ const OCR = (() => {
 
   const NO_KEY = 'APIキーがありません。「AI の設定」でキーを入力してください';
   let sdkPromise = null;
-  // import() は document.baseURI からの相対（pdf.js と同じく、Pages のサブパスでも動く）。失敗したら次の呼び出しで読み直す
+  // import() は document.baseURI からの相対（pdf.js と同じく、Pages のサブパスでも動く）。
+  // 最初の読み込みが一時的に失敗することがあるので、少し待って2回まで読み直す（D-44）。ブラウザは失敗した URL をページを開いている間
+  // 覚えているので、読み直しは入口のファイルに ?retry=n を付ける（入口の失敗はこれで直る。中の部品の失敗は再読み込みが要る）。
+  // API はまだ呼んでいないので料金はかからない
+  const SDK_RETRIES = [500, 1500];
+  let sdkTries = 0;
   const loadSdk = () => {
     if (!sdkPromise) {
-      const url = new URL(SDK_PATH, document.baseURI).href;
-      sdkPromise = import(url).catch(() => { sdkPromise = null; throw new Unavailable('AI の呼び出しに使う部品を読み込めませんでした。ページを再読み込みしてください'); });
+      const base = new URL(SDK_PATH, document.baseURI).href;
+      const attempt = n => import(sdkTries++ ? `${base}?retry=${sdkTries - 1}` : base).catch(e => {
+        if (n >= SDK_RETRIES.length) throw e;
+        console.warn(`AI の呼び出しに使う部品の読み込みを再試行します（${n + 1}回目）`, e);
+        return new Promise(r => setTimeout(r, SDK_RETRIES[n])).then(() => attempt(n + 1));
+      });
+      sdkPromise = attempt(0).catch(e => {
+        console.error('AI の呼び出しに使う部品を読み込めませんでした', e);
+        sdkPromise = null;
+        throw new Unavailable('AI の呼び出しに使う部品を読み込めませんでした。もう一度「AIで読み取る」を押すか、ページを再読み込みしてください（料金はかかっていません）');
+      });
     }
     return sdkPromise;
   };
