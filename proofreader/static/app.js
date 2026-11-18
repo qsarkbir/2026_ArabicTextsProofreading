@@ -601,7 +601,9 @@ async function proofView(slug, idx, life) {
   let p = await api('GET', `/api/projects/${slug}`);
   if (!p.source && !browserMode) { location.hash = `#/p/${slug}/setup`; return; }
   const providerInfo = () => p.ocr_providers?.[$('#ocrprovider').value] || {available: p.ocr, reason:p.ocr_reason};
-  const canOcr = () => providerInfo().available && !!$('#ocrm').value.trim();
+  const fixedModels = () => Object.keys(providerInfo().models || {}).length > 0; // 一覧のある提供元は select、無い提供元（OpenAI）は自由入力
+  const modelId = () => (fixedModels() ? $('#ocrmsel').value : $('#ocrm').value).trim();
+  const canOcr = () => providerInfo().available && !!modelId();
   const N = p.pages.length;
   let lastKey = `proof-last-${slug}`;
   if (idx == null || isNaN(idx)) { try { idx = parseInt(localStorage.getItem(lastKey), 10) || 0; } catch (e) { idx = 0; } }
@@ -673,7 +675,7 @@ async function proofView(slug, idx, life) {
         <div class="ocrhead">
           <button id="ocrb" class="primary">AIで読み取る</button><button id="aib" class="browser-only" title="Anthropic の API キーを設定します">AI の設定</button>
           <select id="ocrprovider" aria-label="AI提供元">${Object.entries(p.ocr_providers || {}).map(([k,v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join('')}</select>
-          <input id="ocrm" list="ocrmodels" aria-label="読み取りモデル" placeholder="画像対応モデルID"><datalist id="ocrmodels"></datalist>
+          <select id="ocrmsel" aria-label="読み取りモデル" hidden></select><input id="ocrm" aria-label="読み取りモデル" placeholder="画像対応モデルID" hidden>
           <label class="small">保存した読み <select id="readings" aria-label="保存した読み取り結果"><option value="">現在の読み</option></select></label>
           <span id="ocrmsg" class="small muted"></span>
         </div>
@@ -981,7 +983,7 @@ async function proofView(slug, idx, life) {
     if (ocrBusy || shifting) return;
     if (!canOcr()) { toast(ocrWhy(), true); return; }
     if (browserMode && !aiCostConfirmed) { // ブラウザ版：最初の読み取りの前に、モデルと料金がかかることを確かめる（D-39）
-      const model = $('#ocrm').value.trim();
+      const model = modelId();
       if (!confirm(`${(providerInfo().models || {})[model] || model} で読み取ります。ページの画像を Anthropic の API に送り、1ページごとに利用料がかかります。続けますか？`)) { $('#ocrmsg').textContent = canOcr() ? '' : ocrWhy(); return; }
       aiCostConfirmed = true;
     }
@@ -990,7 +992,7 @@ async function proofView(slug, idx, life) {
     $('#shl').disabled = $('#shr').disabled = true;
     $('#ocrb').disabled = true; $('#ocrmsg').textContent = '読み取り中…（数十秒かかります）';
     try {
-      const body = {force, provider: $('#ocrprovider').value, model: $('#ocrm').value.trim(), image_key: imageKey};
+      const body = {force, provider: $('#ocrprovider').value, model: modelId(), image_key: imageKey};
       if (pg.image && pg.image.pdf) {
         const c = await renderPdfPage(pg.image.pdf, pg.image.index, 2000);
         if (!life.alive) return;
@@ -1007,20 +1009,24 @@ async function proofView(slug, idx, life) {
     finally { ocrBusy = false; if (life.alive) { $('#ocrb').disabled = !canOcr(); $('#shl').disabled = $('#shr').disabled = false; } }
   };
   $('#ocrb').onclick = () => runOcr(!!ocr);
-  const ocrm = $('#ocrm'), providerSelect = $('#ocrprovider');
+  const ocrm = $('#ocrm'), ocrmsel = $('#ocrmsel'), providerSelect = $('#ocrprovider');
+  const modelPref = () => providerSelect.value === 'openai' ? 'openaiModel' : 'ocrModel';
   providerSelect.value = prefs.ocrProvider;
   if (!providerSelect.value) providerSelect.selectedIndex = 0;
   const configureProvider = () => {
     const info = providerInfo();
     prefs.ocrProvider = providerSelect.value;
-    $('#ocrmodels').innerHTML = Object.entries(info.models || {}).map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
-    ocrm.value = (providerSelect.value === 'openai' ? prefs.openaiModel : prefs.ocrModel) || info.default || '';
+    const models = info.models || {}, fixed = fixedModels(), saved = prefs[modelPref()];
+    ocrmsel.innerHTML = Object.entries(models).map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+    ocrmsel.hidden = !fixed; ocrm.hidden = fixed;
+    if (fixed) ocrmsel.value = Object.hasOwn(models, saved) ? saved : Object.hasOwn(models, info.default) ? info.default : Object.keys(models)[0];
+    else ocrm.value = saved || info.default || '';
     $('#ocrb').disabled = !canOcr();
     $('#ocrmsg').textContent = canOcr() ? '' : ocrWhy();
   };
   providerSelect.onchange = configureProvider;
-  ocrm.oninput = () => {
-    prefs[providerSelect.value === 'openai' ? 'openaiModel' : 'ocrModel'] = ocrm.value;
+  ocrm.oninput = ocrmsel.onchange = () => {
+    prefs[modelPref()] = modelId();
     $('#ocrb').disabled = !canOcr();
   };
   configureProvider();

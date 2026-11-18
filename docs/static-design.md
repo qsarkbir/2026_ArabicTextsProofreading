@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 文書の状態 | 段階1a・1b は実装済み（[#5](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/5)）。段階2・段階3 は実装済み（PR 未作成） |
+| 文書の状態 | 段階1a・1b は実装済み（[#5](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/5)）。段階2 は実装済み（[#6](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/6)）。段階3 は実装済み（[#10](https://github.com/qsarkbir/2026_ArabicTextsProofreading/pull/10)） |
 | 対象 | 段階1（ブラウザ内での校正と、手元の PDF を資料にすること）、段階2（Internet Archive）、段階3（ブラウザ版の OCR。Anthropic のみ） |
 | 最終更新 | 2026-11-16 |
 | 関連 | [README.md](../README.md)、[CLAUDE.md](../CLAUDE.md) |
@@ -78,7 +78,7 @@
 | 1a | ホーム、OpenITI の URI からの作成、テキストのアップロード、校正（本文・完了・注記）、revision による競合検出、保存履歴と復元、検索、書き出し（OpenITI テキスト・注記 CSV・TEI）、バックアップの書き出し・読み込み、CSP、GitHub Pages への配信 | 完了（#5）。`local/{openiti,work,bundle,tei,store,router}.js`・`backend.js`・`mode.js` で、ブラウザだけで動く。ローカル版にもバックアップの書き出し・読み込みを追加 |
 | 1b | 手元の PDF を資料にする、ページの対応付け、PDF の選択範囲からの仮本文（`importers/draft.py` の移植） | 完了（#5）。`local/draft.js`、`files` への PDF の保存（D-22）、画像の表示（D-23）、PDF の付け直し（D-24）、エラー時の違い（D-26） |
 | 2 | Internet Archive 連携（検索、資料情報、IIIF マニフェスト、ページ画像。PDF は利用者がダウンロードして選ぶ） | 完了（#6）。`local/sources.js`、ルーターの IA 経路（D-28）、再試行と案内（D-29）、PDF のリンクと選択（D-30）、CSP の `connect-src`（D-14）。CORS の確認は D-27 |
-| 3 | OCR（Anthropic をブラウザから直接呼ぶ。キーは利用者が入力。OpenAI は後で足す） | 完了（PR 未作成）。`local/ocr.js`、`vendor/anthropic-sdk/`、IndexedDB 2（`ocr` ストア）、AI の設定、バックアップの `ocr`（format_version 2）。D-35〜D-43 |
+| 3 | OCR（Anthropic をブラウザから直接呼ぶ。キーは利用者が入力。OpenAI は後で足す） | 完了（#10）。`local/ocr.js`、`vendor/anthropic-sdk/`、IndexedDB 2（`ocr` ストア）、AI の設定、バックアップの `ocr`（format_version 2）。D-35〜D-43 |
 
 状態は「未着手 → 作業中 → 完了」で書き、完了したら対応する PR を併記する。
 
@@ -279,3 +279,4 @@ Chrome のシークレットウィンドウで `https://example.com/` を開き�
 | 2026-11-16 | 段階3の設計を確定した：キーは既定でタブの中だけ（Q-6）、公式 SDK を同梱（Q-7）、OpenAI は後で足す（Q-8）、バックアップに OCR の結果を含める（Q-2 → D-42、D-11 の一部を置き換え） |
 | 2026-11-16 | 段階3（ブラウザ版の OCR）を完了（PR 未作成）にした。`local/ocr.js`・同梱した公式 SDK 1.4.0（`vendor/anthropic-sdk/`）・AI の設定（キーの扱い）・IndexedDB 2（`ocr` ストア）・ルーターの OCR 経路・バックアップの `ocr`（format_version 2）・CSP の `api.anthropic.com` を追加。D-14 を更新し、D-35・D-37〜D-39・D-42 の実装を D-43 に記録。機能の対応表・IndexedDB の表・形式と版の管理・テストの節を更新 |
 | 2026-11-17 | 段階3のレビュー指摘（軽微）への対応（D-43 (7)）：バックアップの current を履歴にも書く（ローカル版）、キー設定時の保存分の削除、識別子の無い current の `legacy` が履歴と衝突しない採番、画像上限を base64 で判定、Windows の装置名の `reading_id` を拒否、同梱 SDK の README の訂正（JSDoc のコメント2か所も書き換えている・`@opentelemetry/api@1.10.0` を固定） |
+| 2026-11-18 | 段階3 の状態を「完了（#10）」にした。読み取りモデルの欄を、一覧のある提供元（Anthropic）では選択欄にした（候補一覧付きの入力欄では、ブラウザが入力済みの値で候補を絞り込み、Opus 以外が選べないように見えた） |
